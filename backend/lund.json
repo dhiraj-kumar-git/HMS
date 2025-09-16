@@ -1,0 +1,912 @@
+[
+  {
+    "test_id": "301",
+    "test_name": "URINE",
+    "rates": [50, 60],
+    "reference_range": "pH: 4.5-8.0, Specific gravity: 1.010-1.025, Other components: Negative",
+    "units": "Various"
+  },
+  {
+    "test_id": "302",
+    "test_name": "STOOL",
+    "rates": [50, 60],
+    "reference_range": "Negative for occult blood, ova, parasites",
+    "units": "Various"
+  },
+  {
+    "test_id": "303",
+    "test_name": "SPUTUM (AFB)",
+    "rates": [100, 110],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "304",
+    "test_name": "BLOOD Hb",
+    "rates": [50, 60],
+    "reference_range": "Males: 14-18, Females: 12-16",
+    "units": "g/dL"
+  },
+  {
+    "test_id": "305",
+    "test_name": "BLOOD TLC",
+    "rates": [100, 110],
+    "reference_range": "4.5-11.0 × 10³",
+    "units": "cells/mm³"
+  },
+  {
+    "test_id": "306",
+    "test_name": "BLOOD DLC",
+    "rates": [100, 110],
+    "reference_range": "Neutrophils: 2-8, Lymphocytes: 1-4.8, Monocytes: 0.2-0.8, Eosinophils: 0-6, Basophils: 0-3",
+    "units": "× 10⁹/L or %"
+  },
+  {
+    "test_id": "307",
+    "test_name": "BLOOD ESR",
+    "rates": [50, 60],
+    "reference_range": "Males: 0-15, Females: 0-20",
+    "units": "mm/hr"
+  },
+  {
+    "test_id": "308",
+    "test_name": "BLOOD BT/CT",
+    "rates": [50, 60],
+    "reference_range": "BT: <8, CT: 5-15",
+    "units": "minutes"
+  },
+  {
+    "test_id": "309",
+    "test_name": "BLOOD PLATLET BY CELL COUNTER",
+    "rates": [100, 110],
+    "reference_range": "150,000-350,000",
+    "units": "cells/mm³"
+  },
+  {
+    "test_id": "310",
+    "test_name": "BLOOD M. P.",
+    "rates": [100, 110],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "311",
+    "test_name": "BLOOD GROUPING",
+    "rates": [50, 60],
+    "reference_range": "A, B, AB, O; Rh+ or Rh-",
+    "units": "N/A"
+  },
+  {
+    "test_id": "312",
+    "test_name": "MANTOUX TEST (Insulin Syringe)",
+    "rates": [100, 110],
+    "reference_range": "<5: Negative, 5-9: Borderline, ≥10: Positive",
+    "units": "mm of induration"
+  },
+  {
+    "test_id": "313",
+    "test_name": "SEMEN TEST",
+    "rates": [150, 200],
+    "reference_range": "Volume: 1.5-5, Sperm concentration: ≥15, Motility: ≥40, Morphology: ≥4 normal forms",
+    "units": "mL, million/mL, %, %"
+  },
+  {
+    "test_id": "314",
+    "test_name": "PREGNANCY TEST",
+    "rates": [50, 60],
+    "reference_range": "Negative (unless pregnant)",
+    "units": "N/A"
+  },
+  {
+    "test_id": "315",
+    "test_name": "A S L O TEST ABOTRITRE",
+    "rates": [200, 250],
+    "reference_range": "<200",
+    "units": "IU/mL"
+  },
+  {
+    "test_id": "316",
+    "test_name": "R. A. TEST / R F",
+    "rates": [130, 150],
+    "reference_range": "<14",
+    "units": "IU/mL"
+  },
+  {
+    "test_id": "317",
+    "test_name": "AUST. ANTIGEN (HBs Ag) hepa b",
+    "rates": [200, 250],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "318",
+    "test_name": "T3",
+    "rates": [200, 200],
+    "reference_range": "Total: 80-200, Free: 2.3-4.2",
+    "units": "ng/dL or pg/mL"
+  },
+  {
+    "test_id": "319",
+    "test_name": "T4",
+    "rates": [200, 200],
+    "reference_range": "Total: 5.0-12.0, Free: 0.8-1.8",
+    "units": "μg/dL or ng/dL"
+  },
+  {
+    "test_id": "320",
+    "test_name": "TSH",
+    "rates": [200, 250],
+    "reference_range": "0.4-4.0",
+    "units": "mIU/L"
+  },
+  {
+    "test_id": "321",
+    "test_name": "PERIPHERAL BLOOD FILM (PBF)",
+    "rates": [200, 250],
+    "reference_range": "Normal morphology",
+    "units": "N/A"
+  },
+  {
+    "test_id": "322",
+    "test_name": "E.C.G.",
+    "rates": [80, 100],
+    "reference_range": "Normal sinus rhythm",
+    "units": "N/A"
+  },
+  {
+    "test_id": "323",
+    "test_name": "ALKALINE PHOSPHATE",
+    "rates": [120, 130],
+    "reference_range": "30-120 (adults), 150-420 (children)",
+    "units": "IU/L"
+  },
+  {
+    "test_id": "324",
+    "test_name": "BILIRUBIN (TOTAL)",
+    "rates": [120, 130],
+    "reference_range": "0.3-1.2",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "325",
+    "test_name": "BILIRUBIN (DIRECT)",
+    "rates": [120, 130],
+    "reference_range": "0.1-0.3",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "326",
+    "test_name": "CHOLESTEROL",
+    "rates": [170, 180],
+    "reference_range": "<200",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "327",
+    "test_name": "CREATININE",
+    "rates": [200, 220],
+    "reference_range": "0.6-1.2 (adults), 0.2-0.7 (children)",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "328",
+    "test_name": "GLUCOSE (F)",
+    "rates": [80, 80],
+    "reference_range": "70-110",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "329",
+    "test_name": "GLUCOSE (R)",
+    "rates": [80, 80],
+    "reference_range": "<140",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "330",
+    "test_name": "GLUCOSE (PP)",
+    "rates": [80, 80],
+    "reference_range": "<140",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "331",
+    "test_name": "HDL CHOLESTEROL",
+    "rates": [170, 180],
+    "reference_range": "≥60 (desirable)",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "332",
+    "test_name": "SGOT (AST)",
+    "rates": [120, 130],
+    "reference_range": "Females: 9-25, Males: 10-40",
+    "units": "units/L"
+  },
+  {
+    "test_id": "333",
+    "test_name": "SGPT (ALT)",
+    "rates": [120, 130],
+    "reference_range": "Females: 7-30, Males: 10-55",
+    "units": "units/L"
+  },
+  {
+    "test_id": "334",
+    "test_name": "TOTAL PROTEIN",
+    "rates": [120, 130],
+    "reference_range": "6.0-8.3",
+    "units": "g/dL"
+  },
+  {
+    "test_id": "335",
+    "test_name": "TRY GLYCERIDE",
+    "rates": [170, 180],
+    "reference_range": "<150",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "336",
+    "test_name": "UREA",
+    "rates": [200, 220],
+    "reference_range": "8-23",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "337",
+    "test_name": "URIC ACID",
+    "rates": [200, 220],
+    "reference_range": "4-8",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "338",
+    "test_name": "CALCIUM",
+    "rates": [130, 150],
+    "reference_range": "8.2-10.2",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "339",
+    "test_name": "PHOSPHORUS",
+    "rates": [130, 150],
+    "reference_range": "2.3-4.7 (adults), 3.7-5.6 (children)",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "340",
+    "test_name": "ALBUMIN",
+    "rates": [130, 150],
+    "reference_range": "3.5-5.0 (adults), 3.4-4.2 (young children)",
+    "units": "g/dL"
+  },
+  {
+    "test_id": "341",
+    "test_name": "SODIUM",
+    "rates": [300],
+    "reference_range": "136-145",
+    "units": "mEq/L"
+  },
+  {
+    "test_id": "342",
+    "test_name": "C.R.P.",
+    "rates": [200, 250],
+    "reference_range": "0.08-3.1",
+    "units": "mg/L"
+  },
+  {
+    "test_id": "343",
+    "test_name": "M.P. BY CARD",
+    "rates": [200, 250],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "344",
+    "test_name": "Hb A1c",
+    "rates": [450, 500],
+    "reference_range": "4.0-5.6",
+    "units": "%"
+  },
+  {
+    "test_id": "345",
+    "test_name": "PFT",
+    "rates": [70, 100],
+    "reference_range": "Varies by parameter, age, height, sex",
+    "units": "Various"
+  },
+  {
+    "test_id": "346",
+    "test_name": "PFT SECOND VISIT",
+    "rates": [40, 50],
+    "reference_range": "Varies by parameter, age, height, sex",
+    "units": "Various"
+  },
+  {
+    "test_id": "347",
+    "test_name": "POTASSIUM",
+    "rates": [300],
+    "reference_range": "3.5-5.0",
+    "units": "mEq/L"
+  },
+  {
+    "test_id": "348",
+    "test_name": "HIV",
+    "rates": [250, 300],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "349",
+    "test_name": "WIDAL",
+    "rates": [200, 200],
+    "reference_range": "Negative or <1:160",
+    "units": "titer"
+  },
+  {
+    "test_id": "350",
+    "test_name": "VDRL",
+    "rates": [130, 140],
+    "reference_range": "Non-reactive",
+    "units": "N/A"
+  },
+  {
+    "test_id": "351",
+    "test_name": "TEC (aec)",
+    "rates": [100, 120],
+    "reference_range": "50-250",
+    "units": "cells/mm³"
+  },
+  {
+    "test_id": "352",
+    "test_name": "RBC",
+    "rates": [50, 50],
+    "reference_range": "Males: 4.5-5.9 × 10⁶, Females: 4.1-5.1 × 10⁶",
+    "units": "cells/mm³"
+  },
+  {
+    "test_id": "353",
+    "test_name": "PROTHOMBION TIME (PT) / PT INR/ATPP",
+    "rates": [130, 150],
+    "reference_range": "PT: 10-13, INR: 0.9-1.1, APTT: 25-40",
+    "units": "seconds (PT, APTT), ratio (INR)"
+  },
+  {
+    "test_id": "354",
+    "test_name": "DENGUE",
+    "rates": [400, 450],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "355",
+    "test_name": "URINE (ACR) TEST",
+    "rates": [350, 400],
+    "reference_range": "<30",
+    "units": "mg/g"
+  },
+  {
+    "test_id": "356",
+    "test_name": "URINE COMPREHENSIVE",
+    "rates": [50, 60],
+    "reference_range": "See specific components",
+    "units": "Various"
+  },
+  {
+    "test_id": "357",
+    "test_name": "ELECTROLYTES & PH",
+    "rates": [600, 600],
+    "reference_range": "Na: 136-145, K: 3.5-5.0, Cl: 95-105, pH: 7.35-7.45",
+    "units": "mEq/L (electrolytes), pH units"
+  },
+  {
+    "test_id": "359",
+    "test_name": "CHIKUNGUNIYA BY CARD 1GM",
+    "rates": [300, 350],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "361",
+    "test_name": "TYPHI BY CARD METHOD",
+    "rates": [200, 250],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "362",
+    "test_name": "TROPONIN I/RAPID TEST",
+    "rates": [500, 550],
+    "reference_range": "<0.4",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "363",
+    "test_name": "VITAMIN D3 25 OH TOTAL",
+    "rates": [1150, 1250],
+    "reference_range": "30-100 (sufficient)",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "364",
+    "test_name": "HCV (RAPID TEST) hepa c",
+    "rates": [180, 200],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "365",
+    "test_name": "AMYLASE (SERUM)",
+    "rates": [260],
+    "reference_range": "27-131",
+    "units": "U/L"
+  },
+  {
+    "test_id": "group1",
+    "test_name": "CBC (HB, TLC, DLC, RBC, PLATELETE COUNT)",
+    "rates": [200, 250, 440],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "group2",
+    "test_name": "LFT (ALKALINE PHOSPHATE, TOTAL BILIRUBIN, SGOP, SGPT, TOTAL PROTEIN)",
+    "rates": [600, 650, 650],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "group3",
+    "test_name": "KFT/RFT (CRETININE, UREA, URIC ACID)",
+    "rates": [600, 650, 660],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "group4",
+    "test_name": "LIPID PROFILE (CHOLESTEROL, HDL CHOLESTEROL, TRYGLYCERIDE, LDL, VLDL)",
+    "rates": [500, 550, 540],
+    "reference_range": "LDL: <100, VLDL: <30, Others: See individual components",
+    "units": "mg/dL"
+  },
+  {
+    "test_id": "group5",
+    "test_name": "THYROID PROFILE (T3, T4, TSH)",
+    "rates": [500, 550, 650],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "group6",
+    "test_name": "Free T3 T4 TSH",
+    "rates": [900],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "group7",
+    "test_name": "VIT D3",
+    "rates": [1250],
+    "reference_range": "30-100 (sufficient)",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "group8",
+    "test_name": "VIT B12",
+    "rates": [1050],
+    "reference_range": "200-900",
+    "units": "pg/mL"
+  },
+  {
+    "test_id": "group9",
+    "test_name": "HB A1C",
+    "rates": [500],
+    "reference_range": "4.0-5.6",
+    "units": "%"
+  },
+  {
+    "test_id": "group10",
+    "test_name": "CRP",
+    "rates": [250],
+    "reference_range": "0.08-3.1",
+    "units": "mg/L"
+  },
+  {
+    "test_id": "group11",
+    "test_name": "ELECTROLYTES",
+    "rates": [600],
+    "reference_range": "Na: 136-145, K: 3.5-5.0, Cl: 95-105",
+    "units": "mEq/L"
+  },
+  {
+    "test_id": "370",
+    "test_name": "Insulin (fasting insuling)",
+    "rates": [950],
+    "reference_range": "3-25",
+    "units": "μIU/mL"
+  },
+  {
+    "test_id": "371",
+    "test_name": "CA125",
+    "rates": [1400],
+    "reference_range": "<35",
+    "units": "U/mL"
+  },
+  {
+    "test_id": "372",
+    "test_name": "Ferritin",
+    "rates": [700],
+    "reference_range": "Females: 24-307, Males: 24-336",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "373",
+    "test_name": "TTG IgA",
+    "rates": [1150],
+    "reference_range": "<20",
+    "units": "U/mL"
+  },
+  {
+    "test_id": "374",
+    "test_name": "VIT B12",
+    "rates": [1050],
+    "reference_range": "200-900",
+    "units": "pg/mL"
+  },
+  {
+    "test_id": "375",
+    "test_name": "Torch Extended (IgG/IgM)",
+    "rates": [2800],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "376",
+    "test_name": "Free T3,T4,TSH",
+    "rates": [900],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "377",
+    "test_name": "DHEAS",
+    "rates": [1150],
+    "reference_range": "Females: 35-430, Males: 80-560",
+    "units": "μg/dL"
+  },
+  {
+    "test_id": "378",
+    "test_name": "Anti Cardiolipin Antibodies IgM",
+    "rates": [950],
+    "reference_range": "<20",
+    "units": "MPL"
+  },
+  {
+    "test_id": "379",
+    "test_name": "Anti Cardiolipin Antibodies IgG",
+    "rates": [950],
+    "reference_range": "<20",
+    "units": "GPL"
+  },
+  {
+    "test_id": "380",
+    "test_name": "Anti Phospholipid IgG, IgG",
+    "rates": [1600],
+    "reference_range": "<20",
+    "units": "U/mL"
+  },
+  {
+    "test_id": "381",
+    "test_name": "Anti CCP",
+    "rates": [2000],
+    "reference_range": "<20",
+    "units": "U/mL"
+  },
+  {
+    "test_id": "382",
+    "test_name": "HLA B27 Flow Cytometry",
+    "rates": [2600],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "383",
+    "test_name": "HLA B27 PCR Qualitative",
+    "rates": [3250],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "384",
+    "test_name": "CK",
+    "rates": [350],
+    "reference_range": "Females: 30-135, Males: 55-170",
+    "units": "U/L"
+  },
+  {
+    "test_id": "385",
+    "test_name": "Iron Studies",
+    "rates": [600],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "386",
+    "test_name": "CB NAAT (TB)",
+    "rates": [2500],
+    "reference_range": "Not detected",
+    "units": "N/A"
+  },
+  {
+    "test_id": "387",
+    "test_name": "Anti Nuclear Antibody (ANA), ANF",
+    "rates": [950],
+    "reference_range": "<1:40",
+    "units": "titer"
+  },
+  {
+    "test_id": "388",
+    "test_name": "FSh",
+    "rates": [500],
+    "reference_range": "Males: 1-9, Females: Varies by menstrual phase",
+    "units": "IU/L"
+  },
+  {
+    "test_id": "389",
+    "test_name": "LH",
+    "rates": [500],
+    "reference_range": "Males: 1-9, Females: Varies by menstrual phase",
+    "units": "IU/L"
+  },
+  {
+    "test_id": "390",
+    "test_name": "Prolactin",
+    "rates": [500],
+    "reference_range": "Females: 2-29, Males: 2-18",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "391",
+    "test_name": "Testosterone,Total",
+    "rates": [550],
+    "reference_range": "Females: 15-70, Males: 280-1100",
+    "units": "ng/dL"
+  },
+  {
+    "test_id": "392",
+    "test_name": "PSA",
+    "rates": [650],
+    "reference_range": "<4",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "393",
+    "test_name": "Andrology Screen (FSH,LH,Prolactin)",
+    "rates": [1250],
+    "reference_range": "See individual components",
+    "units": "Various"
+  },
+  {
+    "test_id": "394",
+    "test_name": "Culture Urine",
+    "rates": [600],
+    "reference_range": "<10,000",
+    "units": "CFU/mL"
+  },
+  {
+    "test_id": "395",
+    "test_name": "Culture Aerobic Pus",
+    "rates": [750],
+    "reference_range": "No growth",
+    "units": "N/A"
+  },
+  {
+    "test_id": "396",
+    "test_name": "KAPPA/LAMBDA, LIGHT CHAINS, FREE,SERUM",
+    "rates": [6500],
+    "reference_range": "0.26-1.65",
+    "units": "ratio"
+  },
+  {
+    "test_id": "397",
+    "test_name": "ANTIMULLERIAN HORMONE (AMH), SERUM",
+    "rates": [1850],
+    "reference_range": "1.0-3.5 (optimal fertility)",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "398",
+    "test_name": "ESTRADIOL(E2), SERUM",
+    "rates": [620],
+    "reference_range": "Males: 10-40, Females: Varies by menstrual phase",
+    "units": "pg/mL"
+  },
+  {
+    "test_id": "399",
+    "test_name": "ANTI THYROID PEROXIDASE ANTIBODY; ANTI TPO",
+    "rates": [1300],
+    "reference_range": "<35",
+    "units": "IU/mL"
+  },
+  {
+    "test_id": "400",
+    "test_name": "PROTEIN ELECTROPHORESIS, SERUM",
+    "rates": [680],
+    "reference_range": "See specific components",
+    "units": "g/dL or %"
+  },
+  {
+    "test_id": "401",
+    "test_name": "HCG BETA TOTAL QUANTITATIVE, MATERNAL",
+    "rates": [650],
+    "reference_range": "Varies by gestational age",
+    "units": "mIU/mL"
+  },
+  {
+    "test_id": "402",
+    "test_name": "COOMBS TEST, INDIRECT",
+    "rates": [470],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "403",
+    "test_name": "RETICULOCYTE COUNT",
+    "rates": [150],
+    "reference_range": "0.5-1.5",
+    "units": "% of RBCs"
+  },
+  {
+    "test_id": "404",
+    "test_name": "SARS-coV-2 (COVID-19) ANTIBODY IGG",
+    "rates": [525],
+    "reference_range": "Negative (unless previously infected/vaccinated)",
+    "units": "N/A"
+  },
+  {
+    "test_id": "405",
+    "test_name": "SARS-coV-2 (COVID-19) TOTAL ANTIBODIES",
+    "rates": [900],
+    "reference_range": "Negative (unless previously infected/vaccinated)",
+    "units": "N/A"
+  },
+  {
+    "test_id": "406",
+    "test_name": "IMMUNOGLOBULING IgE, SERUM",
+    "rates": [500],
+    "reference_range": "<100",
+    "units": "IU/mL"
+  },
+  {
+    "test_id": "407",
+    "test_name": "FOLATE (FOLIC ACID) SERUM",
+    "rates": [1210],
+    "reference_range": ">3",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "408",
+    "test_name": "GFR (GLOMERULAR FILTRATION RATE), ESTIMATED",
+    "rates": [200],
+    "reference_range": ">90",
+    "units": "mL/min/1.73 m²"
+  },
+  {
+    "test_id": "409",
+    "test_name": "AMYLASE, SERUM",
+    "rates": [350],
+    "reference_range": "27-131",
+    "units": "U/L"
+  },
+  {
+    "test_id": "410",
+    "test_name": "LDH, LACTATE DEHYDROGENASE",
+    "rates": [250],
+    "reference_range": "100-200",
+    "units": "U/L"
+  },
+  {
+    "test_id": "411",
+    "test_name": "ANTI THYROGLOBULIN ANTIBODY, ANTI Tg ipth",
+    "rates": [1300],
+    "reference_range": "<40",
+    "units": "IU/mL"
+  },
+  {
+    "test_id": "412",
+    "test_name": "HEMOGLOBIN HPLC/ELECTROPHORESIS",
+    "rates": [800],
+    "reference_range": "HbA: >95%, HbA2: 1.5-3.5%, HbF: <2%, others: absent",
+    "units": "%"
+  },
+  {
+    "test_id": "413",
+    "test_name": "LIPASE",
+    "rates": [400],
+    "reference_range": "31-186",
+    "units": "U/L"
+  },
+  {
+    "test_id": "417",
+    "test_name": "TMT",
+    "rates": [1500],
+    "reference_range": "No significant ST changes",
+    "units": "N/A"
+  },
+  {
+    "test_id": "419",
+    "test_name": "PTH",
+    "rates": [1600],
+    "reference_range": "15-65",
+    "units": "pg/mL"
+  },
+  {
+    "test_id": "420",
+    "test_name": "HOMOCYSTENTNE",
+    "rates": [1000],
+    "reference_range": "5-15",
+    "units": "μmol/L"
+  },
+  {
+    "test_id": "421",
+    "test_name": "Anit Hav IGG",
+    "rates": [1190],
+    "reference_range": "Negative (unless previously infected/vaccinated)",
+    "units": "N/A"
+  },
+  {
+    "test_id": "422",
+    "test_name": "ANIT HAV IGM",
+    "rates": [1190],
+    "reference_range": "Negative",
+    "units": "N/A"
+  },
+  {
+    "test_id": "423",
+    "test_name": "GROWTH HARMONE",
+    "rates": [800],
+    "reference_range": "Males: <1 (random), Females: <10 (random)",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "424",
+    "test_name": "DOUBLE MARKER",
+    "rates": [2400],
+    "reference_range": "See lab-specific cutoff",
+    "units": "MoM"
+  },
+  {
+    "test_id": "425",
+    "test_name": "C-PEPTIDE",
+    "rates": [1050],
+    "reference_range": "0.8-3.5",
+    "units": "ng/mL"
+  },
+  {
+    "test_id": "426",
+    "test_name": "107 ALLERGENS (2223)",
+    "rates": [6500],
+    "reference_range": "See specific components",
+    "units": "kU/L"
+  },
+  {
+    "test_id": "427",
+    "test_name": "FOOD ALLERGY (2881)",
+    "rates": [6000],
+    "reference_range": "See specific components",
+    "units": "kU/L"
+  },
+  {
+    "test_id": "428",
+    "test_name": "ALLEGY COMPLET PROFILLI(Z)",
+    "rates": [14000],
+    "reference_range": "See specific components",
+    "units": "kU/L"
+  },
+  {
+    "test_id": "429",
+    "test_name": "FOOD Intolerence (ALLO)",
+    "rates": [14000],
+    "reference_range": "See specific components",
+    "units": "Various"
+  }
+]
