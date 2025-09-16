@@ -5,9 +5,6 @@ import {
   Text,
   IconButton,
   Avatar,
-  InputGroup,
-  InputLeftElement,
-  Input,
   HStack,
   Menu,
   MenuButton,
@@ -21,10 +18,10 @@ import {
   Stack,
   Textarea,
   Select,
-  useDisclosure
+  Input,
+  useDisclosure,
 } from '@chakra-ui/react';
 import {
-  FiSearch,
   FiBell,
   FiMail,
   FiUser,
@@ -53,6 +50,40 @@ export default function ReceptionistDashboard() {
   const [doctors, setDoctors] = useState([]);
   const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
   const { isOpen, onOpen, onClose } = useDisclosure();
+
+  // Doctor visiting schedule
+  const schedule = {
+    Monday: [],
+    Tuesday: [
+      { name: "Dr. Kishore Singh (Dermato)", time: "6:00 PM – 7:30 PM" },
+    ],
+    Wednesday: [
+      { name: "Dr. Karan Singh (Pediatrician)", time: "6:00 PM – 7:00 PM" },
+      { name: "Dr. Ramesh P. Jajoo (Ayurved)", time: "8:00 AM – 10:00 AM" },
+      { name: "Dr. Rinku Singh (Gyno)", time: "7:00 PM – 8:00 PM" },
+      { name: "Dr. Prashant Singh (Ortho)", time: "7:00 PM – 8:00 PM" },
+      { name: "Dr. Preeti Maan (Dentist)", time: "5:00 PM – 6:30 PM" },
+    ],
+    Thursday: [
+      { name: "Dr. Pooja Shah (ENT)", time: "5:30 PM – 6:30 PM" },
+    ],
+    Friday: [
+      { name: "Dr. Karan Singh (Pediatrician)", time: "6:00 PM – 7:00 PM" },
+      { name: "Dr. Rinku Singh (Gyno)", time: "7:00 PM – 8:00 PM" },
+      { name: "Dr. Prashant Singh (Ortho)", time: "7:00 PM – 8:00 PM" },
+    ],
+    Saturday: [
+      { name: "Dr. Diwakar Pathak (Homeo)", time: "5:30 PM – 6:30 PM" },
+      { name: "Dr. Preeti Maan (Dentist)", time: "5:00 PM – 6:30 PM" },
+    ],
+    Sunday: [
+      { name: "Dr. Ramesh P. Jajoo (Ayurved)", time: "8:00 AM – 10:00 AM" },
+      { name: "Dr. Pooja Shah (ENT)", time: "5:30 PM – 6:30 PM" },
+      { name: "Dr. Soumya PM", time: "2:00 PM – 5:00 PM" },
+    ],
+  };
+
+  const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   // Fetch doctors list
   useEffect(() => {
@@ -102,7 +133,6 @@ export default function ReceptionistDashboard() {
     }
   };
 
-  // Hard logout: call backend, clear storage, then full reload to /login
   const handleLogout = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -117,12 +147,10 @@ export default function ReceptionistDashboard() {
     } catch (err) {
       console.error('Logout failed:', err);
     } finally {
-      // Clear all auth keys
       localStorage.removeItem('token');
       localStorage.removeItem('username');
       localStorage.removeItem('role');
       localStorage.removeItem('session_id');
-      // Force full app reload on login page
       window.location.href = '/login';
     }
   };
@@ -130,7 +158,7 @@ export default function ReceptionistDashboard() {
   return (
     <Flex w="100vw" h="100vh" bg="gray.50" overflow="hidden">
       <Flex direction="column" flex="1" overflow="hidden">
-        {/* Header bar */}
+        {/* Header */}
         <Flex
           as="header"
           flexShrink="0"
@@ -141,11 +169,9 @@ export default function ReceptionistDashboard() {
           boxShadow="sm"
           h={`${headerHeight}px`}
         >
-          {/* Replace search box with simple Bitsmed text */}
           <Text fontSize="2xl" fontWeight="bold" color="blue.800">
             Bitsmed
           </Text>
-
           <HStack spacing={{ base: '3', md: '4' }}>
             <IconButton icon={<FiBell />} variant="ghost" aria-label="Notifications" />
             <IconButton icon={<FiMail />} variant="ghost" aria-label="Messages" />
@@ -153,7 +179,7 @@ export default function ReceptionistDashboard() {
               <MenuButton
                 as={Button}
                 variant="ghost"
-                rightIcon={<Avatar size={{ base: 'sm', md: 'sm' }} name={username} ml="2" />}
+                rightIcon={<Avatar size="sm" name={username} ml="2" />}
               >
                 <Text fontWeight="medium" mr="2">Welcome, {username}</Text>
               </MenuButton>
@@ -167,28 +193,27 @@ export default function ReceptionistDashboard() {
           </HStack>
         </Flex>
 
-        {/* Main content: registration form */}
-        <Box
+        {/* Main Content: Split Form (left) and Calendar (right) */}
+        <Flex
           as="main"
           flex="1"
           p={{ base: '3', md: '4' }}
           overflowY="auto"
           h={`calc(100vh - ${headerHeight}px)`}
+          gap={6}
         >
+          {/* Left: Registration Form */}
           <Box
-            maxW="700px"
-            w="full"
-            mx="auto"
+            flex="1"
             bg="white"
             p={{ base: '4', md: '6' }}
             borderRadius="lg"
             boxShadow="md"
-            textAlign="center"
           >
-            <Heading as="h2" size="lg" mb="4">
+            <Heading as="h2" size="lg" mb="4" textAlign="center">
               Register Patient
             </Heading>
-            <Stack spacing="4" textAlign="left">
+            <Stack spacing="4">
               <FormControl isRequired>
                 <FormLabel>Name</FormLabel>
                 <Input name="name" value={patient.name} onChange={handleChange} />
@@ -205,11 +230,7 @@ export default function ReceptionistDashboard() {
                 </FormControl>
                 <FormControl isRequired>
                   <FormLabel>Gender</FormLabel>
-                  <Select
-                    name="gender"
-                    value={patient.gender}
-                    onChange={handleChange}
-                  >
+                  <Select name="gender" value={patient.gender} onChange={handleChange}>
                     <option value="">Select</option>
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -274,12 +295,72 @@ export default function ReceptionistDashboard() {
                   ))}
                 </Select>
               </FormControl>
-              <Button colorScheme="brand" size="lg" onClick={registerPatient}>
+              <Button colorScheme="blue" size="lg" onClick={registerPatient}>
                 Register Patient
               </Button>
             </Stack>
           </Box>
-        </Box>
+
+          {/* Right: Calendar */}
+          <Box
+            flex="1"
+            bg="white"
+            p={{ base: '4', md: '6' }}
+            borderRadius="lg"
+            boxShadow="md"
+            overflow="auto"
+          >
+            <Heading as="h2" size="lg" mb="4" textAlign="center">
+              Doctor Schedule
+            </Heading>
+            <Flex gap={4}>
+              {days.map((day) => (
+                <Box
+                  key={day}
+                  flex="1"
+                  border="1px solid"
+                  borderColor="gray.200"
+                  borderRadius="md"
+                  p={3}
+                  minW="150px"
+                  bg="gray.50"
+                >
+                  <Text
+                    fontWeight="bold"
+                    fontSize="md"
+                    textAlign="center"
+                    mb={2}
+                    color="blue.700"
+                  >
+                    {day}
+                  </Text>
+                  {schedule[day].length > 0 ? (
+                    schedule[day].map((event, i) => (
+                      <Box
+                        key={i}
+                        bg="blue.100"
+                        borderLeft="4px solid"
+                        borderColor="blue.500"
+                        borderRadius="md"
+                        p={2}
+                        mb={2}
+                      >
+                        <Text fontSize="sm" fontWeight="bold">
+                          {event.time}
+                        </Text>
+                        <Text fontSize="sm">{event.name}</Text>
+                      </Box>
+                    ))
+                  ) : (
+                    <Text fontSize="sm" color="gray.400" textAlign="center">
+                      No Doctors
+                    </Text>
+                  )}
+                </Box>
+              ))}
+            </Flex>
+          </Box>
+        </Flex>
       </Flex>
 
       {/* Prescription modal */}
