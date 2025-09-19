@@ -205,7 +205,7 @@ export default function DoctorSchedulePage() {
       {fromDashboard && (
         <Box textAlign="center" mt={6}>
           <Button colorScheme="blue" onClick={() => navigate("/")}>
-            Back to Dashboard
+            Back to Register Patient
           </Button>
         </Box>
       )}
