@@ -13,6 +13,7 @@ import SidebarComponent from './Sidebar';
 import Login from './Login';
 import Dashboard from './Dashboard';
 import ReceptionistDashboard from './ReceptionistDashboard';
+import DoctorSchedulePage from "./DoctorSchedulePage";
 import AdminDashboard from './AdminDashboard';
 import MedicalCounterDashboard from './MedicalCounterDashboard';
 import DoctorsDashboard from './DoctorsDashboard';
@@ -88,6 +89,8 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
+          <Route path="/" element={<ReceptionistDashboard />} />
+          <Route path="/schedule" element={<DoctorSchedulePage />} />
           <Route
             path="/doctor"
             element={
