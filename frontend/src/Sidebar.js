@@ -74,6 +74,7 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
           <SidebarItem icon={FiUserPlus} label="Create User" to="/admin/create-user" />
           <SidebarItem icon={FiUsers} label="Users List" to="/admin/users-list" />
           <SidebarItem icon={FiUsers} label="Patients List" to="/admin/patients-list" />
+          <SidebarItem icon={FiCalendar} label="Visiting Doctor Schedule" to="/admin/schedule" />
           <SidebarItem icon={FiCalendar} label="Appointments" to="/admin/appointments" />
           <SidebarItem icon={FiFileText} label="Reports" to="/admin/reports" />
         </>

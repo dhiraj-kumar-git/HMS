@@ -296,7 +296,7 @@ export default function ReceptionistDashboard() {
               <Box textAlign="center" p={4}>
                 <Button
                   colorScheme="blue"
-                  onClick={() => navigate("/schedule")}
+                  onClick={() => navigate("/schedule", { state: { fromDashboard: true } })}
                 >
                   Visiting Doctor Schedule
                 </Button>
