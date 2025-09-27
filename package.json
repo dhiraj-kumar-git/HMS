@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "html2canvas": "^1.4.1",
-    "jspdf": "^3.0.3"
+    "jspdf": "^3.0.3",
+    "react-to-print": "^3.1.1"
   }
 }
