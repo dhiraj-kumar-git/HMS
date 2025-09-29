@@ -159,7 +159,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
           {/* Patient Details */}
           <Box px={4} mt={-2} border="1px solid black" borderRadius="md" py={4}>
             <Flex justifyContent="space-between" alignItems="flex-start">
-              <Box width="50%" textAlign="left">
+              <Box width="60%" textAlign="left">
                 <Flex mb={1}>
                   <Text width="90px">Name</Text>
                   <Text>: MR. {prescriptionData?.name?.toUpperCase() || ''}</Text>
@@ -169,15 +169,19 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                   <Text>: {prescriptionData?.gender?.toUpperCase() || ''} / {prescriptionData?.age || ''}Yr</Text>
                 </Flex>
                 <Flex mb={1}>
-                  <Text width="90px">Address</Text>
-                  <Text>: {prescriptionData?.address || ''}</Text>
-                </Flex>
-                <Flex mb={1}>
                   <Text width="90px">Ph/Mob No</Text>
                   <Text>: {prescriptionData?.contact_no || '/'}</Text>
                 </Flex>
+                <Flex mb={1}>
+                  <Text width="90px">Email ID</Text>
+                  <Text>: {prescriptionData?.email || '/'}</Text>
+                </Flex>
+                <Flex mb={1}>
+                  <Text width="90px">Address</Text>
+                  <Text>: {prescriptionData?.address || ''}</Text>
+                </Flex>
               </Box>
-              <Box width="50%">
+              <Box width="40%">
                 <Flex mb={1}>
                   <Text width="100px">O.P.D No</Text>
                   <Text>: {prescriptionData?.opdNumber || ''}</Text>
@@ -187,7 +191,6 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                   <Text>: {prescriptionData?.psrn_id || ''}</Text>
                 </Flex>
                 <Flex mb={1}>
-
                 </Flex>
                 <Flex mb={1}>
                   <Text width="100px">Date</Text>
