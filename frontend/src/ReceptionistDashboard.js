@@ -34,14 +34,14 @@ export default function ReceptionistDashboard() {
   const username = localStorage.getItem("username");
 
   const defaultDoctors = [
-    { role: "doctor", username: "Dr. Diwakar Pathak (Homeopathic)" },
-    { role: "doctor", username: "Dr. Karan Singh Beniwal (Paediatrician)" },
-    { role: "doctor", username: "Dr. Kishore Singh (Dermatologist)" },
-    { role: "doctor", username: "Dr. Pooja Shah (ENT)" },
-    { role: "doctor", username: "Dr. Prashant Singh (Orthopaedics)" },
-    { role: "doctor", username: "Dr. Preety Maan (Dentist)" },
-    { role: "doctor", username: "Dr. Ramesh P Jajoo (Ayurvedic)" },
-    { role: "doctor", username: "Dr. Rinku Singh (Gynaecology)" },
+    { role: "doctor", username: "diwakar_pathak", display_name: "Dr. Diwakar Pathak (Homeopathic)" },
+    { role: "doctor", username: "karan_singh_beniwal", display_name: "Dr. Karan Singh Beniwal (Paediatrician)" },
+    { role: "doctor", username: "kishore_singh", display_name: "Dr. Kishore Singh (Dermatologist)" },
+    { role: "doctor", username: "pooja_shah", display_name: "Dr. Pooja Shah (ENT)" },
+    { role: "doctor", username: "prashant_singh", display_name: "Dr. Prashant Singh (Orthopaedics)" },
+    { role: "doctor", username: "preety_maan", display_name: "Dr. Preety Maan (Dentist)" },
+    { role: "doctor", username: "ramesh_jajoo", display_name: "Dr. Ramesh P Jajoo (Ayurvedic)" },
+    { role: "doctor", username: "rinku_singh", display_name: "Dr. Rinku Singh (Gynaecology)" },
   ];
 
   const [patient, setPatient] = useState({
@@ -68,13 +68,12 @@ export default function ReceptionistDashboard() {
         const res = await axios.get("http://localhost:5000/doctors", {
           headers: { Authorization: `Bearer ${token}` },
         });
+        // Merge API doctors with defaultDoctors by username
         setDoctors([
           ...defaultDoctors,
           ...res.data.filter(
             (apiDoc) =>
-              !defaultDoctors.some(
-                (defDoc) => defDoc.username === apiDoc.username
-              )
+              !defaultDoctors.some((defDoc) => defDoc.username === apiDoc.username)
           ),
         ]);
       } catch (err) {
@@ -326,6 +325,8 @@ export default function ReceptionistDashboard() {
                   rows={2}
                 />
               </FormControl>
+
+              {/*Doctor dropdown shows display_name but stores username */}
               <FormControl isRequired>
                 <FormLabel>Assign Doctor</FormLabel>
                 <Select
@@ -336,7 +337,7 @@ export default function ReceptionistDashboard() {
                   <option value="">Select Doctor</option>
                   {doctors.map((doc, i) => (
                     <option key={i} value={doc.username}>
-                      {doc.username}
+                      {doc.display_name || doc.username}
                     </option>
                   ))}
                 </Select>

@@ -16,7 +16,7 @@ class Patient:
     prescriptions: list = field(default_factory=list)  # (Legacy field, if needed)
     lab_tests: list = field(default_factory=list)
     remarks: list = field(default_factory=list)  # For storing remarks (multiple)
-    prescription_details: list = field(default_factory=list)  # **New field for storing prescription details**
+    prescription_details: list = field(default_factory=list)  # New field for storing prescription details
     bill_status: Optional[str] = "Pending"
     workflow_status: str = "active"
 
@@ -30,9 +30,15 @@ class User:
     username: str
     password: str  # Hashed password storage
     role: str  # receptionist, doctor, medical_store, lab_staff, admin
+    display_name: Optional[str] = None  # Added field for Display Name
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        user_dict = asdict(self)
+        # Ensure display_name has a fallback to username if not provided
+        if not user_dict.get("display_name"):
+            user_dict["display_name"] = self.username
+        return user_dict
+
 
 @dataclass
 class Session:

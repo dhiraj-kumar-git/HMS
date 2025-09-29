@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Box,
   Button,
@@ -9,44 +9,47 @@ import {
   FormLabel,
   Select,
   useToast,
-} from '@chakra-ui/react';
-import axios from 'axios';
+} from "@chakra-ui/react";
+import axios from "axios";
 
 export default function CreateUser() {
-  const [newUser, setNewUser] = useState({ username: '', password: '', role: '' });
+  const [newUser, setNewUser] = useState({
+    username: "",
+    password: "",
+    role: "",
+    display_name: "",
+  });
   const toast = useToast();
 
   const handleAddUser = async () => {
-    const { username, password, role } = newUser;
-    if (!username || !password || !role) {
+    const { username, password, role, display_name } = newUser;
+    if (!username || !password || !role || !display_name) {
       return toast({
-        title: 'All fields are required!',
-        status: 'warning',
+        title: "All fields are required!",
+        status: "warning",
         duration: 3000,
         isClosable: true,
       });
     }
 
     try {
-      const token = localStorage.getItem('token');
-      await axios.post(
-        'http://localhost:5000/create_user',
-        newUser,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const token = localStorage.getItem("token");
+      await axios.post("http://localhost:5000/create_user", newUser, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
       toast({
-        title: 'User created successfully!',
-        status: 'success',
+        title: "User created successfully!",
+        status: "success",
         duration: 3000,
         isClosable: true,
       });
-      setNewUser({ username: '', password: '', role: '' });
+      setNewUser({ username: "", password: "", role: "", display_name: "" });
     } catch (error) {
       toast({
-        title: 'Error adding user',
+        title: "Error adding user",
         description: error.response?.data?.message || error.message,
-        status: 'error',
+        status: "error",
         duration: 3000,
         isClosable: true,
       });
@@ -66,6 +69,19 @@ export default function CreateUser() {
       <Heading size="lg" mb="6" color="brand.700">
         Create User
       </Heading>
+
+      {/* New Display Name Field */}
+      <FormControl>
+        <FormLabel>Display Name</FormLabel>
+        <Input
+          size="lg"
+          placeholder="Enter display name (e.g. Dr. Doctor Name)"
+          value={newUser.display_name}
+          onChange={(e) =>
+            setNewUser({ ...newUser, display_name: e.target.value })
+          }
+        />
+      </FormControl>
 
       <Stack spacing="5">
         <FormControl>
@@ -99,9 +115,7 @@ export default function CreateUser() {
             size="lg"
             placeholder="Select role"
             value={newUser.role}
-            onChange={(e) =>
-              setNewUser({ ...newUser, role: e.target.value })
-            }
+            onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
           >
             <option value="receptionist">Receptionist</option>
             <option value="doctor">Doctor</option>
@@ -114,7 +128,7 @@ export default function CreateUser() {
           size="lg"
           colorScheme="brand"
           onClick={handleAddUser}
-          _hover={{ transform: 'scale(1.02)' }}
+          _hover={{ transform: "scale(1.02)" }}
           transition="all 0.2s"
         >
           Add User

@@ -420,7 +420,7 @@ export default function LabTestDashboard() {
       </Flex>
 
       {/* MAIN */}
-      <Box as="main" flex="1" px="8" py="6" mx="8" maxW="1200px" overflow="hidden">
+      <Box as="main" flex="1" px="8" py="6" mx="8" maxW="1200px" overflow="hidden" overflowY="auto">
         {/* ─── Test Request Overview ─── */}
         <Flex mb="8" gap="6" flexWrap="wrap">
           {/* ─────────── Left: single blue‑background overview card ─────────── */}
