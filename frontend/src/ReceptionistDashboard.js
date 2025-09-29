@@ -5,9 +5,6 @@ import {
   Text,
   IconButton,
   Avatar,
-  InputGroup,
-  InputLeftElement,
-  Input,
   HStack,
   Menu,
   MenuButton,
@@ -21,9 +18,10 @@ import {
   Stack,
   Textarea,
   Select,
+  Input,
   useDisclosure,
 } from "@chakra-ui/react";
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
+import { FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import PrescriptionModal from "./PrescriptionModal";
@@ -55,6 +53,7 @@ export default function ReceptionistDashboard() {
     psrn_id: "",
     doctor_assigned: "",
     patient_type: "",
+    email: "",
   });
   const [opdNumber, setOpdNumber] = useState("");
   const [doctors, setDoctors] = useState([]);
@@ -86,15 +85,30 @@ export default function ReceptionistDashboard() {
   }, []);
 
   const handleChange = (e) => {
-    setPatient((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+
+    if (name === "email") {
+      // strip domain if pasted with @pilani.bits-pilani.ac.in
+      const cleanedValue = value
+        .toLowerCase()
+        .replace(/@pilani\.bits-pilani\.ac\.in$/i, "");
+      setPatient((prev) => ({ ...prev, email: cleanedValue }));
+    } else {
+      setPatient((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const registerPatient = async () => {
+    let patientData = { ...patient };
+    if (patient.patient_type === "Student" && patient.email) {
+      patientData.email = `${patient.email.toLowerCase()}@pilani.bits-pilani.ac.in`;
+    }
+
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
         "http://localhost:5000/register_patient",
-        patient,
+        patientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setOpdNumber(res.data.psr_no);
@@ -133,12 +147,10 @@ export default function ReceptionistDashboard() {
     } catch (err) {
       console.error("Logout failed:", err);
     } finally {
-      // Clear all auth keys
       localStorage.removeItem("token");
       localStorage.removeItem("username");
       localStorage.removeItem("role");
       localStorage.removeItem("session_id");
-      // Force full app reload on login page
       window.location.href = "/login";
     }
   };
@@ -157,7 +169,6 @@ export default function ReceptionistDashboard() {
           boxShadow="sm"
           h={`${headerHeight}px`}
         >
-          {/* Replace search box with simple Bitsmed text */}
           <Text fontSize="2xl" fontWeight="bold" color="blue.800">
             Bitsmed
           </Text>
@@ -286,6 +297,26 @@ export default function ReceptionistDashboard() {
                   </FormControl>
                 )}
               </HStack>
+
+              {/* Email field only for Student */}
+              {patient.patient_type === "Student" && (
+                <FormControl isRequired>
+                  <FormLabel>Email ID</FormLabel>
+                  <Flex align="center">
+                    <Input
+                      type="text"
+                      name="email"
+                      value={patient.email}
+                      onChange={handleChange}
+                      placeholder="Enter ID (e.g. f20250123)"
+                    />
+                    <Box ml={2} color="gray.600" whiteSpace="nowrap">
+                      @pilani.bits-pilani.ac.in
+                    </Box>
+                  </Flex>
+                </FormControl>
+              )}
+
               <FormControl isRequired>
                 <FormLabel>Address</FormLabel>
                 <Textarea
@@ -341,6 +372,10 @@ export default function ReceptionistDashboard() {
             opdNumber,
             psrn_id:
               patient.patient_type === "Other" ? undefined : patient.psrn_id,
+            email:
+              patient.patient_type === "Student" && patient.email
+                ? `${patient.email.toLowerCase()}@pilani.bits-pilani.ac.in`
+                : patient.email,
           }}
         />
       )}
