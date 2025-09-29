@@ -1,7 +1,7 @@
 // Sidebar.js
-import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { Box, Flex, Text, Button } from '@chakra-ui/react';
+import React, { useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import { Box, Flex, Text, Button, Image } from "@chakra-ui/react";
 import {
   FiChevronLeft,
   FiChevronRight,
@@ -10,19 +10,20 @@ import {
   FiUserPlus,
   FiUsers,
   FiCalendar,
-  FiFileText
-} from 'react-icons/fi';
+  FiFileText,
+} from "react-icons/fi";
+import bitsLogo from "./assets/bits-logo.png";
 
 const SidebarItem = ({ icon, label, to }) => (
-  <NavLink to={to} end style={{ textDecoration: 'none' }}>
+  <NavLink to={to} end style={{ textDecoration: "none" }}>
     {({ isActive }) => (
       <Flex
         align="center"
-        p={{ base: '3', md: '4' }}
-        bg={isActive ? 'blue.100' : 'transparent'}
-        borderLeft={isActive ? '4px solid #3182CE' : '4px solid transparent'}
+        p={{ base: "3", md: "4" }}
+        bg={isActive ? "blue.100" : "transparent"}
+        borderLeft={isActive ? "4px solid #3182CE" : "4px solid transparent"}
         cursor="pointer"
-        _hover={{ bg: 'blue.50' }}
+        _hover={{ bg: "blue.50" }}
         transition="all 0.2s"
       >
         <Box as={icon} mr="3" />
@@ -40,13 +41,15 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
     setCollapsed(!collapsed);
   };
 
-  const toggleIcon = collapsed 
-    ? <FiChevronRight color="#fff" /> 
-    : <FiChevronLeft color="#fff" />;
+  const toggleIcon = collapsed ? (
+    <FiChevronRight color="#fff" />
+  ) : (
+    <FiChevronLeft color="#fff" />
+  );
 
   return (
     <Box
-      w={{ base: '200px', md: '250px' }}
+      w={{ base: "200px", md: "250px" }}
       bg="white"
       boxShadow="md"
       position="sticky"
@@ -56,49 +59,78 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
     >
       {/* HEADER SLOT */}
       <Box position="relative" h="48px" px="4" mb="4">
-        <Text
-          position="absolute"
-          top="60%"
-          transform="translateY(-50%)"
-          fontSize={{ base: 'xl', md: '2xl' }}
-          fontWeight="bold"
-        >
-          BitsMed
-        </Text>
+        <Flex align="center" h="100%">
+          <Image
+            src={bitsLogo}
+            alt="BITS Pilani"
+            boxSize="32px"
+            mr={2} // space between logo and text
+          />
+          <Text fontSize={{ base: "xl", md: "2xl" }} fontWeight="bold">
+            BitsMed
+          </Text>
+        </Flex>
       </Box>
 
       {/* Sidebar Navigation Items */}
-      {isLoggedIn && role === 'admin' && (
+      {isLoggedIn && role === "admin" && (
         <>
           <SidebarItem icon={FiHome} label="Dashboard" to="/admin" />
-          <SidebarItem icon={FiUserPlus} label="Create User" to="/admin/create-user" />
-          <SidebarItem icon={FiUsers} label="Users List" to="/admin/users-list" />
-          <SidebarItem icon={FiUsers} label="Patients List" to="/admin/patients-list" />
-          <SidebarItem icon={FiCalendar} label="Visiting Doctor Schedule" to="/admin/schedule" />
-          <SidebarItem icon={FiCalendar} label="Appointments" to="/admin/appointments" />
+          <SidebarItem
+            icon={FiUserPlus}
+            label="Create User"
+            to="/admin/create-user"
+          />
+          <SidebarItem
+            icon={FiUsers}
+            label="Users List"
+            to="/admin/users-list"
+          />
+          <SidebarItem
+            icon={FiUsers}
+            label="Patients List"
+            to="/admin/patients-list"
+          />
+          <SidebarItem
+            icon={FiCalendar}
+            label="Visiting Doctor Schedule"
+            to="/admin/schedule"
+          />
+          <SidebarItem
+            icon={FiCalendar}
+            label="Appointments"
+            to="/admin/appointments"
+          />
           <SidebarItem icon={FiFileText} label="Reports" to="/admin/reports" />
         </>
       )}
-      {isLoggedIn && role === 'medical_store' && (
+      {isLoggedIn && role === "medical_store" && (
         <>
           <SidebarItem icon={FiHome} label="Dashboard" to="/medical_counter" />
-          <SidebarItem icon={FiUserPlus} label="Add Medicine" to="/add-medicine" />
+          <SidebarItem
+            icon={FiUserPlus}
+            label="Add Medicine"
+            to="/add-medicine"
+          />
           <SidebarItem icon={FiUsers} label="Inventory" to="/inventory" />
         </>
       )}
-      {isLoggedIn && role === 'doctor' && (
+      {isLoggedIn && role === "doctor" && (
         <>
           <SidebarItem icon={FiHome} label="Doctor Dashboard" to="/doctor" />
-          <SidebarItem icon={FiUsers} label="View All Patients" to="/doctor/all-patients" />
+          <SidebarItem
+            icon={FiUsers}
+            label="View All Patients"
+            to="/doctor/all-patients"
+          />
         </>
       )}
-      {isLoggedIn && role === 'lab_staff' && (
-        <SidebarItem icon={FiHome} label="Lab Dashboard" to="/lab" />
+      {isLoggedIn && role === "lab_staff" && (
+        <>
+          <SidebarItem icon={FiHome} label="Lab Dashboard" to="/lab" />
+          <SidebarItem icon={FiFileText} label="Upload Lab Reports" to="/lab/upload" />
+        </>
       )}
-
-      
-
-    
     </Box>
   );
 }

@@ -295,7 +295,7 @@ function DashboardHome() {
         />
         <StatCard
           title="Hospital Earning"
-          value="$3654"
+          value="₹​ 36,546"
           icon={FiCreditCard}
           bgGradient="linear(to-r, gray.600, gray.700)"
         />
