@@ -35,6 +35,17 @@ export default function ReceptionistDashboard() {
   const toast = useToast();
   const username = localStorage.getItem("username");
 
+  const defaultDoctors = [
+    { role: "doctor", username: "Dr. Diwakar Pathak (Homeopathic)" },
+    { role: "doctor", username: "Dr. Karan Singh Beniwal (Paediatrician)" },
+    { role: "doctor", username: "Dr. Kishore Singh (Dermatologist)" },
+    { role: "doctor", username: "Dr. Pooja Shah (ENT)" },
+    { role: "doctor", username: "Dr. Prashant Singh (Orthopaedics)" },
+    { role: "doctor", username: "Dr. Preety Maan (Dentist)" },
+    { role: "doctor", username: "Dr. Ramesh P Jajoo (Ayurvedic)" },
+    { role: "doctor", username: "Dr. Rinku Singh (Gynaecology)" },
+  ];
+
   const [patient, setPatient] = useState({
     name: "",
     age: "",
@@ -58,9 +69,18 @@ export default function ReceptionistDashboard() {
         const res = await axios.get("http://localhost:5000/doctors", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setDoctors(res.data);
+        setDoctors([
+          ...defaultDoctors,
+          ...res.data.filter(
+            (apiDoc) =>
+              !defaultDoctors.some(
+                (defDoc) => defDoc.username === apiDoc.username
+              )
+          ),
+        ]);
       } catch (err) {
         console.error("Error fetching doctors:", err);
+        setDoctors(defaultDoctors);
       }
     })();
   }, []);
@@ -296,7 +316,9 @@ export default function ReceptionistDashboard() {
               <Box textAlign="center" p={4}>
                 <Button
                   colorScheme="blue"
-                  onClick={() => navigate("/schedule", { state: { fromDashboard: true } })}
+                  onClick={() =>
+                    navigate("/schedule", { state: { fromDashboard: true } })
+                  }
                 >
                   Visiting Doctor Schedule
                 </Button>
