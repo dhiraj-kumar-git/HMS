@@ -34,14 +34,46 @@ export default function ReceptionistDashboard() {
   const username = localStorage.getItem("username");
 
   const defaultDoctors = [
-    { role: "doctor", username: "diwakar_pathak", display_name: "Dr. Diwakar Pathak (Homeopathic)" },
-    { role: "doctor", username: "karan_singh_beniwal", display_name: "Dr. Karan Singh Beniwal (Paediatrician)" },
-    { role: "doctor", username: "kishore_singh", display_name: "Dr. Kishore Singh (Dermatologist)" },
-    { role: "doctor", username: "pooja_shah", display_name: "Dr. Pooja Shah (ENT)" },
-    { role: "doctor", username: "prashant_singh", display_name: "Dr. Prashant Singh (Orthopaedics)" },
-    { role: "doctor", username: "preety_maan", display_name: "Dr. Preety Maan (Dentist)" },
-    { role: "doctor", username: "ramesh_jajoo", display_name: "Dr. Ramesh P Jajoo (Ayurvedic)" },
-    { role: "doctor", username: "rinku_singh", display_name: "Dr. Rinku Singh (Gynaecology)" },
+    {
+      role: "doctor",
+      username: "diwakar_pathak",
+      display_name: "Dr. Diwakar Pathak (Homeopathic)",
+    },
+    {
+      role: "doctor",
+      username: "karan_singh_beniwal",
+      display_name: "Dr. Karan Singh Beniwal (Paediatrician)",
+    },
+    {
+      role: "doctor",
+      username: "kishore_singh",
+      display_name: "Dr. Kishore Singh (Dermatologist)",
+    },
+    {
+      role: "doctor",
+      username: "pooja_shah",
+      display_name: "Dr. Pooja Shah (ENT)",
+    },
+    {
+      role: "doctor",
+      username: "prashant_singh",
+      display_name: "Dr. Prashant Singh (Orthopaedics)",
+    },
+    {
+      role: "doctor",
+      username: "preety_maan",
+      display_name: "Dr. Preety Maan (Dentist)",
+    },
+    {
+      role: "doctor",
+      username: "ramesh_jajoo",
+      display_name: "Dr. Ramesh P Jajoo (Ayurvedic)",
+    },
+    {
+      role: "doctor",
+      username: "rinku_singh",
+      display_name: "Dr. Rinku Singh (Gynaecology)",
+    },
   ];
 
   const [patient, setPatient] = useState({
@@ -73,7 +105,9 @@ export default function ReceptionistDashboard() {
           ...defaultDoctors,
           ...res.data.filter(
             (apiDoc) =>
-              !defaultDoctors.some((defDoc) => defDoc.username === apiDoc.username)
+              !defaultDoctors.some(
+                (defDoc) => defDoc.username === apiDoc.username
+              )
           ),
         ]);
       } catch (err) {
@@ -297,24 +331,27 @@ export default function ReceptionistDashboard() {
                 )}
               </HStack>
 
-              {/* Email field only for Student */}
-              {patient.patient_type === "Student" && (
-                <FormControl isRequired>
-                  <FormLabel>Email ID</FormLabel>
-                  <Flex align="center">
-                    <Input
-                      type="text"
-                      name="email"
-                      value={patient.email}
-                      onChange={handleChange}
-                      placeholder="Enter ID (e.g. f20250123)"
-                    />
+              <FormControl isRequired>
+                <FormLabel>Email ID</FormLabel>
+                <Flex align="center">
+                  <Input
+                    type="text"
+                    name="email"
+                    value={patient.email}
+                    onChange={handleChange}
+                    placeholder={
+                      patient.patient_type === "Student"
+                        ? "Enter ID (e.g. f20250123)"
+                        : "Enter email"
+                    }
+                  />
+                  {(patient.patient_type === "Student" || patient.patient_type === "Faculty") && (
                     <Box ml={2} color="gray.600" whiteSpace="nowrap">
                       @pilani.bits-pilani.ac.in
                     </Box>
-                  </Flex>
-                </FormControl>
-              )}
+                  )}
+                </Flex>
+              </FormControl>
 
               <FormControl isRequired>
                 <FormLabel>Address</FormLabel>
@@ -326,7 +363,7 @@ export default function ReceptionistDashboard() {
                 />
               </FormControl>
 
-              {/*Doctor dropdown shows display_name but stores username */}
+              {/* Doctor dropdown shows display_name but stores username */}
               <FormControl isRequired>
                 <FormLabel>Assign Doctor</FormLabel>
                 <Select

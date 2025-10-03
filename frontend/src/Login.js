@@ -26,6 +26,7 @@ function Login({ onLogin }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async () => {
@@ -39,6 +40,8 @@ function Login({ onLogin }) {
     }
 
     setFieldErrors({});
+    setError("");
+    setLoading(true);
     try {
       const response = await axios.post("http://localhost:5000/login", {
         username,
@@ -59,6 +62,8 @@ function Login({ onLogin }) {
       } else {
         setError("An error occurred. Please try again.");
       }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -137,7 +142,12 @@ function Login({ onLogin }) {
               )}
             </FormControl>
 
-            <Button colorScheme="brand" size="lg" onClick={handleLogin}>
+            <Button
+              colorScheme="brand"
+              size="lg"
+              onClick={handleLogin}
+              isLoading={loading}
+            >
               Login
             </Button>
           </Stack>

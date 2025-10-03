@@ -284,16 +284,22 @@ export default function LabTestDashboard() {
     }
   };
 
-  const handlePrint = () => {
-    const date = new Date().toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric'
+    const handlePrint = () => {
+    const currentDateTime = new Date().toLocaleString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
     });
+
     let rows = '';
     tests.forEach((test) => {
       if (test.type === 'individual') {
         rows += `<tr>
           <td style="background:#FFFBCC;font-weight:bold;">${test.lab_test}</td>
-          <td>${test.result||'Pending'}</td>
+          <td>${test.result || 'Pending'}</td>
           <td>${test.reference_range}</td>
           <td>${test.units}</td>
         </tr>`;
@@ -302,12 +308,12 @@ export default function LabTestDashboard() {
           ${test.lab_test} (Overall Ref: ${test.groupReference}, Units: ${test.groupUnits})
         </td></tr>`;
         test.subTestNames.forEach((n, idx) => {
-          const det = test.subTestDetails[idx]||{};
+          const det = test.subTestDetails[idx] || {};
           rows += `<tr>
             <td>${n}</td>
-            <td>${test.subResults[idx]||'Pending'}</td>
-            <td>${det.reference_range||'N/A'}</td>
-            <td>${det.units||'N/A'}</td>
+            <td>${test.subResults[idx] || 'Pending'}</td>
+            <td>${det.reference_range || 'N/A'}</td>
+            <td>${det.units || 'N/A'}</td>
           </tr>`;
         });
       } else if (test.type === 'multi') {
@@ -318,9 +324,9 @@ export default function LabTestDashboard() {
           const label = r.split(':')[0];
           rows += `<tr>
             <td>${label}</td>
-            <td>${test.multiResults[idx]||'Pending'}</td>
+            <td>${test.multiResults[idx] || 'Pending'}</td>
             <td>${r}</td>
-            <td>${test.unitsArray[idx]||'N/A'}</td>
+            <td>${test.unitsArray[idx] || 'N/A'}</td>
           </tr>`;
         });
       }
@@ -332,30 +338,60 @@ export default function LabTestDashboard() {
         <head>
           <title>Lab Report</title>
           <style>
-            body{font-family:Arial;margin:20px;}
-            .hdr,.ftr{text-align:center;border-bottom:2px solid #000;padding-bottom:10px;}
-            .info{display:flex;justify-content:space-between;margin-top:20px;}
-            table{width:100%;border-collapse:collapse;margin-top:20px;}
-            th,td{border:1px solid #000;padding:8px;text-align:left;}
-            .sig{margin-top:30px;text-align:right;}
+            body { font-family: Arial; margin: 20px; }
+            .header-box { text-align: center; border-bottom: 1px solid black; padding-bottom: 8px; }
+            .header-box h2 { margin: 0; font-size: 18px; font-weight: bold; }
+            .header-box p { margin: 2px 0; font-size: 14px; }
+            .header-box h3 { margin: 4px 0; font-size: 16px; font-weight: bold; }
+            .header-flex { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
+            .patient-info { border: 1px solid black; border-radius: 4px; padding: 10px; margin-top: 10px; }
+            .patient-row { display: flex; justify-content: space-between; align-items: flex-start; }
+            .patient-left, .patient-right { width: 48%; }
+            .patient-left div, .patient-right div { margin-bottom: 4px; display: flex; }
+            .patient-left div span:first-child, .patient-right div span:first-child { display: inline-block; width: 100px; font-weight: 500; }
+
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
+            th { background: #f0f0f0; }
+            .sig { margin-top: 30px; text-align: right; }
           </style>
         </head>
         <body>
-          <div class="hdr">
+
+          <div class="header-box">
             <h2>Birla Institute of Technology & Science</h2>
-            <p>Pilani (Rajasthan) 333031, India</p>
+            <p>Pilani (Rajasthan) 333 031, India</p>
             <h3>MEDICAL CENTRE</h3>
-          </div>
-          <div class="info">
-            <div>
-              <p><strong>Name:</strong> ${selectedPatient.name}</p>
-              <p><strong>Age/Sex:</strong> ${selectedPatient.age} / ${selectedPatient.gender}</p>
+            <p>Vidya Vihar, Pilani, RAJASTHAN</p>
+            <div class="header-flex">
+              <div style="text-align:left;">
+                <div>Contact No.: 01596-515525</div>
+                <div>Email: medc@pilani.bits-pilani.ac.in</div>
+                <div>Website: www.bits-pilani.ac.in</div>
+              </div>
+              <div style="text-align:right;">
+                <div>Fax: 01596-244183</div>
+                <div>Date & Time: ${currentDateTime}</div>
+              </div>
             </div>
-            <div>
-              <p><strong>PSR No:</strong> ${selectedPatient.psr_no}</p>
-              <p><strong>Date:</strong> ${date}</p>
+          </div>
+
+          <div class="patient-info">
+            <div class="patient-row">
+              <div class="patient-left">
+                <div><span>Name</span><span>: ${selectedPatient?.name?.toUpperCase() || ''}</span></div>
+                <div><span>Sex & Age</span><span>: ${selectedPatient?.gender?.toUpperCase() || ''} / ${selectedPatient?.age || ''}Yr</span></div>
+                <div><span>Ph/Mob No</span><span>: ${selectedPatient?.contact_no || '/'}</span></div>
+                <div><span>Email ID</span><span>: ${selectedPatient?.email || '/'}</span></div>
+                <div><span>Address</span><span>: ${selectedPatient?.address || ''}</span></div>
+              </div>
+              <div class="patient-right">
+                <div><span>PSRN/ID No</span><span>: ${selectedPatient?.psr_no || ''}</span></div>
+                <div><span>Date & Time</span><span>: ${currentDateTime}</span></div>
+              </div>
             </div>
           </div>
+
           <h3 style="text-align:center;margin:20px 0;">LAB TEST REPORT</h3>
           <table>
             <thead>
@@ -365,7 +401,7 @@ export default function LabTestDashboard() {
           </table>
           <div class="sig">
             <p>Lab Technician Signature: ____________</p>
-            <p>Date: ${date}</p>
+            <p>Date: ${currentDateTime}</p>
           </div>
         </body>
       </html>
