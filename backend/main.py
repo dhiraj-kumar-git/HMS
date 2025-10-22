@@ -197,11 +197,15 @@ def create_user():
     password = data.get("password")
     role = data.get("role")
     display_name = data.get("display_name")
+    department = data.get("department")
 
     if not all([username, password, role, display_name]):
         return jsonify({"error": "Missing required fields"}), 400
+    
+    if role == "doctor" and not department:
+        return jsonify({"error": "Department is required for doctors"}), 400
 
-    if database.create_user(username, password, role, display_name):
+    if database.create_user(username, password, role, display_name, department):
         return jsonify({"message": "User created successfully"}), 201
     return jsonify({"error": "User already exists"}), 400
 

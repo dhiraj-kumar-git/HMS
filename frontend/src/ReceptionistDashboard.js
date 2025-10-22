@@ -33,49 +33,6 @@ export default function ReceptionistDashboard() {
   const toast = useToast();
   const username = localStorage.getItem("username");
 
-  const defaultDoctors = [
-    {
-      role: "doctor",
-      username: "diwakar_pathak",
-      display_name: "Dr. Diwakar Pathak (Homeopathic)",
-    },
-    {
-      role: "doctor",
-      username: "karan_singh_beniwal",
-      display_name: "Dr. Karan Singh Beniwal (Paediatrician)",
-    },
-    {
-      role: "doctor",
-      username: "kishore_singh",
-      display_name: "Dr. Kishore Singh (Dermatologist)",
-    },
-    {
-      role: "doctor",
-      username: "pooja_shah",
-      display_name: "Dr. Pooja Shah (ENT)",
-    },
-    {
-      role: "doctor",
-      username: "prashant_singh",
-      display_name: "Dr. Prashant Singh (Orthopaedics)",
-    },
-    {
-      role: "doctor",
-      username: "preety_maan",
-      display_name: "Dr. Preety Maan (Dentist)",
-    },
-    {
-      role: "doctor",
-      username: "ramesh_jajoo",
-      display_name: "Dr. Ramesh P Jajoo (Ayurvedic)",
-    },
-    {
-      role: "doctor",
-      username: "rinku_singh",
-      display_name: "Dr. Rinku Singh (Gynaecology)",
-    },
-  ];
-
   const [patient, setPatient] = useState({
     name: "",
     age: "",
@@ -90,7 +47,7 @@ export default function ReceptionistDashboard() {
   const [opdNumber, setOpdNumber] = useState("");
   const [doctors, setDoctors] = useState([]);
   const [isPrescriptionOpen, setIsPrescriptionOpen] = useState(false);
-  const { isOpen, onOpen, onClose } = useDisclosure();
+  const { onOpen, onClose } = useDisclosure();
 
   // Fetch doctors list
   useEffect(() => {
@@ -100,19 +57,9 @@ export default function ReceptionistDashboard() {
         const res = await axios.get("http://localhost:5000/doctors", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        // Merge API doctors with defaultDoctors by username
-        setDoctors([
-          ...defaultDoctors,
-          ...res.data.filter(
-            (apiDoc) =>
-              !defaultDoctors.some(
-                (defDoc) => defDoc.username === apiDoc.username
-              )
-          ),
-        ]);
+        setDoctors(res.data);
       } catch (err) {
         console.error("Error fetching doctors:", err);
-        setDoctors(defaultDoctors);
       }
     })();
   }, []);
@@ -302,8 +249,23 @@ export default function ReceptionistDashboard() {
                   <FormLabel>Contact No</FormLabel>
                   <Input
                     name="contact_no"
+                    type="tel"
+                    maxLength={10}
+                    pattern="[0-9]{10}"
                     value={patient.contact_no}
-                    onChange={handleChange}
+                    onChange={(e) => {
+                      // Allow only numeric input
+                      const numericValue = e.target.value.replace(/\D/g, "");
+                      // Prevent more than 10 digits
+                      if (numericValue.length <= 10) {
+                        handleChange({
+                          target: {
+                            name: "contact_no",
+                            value: numericValue,
+                          },
+                        });
+                      }
+                    }}
                   />
                 </FormControl>
                 <FormControl isRequired>
@@ -372,11 +334,17 @@ export default function ReceptionistDashboard() {
                   onChange={handleChange}
                 >
                   <option value="">Select Doctor</option>
-                  {doctors.map((doc, i) => (
-                    <option key={i} value={doc.username}>
-                      {doc.display_name || doc.username}
-                    </option>
-                  ))}
+                  {doctors.map((doc, i) => {
+                    const label = doc.department
+                      ? `${doc.display_name} (${doc.department})`
+                      : doc.display_name || doc.username;
+
+                    return (
+                      <option key={i} value={doc.username}>
+                        {label}
+                      </option>
+                    );
+                  })}
                 </Select>
               </FormControl>
               <Button colorScheme="brand" size="lg" onClick={registerPatient}>

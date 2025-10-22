@@ -18,12 +18,13 @@ export default function CreateUser() {
     password: "",
     role: "",
     display_name: "",
+    department: ""
   });
   const toast = useToast();
 
   const handleAddUser = async () => {
-    const { username, password, role, display_name } = newUser;
-    if (!username || !password || !role || !display_name) {
+    const { username, password, role, display_name, department } = newUser;
+    if (!username || !password || !role || !display_name || !department) {
       return toast({
         title: "All fields are required!",
         status: "warning",
@@ -44,7 +45,7 @@ export default function CreateUser() {
         duration: 3000,
         isClosable: true,
       });
-      setNewUser({ username: "", password: "", role: "", display_name: "" });
+      setNewUser({ username: "", password: "", role: "", display_name: "", department: "" });
     } catch (error) {
       toast({
         title: "Error adding user",
@@ -72,6 +73,21 @@ export default function CreateUser() {
 
       <Stack spacing="5">
         <FormControl>
+          <FormLabel>Role</FormLabel>
+          <Select
+            size="lg"
+            placeholder="Select role"
+            value={newUser.role}
+            onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+          >
+            <option value="receptionist">Receptionist</option>
+            <option value="doctor">Doctor</option>
+            <option value="medical_store">Medical Store</option>
+            <option value="lab_staff">Lab Staff</option>
+          </Select>
+        </FormControl>
+
+        <FormControl>
           <FormLabel>Display Name</FormLabel>
           <Input
             size="lg"
@@ -82,6 +98,29 @@ export default function CreateUser() {
             }
           />
         </FormControl>
+
+        {newUser.role === "doctor" && (
+          <FormControl>
+            <FormLabel>Department Name</FormLabel>
+            <Select
+              size="lg"
+              placeholder="Select department"
+              value={newUser.department}
+              onChange={(e) =>
+                setNewUser({ ...newUser, department: e.target.value })
+              }
+            >
+            <option value="Ayurvedic">Ayurvedic</option>
+            <option value="Dentist">Dentist</option>
+            <option value="Dermatologist">Dermatologist</option>
+            <option value="ENT">ENT</option>
+            <option value="Gynaecology">Gynaecology</option>
+            <option value="Homeopathic">Homeopathic</option>
+            <option value="Orthopaedics">Orthopaedics</option>
+            <option value="Paediatrician">Paediatrician</option>
+            </Select>
+          </FormControl>
+        )}
 
         <FormControl>
           <FormLabel>Username</FormLabel>
@@ -106,21 +145,6 @@ export default function CreateUser() {
               setNewUser({ ...newUser, password: e.target.value })
             }
           />
-        </FormControl>
-
-        <FormControl>
-          <FormLabel>Role</FormLabel>
-          <Select
-            size="lg"
-            placeholder="Select role"
-            value={newUser.role}
-            onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-          >
-            <option value="receptionist">Receptionist</option>
-            <option value="doctor">Doctor</option>
-            <option value="medical_store">Medical Store</option>
-            <option value="lab_staff">Lab Staff</option>
-          </Select>
         </FormControl>
 
         <Button

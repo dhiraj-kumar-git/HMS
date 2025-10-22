@@ -25,7 +25,7 @@ def check_password(password, hashed_password):
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password)
 
 # Create a new user (Receptionist, Doctor, Medical Store, Lab Staff, Admin)
-def create_user(username, password, role, display_name=None):
+def create_user(username, password, role, display_name, department=None):
     existing_user = users.find_one({"username": username})
     if not existing_user:
         hashed_password = hash_password(password)
@@ -33,7 +33,8 @@ def create_user(username, password, role, display_name=None):
             username=username,
             password=hashed_password.decode('utf-8'),
             role=role,
-            display_name=display_name or username  # fallback to username
+            display_name=display_name or username,  # fallback to username
+            department=department
         )
         users.insert_one(user.to_dict())
         return True
@@ -181,14 +182,6 @@ def add_dummy_users():
     dummy_users = [
         {"username": "receptionist1", "password": "test123", "role": "receptionist", "display_name": "Receptionist 1"},
         {"username": "doctor1", "password": "test123", "role": "doctor", "display_name": "Dr. Doctor Name"},
-        {"username": "pooja_shah", "password": "test123", "role": "doctor", "display_name": "Dr. Pooja Shah"},
-        {"username": "kishore_singh", "password": "test123", "role": "doctor", "display_name": "Dr. Kishore Singh"},
-        {"username": "ramesh_jajoo", "password": "test123", "role": "doctor", "display_name": "Dr. Ramesh Jajoo"},
-        {"username": "preety_maan", "password": "test123", "role": "doctor", "display_name": "Dr. Preety Maan"},
-        {"username": "karan_singh_beniwal", "password": "test123", "role": "doctor", "display_name": "Dr. Karan Singh Beniwal"},
-        {"username": "prashant_singh", "password": "test123", "role": "doctor", "display_name": "Dr. Prashant Singh"},
-        {"username": "rinku_singh", "password": "test123", "role": "doctor", "display_name": "Dr. Rinku Singh"},
-        {"username": "diwakar_pathak", "password": "test123", "role": "doctor", "display_name": "Dr. Diwakar Pathak"},
         {"username": "medical_store1", "password": "test123", "role": "medical_store", "display_name": "Medical Store"},
         {"username": "lab_staff1", "password": "test123", "role": "lab_staff", "display_name": "Lab Staff"},
         {"username": "admin1", "password": "test123", "role": "admin", "display_name": "Admin"},
