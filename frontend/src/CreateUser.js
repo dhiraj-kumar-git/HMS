@@ -70,20 +70,19 @@ export default function CreateUser() {
         Create User
       </Heading>
 
-      {/* New Display Name Field */}
-      <FormControl>
-        <FormLabel>Display Name</FormLabel>
-        <Input
-          size="lg"
-          placeholder="Enter display name (e.g. Dr. Doctor Name)"
-          value={newUser.display_name}
-          onChange={(e) =>
-            setNewUser({ ...newUser, display_name: e.target.value })
-          }
-        />
-      </FormControl>
-
       <Stack spacing="5">
+        <FormControl>
+          <FormLabel>Display Name</FormLabel>
+          <Input
+            size="lg"
+            placeholder="Enter display name (e.g. Dr. Doctor Name)"
+            value={newUser.display_name}
+            onChange={(e) =>
+              setNewUser({ ...newUser, display_name: e.target.value })
+            }
+          />
+        </FormControl>
+
         <FormControl>
           <FormLabel>Username</FormLabel>
           <Input

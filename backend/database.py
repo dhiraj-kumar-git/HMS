@@ -88,23 +88,13 @@ def generate_psr_number():
     return f"{today}{str(count + 1).zfill(4)}"  # Format: YYYYMMDDXXXX
 
 # Register a new patient
-def register_patient(name, age, gender, contact_no, address, doctor_assigned, patient_type):
+def register_patient(patient_data):
     psr_no = generate_psr_number()
     registration_time = datetime.now()
 
-    patient = Patient(
-        psr_no=psr_no,
-        name=name,
-        age=age,
-        gender=gender,
-        contact_no=contact_no,
-        address=address,
-        registration_time=registration_time,
-        doctor_assigned=doctor_assigned,
-        patient_type=patient_type,
-        workflow_status="active"  # New field
-    )
-    patients.insert_one(patient.to_dict())
+    patient_data["psr_no"] = psr_no
+    patient_data["registration_time"] = registration_time
+    patients.insert_one(patient_data)
     return psr_no  # Return the generated PSR number
 
 # Retrieve patient details by PSR number
@@ -178,6 +168,14 @@ def get_active_pending_patients():
         ]
     }
     return list(patients.find(query, {"_id": 0}))
+
+def get_doctors_name():
+
+    for d in db.users.find({"role": "doctor"}):
+        print(d)
+
+    doctors = db.users.find({"role": "doctor"})
+    return {d["username"]: d.get("display_name", d["username"]) for d in doctors}
 
 def add_dummy_users():
     dummy_users = [

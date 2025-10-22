@@ -30,7 +30,7 @@ class User:
     username: str
     password: str  # Hashed password storage
     role: str  # receptionist, doctor, medical_store, lab_staff, admin
-    display_name: Optional[str] = None  # Added field for Display Name
+    display_name: str  # Added field for Display Name
 
     def to_dict(self) -> dict:
         user_dict = asdict(self)
