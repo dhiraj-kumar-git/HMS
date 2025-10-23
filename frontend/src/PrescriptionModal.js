@@ -13,23 +13,52 @@ import {
 
 function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
   const toast = useToast();
- 
-  const currentDate = new Date().toLocaleDateString('en-GB', {
+
+  const currentDateTime = new Date().toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
-    year: 'numeric'
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
   });
+
 
   const handlePrint = () => {
     try {
+      let printStarted = false;
+
+      // Some browsers fire beforeprint/afterprint events
+      const mediaQueryList = window.matchMedia('print');
+      const beforePrintListener = () => {
+        printStarted = true;
+      };
+      const afterPrintListener = () => {
+        if (printStarted) {
+          toast({
+            title: 'Print Completed',
+            description: 'Prescription has been sent to printer.',
+            status: 'success',
+            duration: 3000,
+            isClosable: true,
+          });
+        } else {
+          toast({
+            title: 'Print Cancelled',
+            description: 'Printing was cancelled by the user.',
+            status: 'warning',
+            duration: 3000,
+            isClosable: true,
+          });
+        }
+        mediaQueryList.removeListener(beforePrintListener);
+        window.removeEventListener('afterprint', afterPrintListener);
+      };
+
+      mediaQueryList.addListener(beforePrintListener);
+      window.addEventListener('afterprint', afterPrintListener);
+
       window.print();
-      toast({
-        title: 'Printing',
-        description: 'Prescription is being printed',
-        status: 'info',
-        duration: 2000,
-        isClosable: true,
-      });
     } catch (error) {
       toast({
         title: 'Print Error',
@@ -40,15 +69,11 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
       });
     }
   };
-  // in registerPatient():
- 
 
   return (
     <>
-      {/* ————— Updated Styles ————— */}
       <style>
         {`
-  /* ————— ONLY for SCREEN ————— */
   @media screen {
     .chakra-modal__content {
       zoom: 0.65;
@@ -56,9 +81,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
     }
   }
 
-  /* ————— ONLY for PRINT ————— */
   @media print {
-    /* undo the screen zoom */
     .chakra-modal__content {
       zoom: 1 !important;
       transform: none !important;
@@ -69,12 +92,10 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
       padding: 0 !important;
     }
 
-    /* make the overlay disappear */
     .chakra-modal__overlay {
       display: none !important;
     }
 
-    /* show only the printable area */
     body * {
       visibility: hidden !important;
     }
@@ -82,7 +103,6 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
       visibility: visible !important;
     }
 
-    /* pin to true A4 dimensions */
     .printable-content {
       position: absolute !important;
       top: 0; left: 0;
@@ -92,12 +112,10 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
       box-shadow: none !important;
     }
 
-    /* remove the print button */
     .no-print {
       display: none !important;
     }
 
-    /* page size & margins */
     @page {
       size: A4 portrait;
       margin: 0;
@@ -112,7 +130,6 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
   }
 `}
       </style>
-
 
       <Modal isOpen={isOpen} onClose={onClose} size="xl">
         <ModalOverlay />
@@ -144,7 +161,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
               </Box>
               <Box textAlign="right">
                 <Text>Fax: 01596-244183</Text>
-                <Text>Date: {currentDate}</Text>
+                <Text>Date & Time: {currentDateTime}</Text>
               </Box>
             </Flex>
           </Box>
@@ -159,25 +176,33 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
           {/* Patient Details */}
           <Box px={4} mt={-2} border="1px solid black" borderRadius="md" py={4}>
             <Flex justifyContent="space-between" alignItems="flex-start">
-              <Box width="50%" textAlign="left">
+              <Box width="60%" textAlign="left">
                 <Flex mb={1}>
                   <Text width="90px">Name</Text>
-                  <Text>: MR. {prescriptionData?.name?.toUpperCase() || ''}</Text>
+                  <Text>
+                    : {prescriptionData?.name?.toUpperCase() || ''}
+                  </Text>
                 </Flex>
                 <Flex mb={1}>
                   <Text width="90px">Sex & Age</Text>
-                  <Text>: {prescriptionData?.gender?.toUpperCase() || ''} / {prescriptionData?.age || ''}Yr</Text>
-                </Flex>
-                <Flex mb={1}>
-                  <Text width="90px">Address</Text>
-                  <Text>: {prescriptionData?.address || ''}</Text>
+                  <Text>
+                    : {prescriptionData?.gender?.toUpperCase() || ''} / {prescriptionData?.age || ''}Yr
+                  </Text>
                 </Flex>
                 <Flex mb={1}>
                   <Text width="90px">Ph/Mob No</Text>
                   <Text>: {prescriptionData?.contact_no || '/'}</Text>
                 </Flex>
+                <Flex mb={1}>
+                  <Text width="90px">Email ID</Text>
+                  <Text>: {prescriptionData?.email || '/'}</Text>
+                </Flex>
+                <Flex mb={1}>
+                  <Text width="90px">Address</Text>
+                  <Text>: {prescriptionData?.address || ''}</Text>
+                </Flex>
               </Box>
-              <Box width="50%">
+              <Box width="40%">
                 <Flex mb={1}>
                   <Text width="100px">O.P.D No</Text>
                   <Text>: {prescriptionData?.opdNumber || ''}</Text>
@@ -187,11 +212,8 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                   <Text>: {prescriptionData?.psrn_id || ''}</Text>
                 </Flex>
                 <Flex mb={1}>
-
-                </Flex>
-                <Flex mb={1}>
-                  <Text width="100px">Date</Text>
-                  <Text>: {currentDate}</Text>
+                  <Text width="100px">Date & Time</Text>
+                  <Text>: {currentDateTime}</Text>
                 </Flex>
               </Box>
             </Flex>

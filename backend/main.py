@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import database  # Import database functions
+from database import get_doctors_name
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 import uuid
@@ -89,18 +90,44 @@ def register_patient():
         return jsonify({"error": "Unauthorized access"}), 403
 
     data = request.json
+
+    doctor_username = data.get("doctor_assigned")
+    if doctor_username:
+        doctors_map = get_doctors_name()
+        doctor_name = doctors_map.get(doctor_username, doctor_username)
+        data["doctor_name"] = doctor_name
+
+    print("Doctors Map:", doctors_map)
+
     name = data.get("name")
     age = data.get("age")
     gender = data.get("gender")
     contact_no = data.get("contact_no")
+    email = data.get("email")
     address = data.get("address")
     doctor_assigned = data.get("doctor_assigned")
     patient_type = data.get("patient_type")
 
-    if not all([name, age, gender, contact_no, address, doctor_assigned, patient_type]):
+    if not all([name, age, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type]):
         return jsonify({"error": "Missing required fields"}), 400
 
-    psr_no = database.register_patient(name, age, gender, contact_no, address, doctor_assigned, patient_type)
+    patient_data = {
+        "name": name,
+        "age": age,
+        "gender": gender,
+        "contact_no": contact_no,
+        "email": email,
+        "address": address,
+        "doctor_assigned": doctor_assigned,
+        "doctor_name": doctor_name,
+        "patient_type": patient_type,
+        "workflow_status": "active",
+        "bill_status": "Pending",
+        "lab_tests": [],
+        "lab_results": []
+    }
+
+    psr_no = database.register_patient(patient_data)
     return jsonify({"message": "Patient registered successfully", "psr_no": psr_no}), 201
 
 # Protected route to fetch patient details
@@ -122,6 +149,15 @@ def get_users():
 
     users_list = database.get_all_users()
     return jsonify(users_list), 200
+
+# Get the display_name from the username
+@app.route('/users/<username>', methods=['GET'])
+@jwt_required()
+def get_user(username):
+    user = database.users.find_one({"username": username}, {"_id": 0, "password": 0})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user), 200
 
 # Get list of all patients (Admin only)
 @app.route('/patients', methods=['GET'])
@@ -169,11 +205,16 @@ def create_user():
     username = data.get("username")
     password = data.get("password")
     role = data.get("role")
+    display_name = data.get("display_name")
+    department = data.get("department")
 
-    if not all([username, password, role]):
+    if not all([username, password, role, display_name]):
         return jsonify({"error": "Missing required fields"}), 400
+    
+    if role == "doctor" and not department:
+        return jsonify({"error": "Department is required for doctors"}), 400
 
-    if database.create_user(username, password, role):
+    if database.create_user(username, password, role, display_name, department):
         return jsonify({"message": "User created successfully"}), 201
     return jsonify({"error": "User already exists"}), 400
 

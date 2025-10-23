@@ -25,11 +25,17 @@ def check_password(password, hashed_password):
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password)
 
 # Create a new user (Receptionist, Doctor, Medical Store, Lab Staff, Admin)
-def create_user(username, password, role):
+def create_user(username, password, role, display_name, department=None):
     existing_user = users.find_one({"username": username})
     if not existing_user:
         hashed_password = hash_password(password)
-        user = User(username=username, password=hashed_password.decode('utf-8'), role=role)
+        user = User(
+            username=username,
+            password=hashed_password.decode('utf-8'),
+            role=role,
+            display_name=display_name or username,  # fallback to username
+            department=department
+        )
         users.insert_one(user.to_dict())
         return True
     return False  # User already exists
@@ -83,23 +89,13 @@ def generate_psr_number():
     return f"{today}{str(count + 1).zfill(4)}"  # Format: YYYYMMDDXXXX
 
 # Register a new patient
-def register_patient(name, age, gender, contact_no, address, doctor_assigned, patient_type):
+def register_patient(patient_data):
     psr_no = generate_psr_number()
     registration_time = datetime.now()
 
-    patient = Patient(
-        psr_no=psr_no,
-        name=name,
-        age=age,
-        gender=gender,
-        contact_no=contact_no,
-        address=address,
-        registration_time=registration_time,
-        doctor_assigned=doctor_assigned,
-        patient_type=patient_type,
-        workflow_status="active"  # New field
-    )
-    patients.insert_one(patient.to_dict())
+    patient_data["psr_no"] = psr_no
+    patient_data["registration_time"] = registration_time
+    patients.insert_one(patient_data)
     return psr_no  # Return the generated PSR number
 
 # Retrieve patient details by PSR number
@@ -174,17 +170,25 @@ def get_active_pending_patients():
     }
     return list(patients.find(query, {"_id": 0}))
 
+def get_doctors_name():
+
+    for d in db.users.find({"role": "doctor"}):
+        print(d)
+
+    doctors = db.users.find({"role": "doctor"})
+    return {d["username"]: d.get("display_name", d["username"]) for d in doctors}
+
 def add_dummy_users():
     dummy_users = [
-        {"username": "receptionist1", "password": "test123", "role": "receptionist"},
-        {"username": "doctor1", "password": "test123", "role": "doctor"},
-        {"username": "medical_store1", "password": "test123", "role": "medical_store"},
-        {"username": "lab_staff1", "password": "test123", "role": "lab_staff"},
-        {"username": "admin1", "password": "test123", "role": "admin"},
+        {"username": "receptionist1", "password": "test123", "role": "receptionist", "display_name": "Receptionist 1"},
+        {"username": "doctor1", "password": "test123", "role": "doctor", "display_name": "Dr. Doctor Name"},
+        {"username": "medical_store1", "password": "test123", "role": "medical_store", "display_name": "Medical Store"},
+        {"username": "lab_staff1", "password": "test123", "role": "lab_staff", "display_name": "Lab Staff"},
+        {"username": "admin1", "password": "test123", "role": "admin", "display_name": "Admin"},
     ]
 
     for user in dummy_users:
-        if not create_user(user["username"], user["password"], user["role"]):
+        if not create_user(user["username"], user["password"], user["role"], user.get("display_name")):
             print(f"User {user['username']} already exists.")
         else:
             print(f"User {user['username']} created successfully.")

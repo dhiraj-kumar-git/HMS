@@ -98,11 +98,13 @@ function CustomSpinner() {
 export default function AllPatients({ onLogout }) {
   // Username
   const loginUsername = localStorage.getItem('username') || 'Doctor';
+  const displayName = localStorage.getItem('display_name') || 'Doctor';
 
   // Optionally define a default logout in case one is not provided.
   const defaultLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
+    localStorage.removeItem('display_name');
     localStorage.removeItem('role');
     localStorage.removeItem('session_id');
     window.location.href = '/login';
@@ -264,10 +266,10 @@ export default function AllPatients({ onLogout }) {
               as={Button}
               variant="ghost"
               size="sm"
-              rightIcon={<Avatar size="xs" name={loginUsername} />}
+              rightIcon={<Avatar size="xs" name={displayName || loginUsername} />}
             >
               <Text fontWeight="medium" display={{ base: 'none', md: 'block' }} fontSize="sm">
-                {loginUsername}
+                {displayName || loginUsername}
               </Text>
             </MenuButton>
             <MenuList>
