@@ -8,6 +8,17 @@ from database import get_patient_by_psr
 import pandas as pd
 import json
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = "your_secret_key"  # Change this to a strong secret
@@ -158,6 +169,45 @@ def get_user(username):
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify(user), 200
+
+# Sending Lab report email
+def send_email(recipient_email, subject, body):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = recipient_email
+        msg['Subject'] = subject
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_ADDRESS, recipient_email, msg.as_string())
+
+        print("Email sent successfully!")
+    
+    except Exception as e:
+        print(f"Error sending mail: {e}")
+
+@app.route('/lab/send_email', methods=['POST'])
+@jwt_required()
+def lab_send_email():
+    try:
+        data = request.get_json()
+        recipient_email = data.get("recipient_email")
+        subject = data.get("subject")
+        body = data.get("body")
+
+        if not all([recipient_email, subject, body]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        send_email(recipient_email, subject, body)
+        return jsonify({"message": "Email sent successfully"}), 200
+
+    except Exception as e:
+        print(f"Error in sending lab report email: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # Get list of all patients (Admin only)
 @app.route('/patients', methods=['GET'])
