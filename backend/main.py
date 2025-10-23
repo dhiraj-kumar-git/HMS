@@ -150,6 +150,15 @@ def get_users():
     users_list = database.get_all_users()
     return jsonify(users_list), 200
 
+# Get the display_name from the username
+@app.route('/users/<username>', methods=['GET'])
+@jwt_required()
+def get_user(username):
+    user = database.users.find_one({"username": username}, {"_id": 0, "password": 0})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user), 200
+
 # Get list of all patients (Admin only)
 @app.route('/patients', methods=['GET'])
 @jwt_required()

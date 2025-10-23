@@ -46,6 +46,7 @@ export default function DoctorsDashboard() {
   const navigate = useNavigate();
   const toast = useToast();
   const username = localStorage.getItem("username");
+  const [displayName, setDisplayName] = useState(localStorage.getItem("display_name") || "");
   const token = localStorage.getItem("token");
 
   // GLOBAL STATE
@@ -79,6 +80,35 @@ export default function DoctorsDashboard() {
       setFilterPSRN("");
     }
   }, [searchPSRN]);
+
+  useEffect(() => {
+  const fetchDisplayName = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const username = localStorage.getItem("username");
+
+      const cachedName = localStorage.getItem("display_name");
+      if (cachedName) {
+        setDisplayName(cachedName);
+        return;
+      }
+
+      const res = await axios.get(`http://localhost:5000/users/${username}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const fetchedName = res.data.display_name || username;
+      setDisplayName(fetchedName);
+
+      localStorage.setItem("display_name", fetchedName);
+      } catch (error) {
+        console.error("Error fetching display name:", error);
+        setDisplayName(localStorage.getItem("username"));
+      }
+    };
+
+    fetchDisplayName();
+  }, []);
 
   /** FETCH PATIENTS HELPERS **/
   const fetchPatients = async () => {
@@ -282,6 +312,7 @@ export default function DoctorsDashboard() {
       // Clear all auth keys
       localStorage.removeItem("token");
       localStorage.removeItem("username");
+      localStorage.removeItem("display_name");
       // Force full app reload on login page
       window.location.href = "/login";
     }
@@ -359,10 +390,10 @@ export default function DoctorsDashboard() {
             <MenuButton
               as={Button}
               variant="ghost"
-              rightIcon={<Avatar size="sm" name={username} ml="2" />}
+              rightIcon={<Avatar size="sm" name={displayName || username} ml="2" />}
             >
               <Text fontWeight="medium" mr="2">
-                Welcome, {username}
+                Welcome, {displayName || username}
               </Text>
             </MenuButton>
             <MenuList>
@@ -407,7 +438,7 @@ export default function DoctorsDashboard() {
                   Good Morning
                 </Text>
                 <Text fontSize="2xl" fontWeight="bold" color="gray.800">
-                  {username.toUpperCase()}
+                  {displayName || username}
                 </Text>
                 <Text fontSize="sm" color="gray.500" mt="4" lineHeight="short">
                   You have {displayedPatients.length} patient bookings today.
