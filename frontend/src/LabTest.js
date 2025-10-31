@@ -56,25 +56,19 @@ export default function LabTestDashboard() {
   const toast = useToast();
 
   const [emailLoading, setEmailLoading] = useState(false);
-
-
-  // DRAWER
-  const {
-    isOpen: isDrawerOpen,
-    onOpen: onDrawerOpen,
-    onClose: onDrawerClose,
-  } = useDisclosure();
-
-  // DATA STATE
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
 
-  // OVERVIEW STATE
+  const [configTests, setConfigTests] = useState([]);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [tests, setTests] = useState([]);
+  const [testsLoading, setTestsLoading] = useState(false);
+
   const [timeframe, setTimeframe] = useState("last_month");
   const [selectedTab, setSelectedTab] = useState("All");
   const [workload, setWorkload] = useState(88);
-  const workloadChange = 5; // e.g. +5%
+  const workloadChange = 5; // example +5%
   const [stats, setStats] = useState({
     Urgent: 0,
     Pending: 4,
@@ -87,9 +81,7 @@ export default function LabTestDashboard() {
     "In-Progress": 14,
     Completed: 8,
   });
-  const [revenue, setRevenue] = useState(5678);
 
-  // HEADER TIME
   const currentTime = new Date().toLocaleString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
@@ -99,8 +91,12 @@ export default function LabTestDashboard() {
     year: "numeric",
   });
 
-  // CONFIG TESTS
-  const [configTests, setConfigTests] = useState([]);
+  const { isOpen, onOpen, onClose } = useDisclosure();
+  const {
+    isOpen: isSuccessOpen,
+    onOpen: onSuccessOpen,
+    onClose: onSuccessClose,
+  } = useDisclosure();
 
   // Fetch lab‑test config
   const fetchConfigTests = async () => {
@@ -108,31 +104,13 @@ export default function LabTestDashboard() {
       const token = localStorage.getItem("token");
       const labRes = await axios.get(
         "http://localhost:5000/dropdown/labtests",
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       setConfigTests(labRes.data);
     } catch (e) {
       console.error("Error fetching config tests:", e);
     }
   };
-
-  useEffect(() => {
-    fetchConfigTests();
-  }, []);
-
-  // PATIENT DETAILS & TESTS
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [tests, setTests] = useState([]);
-  const [testsLoading, setTestsLoading] = useState(false);
-
-  // SUCCESS MODAL
-  const {
-    isOpen: isSuccessOpen,
-    onOpen: onSuccessOpen,
-    onClose: onSuccessClose,
-  } = useDisclosure();
 
   // FETCH PATIENTS
   const fetchPatients = async () => {
@@ -194,16 +172,13 @@ export default function LabTestDashboard() {
   const handlePatientSelect = async (psrNo) => {
     // ensure configTests is loaded
     if (!configTests.length) await fetchConfigTests();
-
     setTestsLoading(true);
 
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(
         `http://localhost:5000/get_patient/${psrNo}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       const patient = response.data;
       setSelectedPatient(patient);
@@ -264,8 +239,6 @@ export default function LabTestDashboard() {
     }
   };
 
-  // OPEN PATIENT MODAL
-  const { isOpen, onOpen, onClose } = useDisclosure();
   const openPatientModal = async (p) => {
     await handlePatientSelect(p.psr_no);
     onOpen();
@@ -277,11 +250,13 @@ export default function LabTestDashboard() {
     arr[i].result = val;
     setTests(arr);
   };
+
   const handleSubResultChange = (gi, si, val) => {
     const arr = [...tests];
     arr[gi].subResults[si] = val;
     setTests(arr);
   };
+
   const handleMultiResultChange = (i, si, val) => {
     const arr = [...tests];
     arr[i].multiResults[si] = val;
@@ -290,19 +265,59 @@ export default function LabTestDashboard() {
 
   // SUBMIT & PRINT
   const submitResults = async () => {
+    if (!selectedPatient || !tests.length) {
+      toast({
+        title: "No test data",
+        description: "Please select a patient and enter results first.",
+        status: "warning",
+      });
+      return;
+    }
+
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "http://localhost:5000/lab/submit_results",
-        { psr_no: selectedPatient.psr_no, results: tests },
+        "http://localhost:5000/lab/save_report",
+        {
+          psr_no: selectedPatient.psr_no,
+          test_name: tests[0].lab_test,
+          results: tests.reduce((acc, t) => {
+            if (t.type === "individual") acc[t.lab_test] = t.result;
+            else if (t.type === "group")
+              t.subTestNames.forEach(
+                (n, idx) => (acc[n] = t.subResults[idx] || "")
+              );
+            else if (t.type === "multi")
+              t.reference_ranges.forEach(
+                (r, idx) => (acc[r.split(":")[0]] = t.multiResults[idx] || "")
+              );
+            return acc;
+          }, {}),
+          remarks: "",
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      onSuccessOpen();
+
+      toast({
+        title: "Report saved successfully",
+        description: `${selectedPatient.name}'s lab report has been generated.`,
+        status: "success",
+      });
+
+      localStorage.setItem("refreshReports", "true");
+
+      onClose();
     } catch (e) {
-      console.error("Error submitting results:", e);
+      console.error("Error saving report:", e);
+      toast({
+        title: "Error saving report",
+        description: e.message,
+        status: "error",
+      });
     }
   };
 
+  // Email Report
   const handleMailing = async () => {
     if (!selectedPatient?.psr_no) {
       toast({
@@ -316,7 +331,6 @@ export default function LabTestDashboard() {
     }
 
     setEmailLoading(true);
-
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
@@ -338,22 +352,38 @@ export default function LabTestDashboard() {
         return;
       }
 
-      const subject = `Lab Test Report - PSR ${selectedPatient.psr_no}`;
-      const body = `
-        Dear ${patientData.name},
+      const latestResults = tests
+        .map((t) => {
+          if (t.type === "individual") return `${t.lab_test}: ${t.result}`;
+          if (t.type === "group")
+            return t.subTestNames
+              .map((n, i) => `${n}: ${t.subResults[i]}`)
+              .join(", ");
+          if (t.type === "multi")
+            return t.reference_ranges
+              .map(
+                (r, i) => `${r.split(":")[0]}: ${t.multiResults[i] || "N/A"}`
+              )
+              .join(", ");
+          return "";
+        })
+        .join("\n");
 
-        Your lab test report (PSR: ${selectedPatient.psr_no}) is now ready.
+      const subject = `Lab Report for ${patientData.name} (PSR ${selectedPatient.psr_no})`;
+      const body = `Dear ${patientData.name},
 
-        Please visit the Medical Centre for more information.
+Your lab test report is now available.
 
-        Best regards,
-        Medical Centre Team
-        BITS Pilani
-        `;
+${latestResults}
+
+Best regards,
+Medical Centre Team
+BITS Pilani
+`;
 
       await axios.post(
         "http://localhost:5000/lab/send_email",
-        { recipient_email: recipientEmail, subject, body },
+        { to_email: recipientEmail, subject, body },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -361,8 +391,6 @@ export default function LabTestDashboard() {
         title: "Email sent successfully",
         description: `Report sent to ${recipientEmail}`,
         status: "success",
-        duration: 3000,
-        isClosable: true,
       });
     } catch (err) {
       console.error("Error emailing report:", err);
@@ -370,14 +398,13 @@ export default function LabTestDashboard() {
         title: "Error emailing report",
         description: err.message || "Unable to send email.",
         status: "error",
-        duration: 3000,
-        isClosable: true,
       });
     } finally {
-        setEmailLoading(false);
+      setEmailLoading(false);
     }
   };
 
+  // Print Report
   const handlePrint = () => {
     const currentDateTime = new Date().toLocaleString("en-GB", {
       day: "2-digit",
@@ -387,7 +414,7 @@ export default function LabTestDashboard() {
       minute: "2-digit",
       hour12: true,
     });
-
+    
     let rows = "";
     tests.forEach((test) => {
       if (test.type === "individual") {
@@ -990,31 +1017,17 @@ export default function LabTestDashboard() {
         </Box>
       </Box>
 
-      {/* CENTRAL MODAL */}
-      <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        size="4xl"
-        isCentered
-        motionPreset="scale"
-      >
-        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
-        <ModalContent
-          bg="white"
-          borderRadius="2xl"
-          boxShadow="2xl"
-          overflow="hidden"
-        >
-          <Box bg="blue.600" px={6} py={4} position="relative">
-            <Text fontSize="lg" fontWeight="bold" color="white">
-              {selectedPatient
-                ? `${selectedPatient.name} (PSR: ${selectedPatient.psr_no})`
-                : "Patient Details"}
-            </Text>
-            <ModalCloseButton color="white" top="4" right="4" />
-          </Box>
-
-          <ModalBody bg="gray.50" p={6}>
+      {/* PATIENT MODAL */}
+      <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader bg="blue.600" color="white">
+            {selectedPatient
+              ? `${selectedPatient.name} (PSR: ${selectedPatient.psr_no})`
+              : "Patient Details"}
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody bg="gray.50">
             {testsLoading ? (
               <Flex align="center" justify="center" h="200px">
                 <Spinner size="xl" color="blue.500" />
@@ -1024,15 +1037,15 @@ export default function LabTestDashboard() {
                 <Table variant="simple" size="md">
                   <Thead>
                     <Tr>
-                      <Th color="gray.600">Test Name</Th>
-                      <Th color="gray.600">Result</Th>
-                      <Th color="gray.600">Reference Range</Th>
-                      <Th color="gray.600">Units</Th>
+                      <Th>Test Name</Th>
+                      <Th>Result</Th>
+                      <Th>Reference Range</Th>
+                      <Th>Units</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
                     {tests.map((test, idx) => {
-                      if (test.type === "individual") {
+                      if (test.type === "individual")
                         return (
                           <Tr key={idx}>
                             <Td fontWeight="semibold" color="blue.700">
@@ -1041,9 +1054,6 @@ export default function LabTestDashboard() {
                             <Td>
                               <Input
                                 size="sm"
-                                variant="filled"
-                                bg="gray.100"
-                                focusBorderColor="blue.400"
                                 value={test.result}
                                 onChange={(e) =>
                                   handleIndividualResultChange(
@@ -1053,133 +1063,73 @@ export default function LabTestDashboard() {
                                 }
                               />
                             </Td>
-                            <Td
-                              whiteSpace="normal"
-                              wordBreak="break-word"
-                              color="gray.700"
-                            >
-                              {test.reference_range}
-                            </Td>
-                            <Td
-                              whiteSpace="normal"
-                              wordBreak="break-word"
-                              color="gray.700"
-                            >
-                              {test.units}
-                            </Td>
+                            <Td>{test.reference_range}</Td>
+                            <Td>{test.units}</Td>
                           </Tr>
                         );
-                      }
-
-                      if (test.type === "group") {
+                      if (test.type === "group")
                         return (
                           <React.Fragment key={idx}>
                             <Tr>
-                              <Td
-                                colSpan={4}
-                                bg="blue.50"
-                                fontWeight="bold"
-                                color="blue.600"
-                              >
-                                {test.lab_test} (Overall: {test.groupReference}{" "}
-                                {test.groupUnits})
+                              <Td colSpan={4} fontWeight="bold" bg="blue.50">
+                                {test.lab_test}
                               </Td>
                             </Tr>
-                            {test.subTestNames.map((n, si) => (
-                              <Tr key={si}>
-                                <Td pl={8}>{n}</Td>
+                            {test.subTestNames.map((n, i) => (
+                              <Tr key={i}>
+                                <Td pl={6}>{n}</Td>
                                 <Td>
                                   <Input
                                     size="sm"
-                                    variant="filled"
-                                    bg="gray.100"
-                                    focusBorderColor="blue.400"
-                                    value={test.subResults[si]}
+                                    value={test.subResults[i]}
                                     onChange={(e) =>
                                       handleSubResultChange(
                                         idx,
-                                        si,
+                                        i,
                                         e.target.value
                                       )
                                     }
                                   />
                                 </Td>
-                                <Td
-                                  whiteSpace="normal"
-                                  wordBreak="break-word"
-                                  color="gray.700"
-                                >
-                                  {test.subTestDetails[si]?.reference_range ??
+                                <Td>
+                                  {test.subTestDetails[i]?.reference_range ||
                                     "N/A"}
                                 </Td>
-                                <Td
-                                  whiteSpace="normal"
-                                  wordBreak="break-word"
-                                  color="gray.700"
-                                >
-                                  {test.subTestDetails[si]?.units ?? "N/A"}
-                                </Td>
+                                <Td>{test.subTestDetails[i]?.units || "N/A"}</Td>
                               </Tr>
                             ))}
                           </React.Fragment>
                         );
-                      }
-
-                      if (test.type === "multi") {
+                      if (test.type === "multi")
                         return (
                           <React.Fragment key={idx}>
                             <Tr>
-                              <Td
-                                colSpan={4}
-                                bg="blue.50"
-                                fontWeight="bold"
-                                color="blue.600"
-                              >
+                              <Td colSpan={4} fontWeight="bold" bg="blue.50">
                                 {test.lab_test}
                               </Td>
                             </Tr>
-                            {test.reference_ranges.map((r, si) => {
-                              const label = r.split(":")[0];
-                              return (
-                                <Tr key={si}>
-                                  <Td pl={8}>{label}</Td>
-                                  <Td>
-                                    <Input
-                                      size="sm"
-                                      variant="filled"
-                                      bg="gray.100"
-                                      focusBorderColor="blue.400"
-                                      value={test.multiResults[si]}
-                                      onChange={(e) =>
-                                        handleMultiResultChange(
-                                          idx,
-                                          si,
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </Td>
-                                  <Td
-                                    whiteSpace="normal"
-                                    wordBreak="break-word"
-                                    color="gray.700"
-                                  >
-                                    {r}
-                                  </Td>
-                                  <Td
-                                    whiteSpace="normal"
-                                    wordBreak="break-word"
-                                    color="gray.700"
-                                  >
-                                    {test.unitsArray[si] ?? "N/A"}
-                                  </Td>
-                                </Tr>
-                              );
-                            })}
+                            {test.reference_ranges.map((r, i) => (
+                              <Tr key={i}>
+                                <Td pl={6}>{r.split(":")[0]}</Td>
+                                <Td>
+                                  <Input
+                                    size="sm"
+                                    value={test.multiResults[i]}
+                                    onChange={(e) =>
+                                      handleMultiResultChange(
+                                        idx,
+                                        i,
+                                        e.target.value
+                                      )
+                                    }
+                                  />
+                                </Td>
+                                <Td>{r}</Td>
+                                <Td>{test.unitsArray[i] || "N/A"}</Td>
+                              </Tr>
+                            ))}
                           </React.Fragment>
                         );
-                      }
-
                       return null;
                     })}
                   </Tbody>
@@ -1187,30 +1137,18 @@ export default function LabTestDashboard() {
               </Box>
             )}
           </ModalBody>
-
-          <ModalFooter bg="gray.50" px={6} py={4}>
-            <Button
-              colorScheme="blue"
-              borderRadius="full"
-              mr={3}
-              onClick={submitResults}
-              isLoading={testsLoading}
-            >
+          <ModalFooter bg="gray.50">
+            <Button colorScheme="blue" onClick={submitResults} mr={3}>
               Save Results
             </Button>
-            <Button
-              colorScheme="green"
-              borderRadius="full"
-              onClick={handlePrint}
-            >
+            <Button colorScheme="green" onClick={handlePrint}>
               Print Report
             </Button>
             <Button
               colorScheme="yellow"
-              borderRadius="full"
-              ml={3}
               onClick={handleMailing}
               isLoading={emailLoading}
+              ml={3}
             >
               Email Report
             </Button>
@@ -1219,12 +1157,7 @@ export default function LabTestDashboard() {
       </Modal>
 
       {/* SUCCESS MODAL */}
-      <Modal
-        isOpen={isSuccessOpen}
-        onClose={onSuccessClose}
-        size="md"
-        isCentered
-      >
+      <Modal isOpen={isSuccessOpen} onClose={onSuccessClose} isCentered>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>Success</ModalHeader>

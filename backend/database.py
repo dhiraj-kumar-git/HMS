@@ -134,6 +134,24 @@ def add_lab_test(psr_no, lab_test, doctor_username):
     )
     return result.modified_count > 0
 
+# Add a lab report to a patient
+def add_lab_report(psr_no, report_details):
+    result = patients.update_one(
+        {"psr_no": psr_no},
+        {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
+    )
+    return result.modified_count > 0
+
+# Retrieve all patients with lab reports
+def get_lab_reports():
+    reports = list(
+        patients.find(
+            {"lab_reports": {"$exists": True, "$ne": []}},
+            {"_id": 0, "name": 1, "psr_no": 1, "age": 1, "gender": 1, "lab_reports": 1, "email": 1}
+        )
+    )
+    return reports
+
 # Add a remark to a patient (recording the remark separately)
 def add_remark(psr_no, remark, doctor_username):
     result = patients.update_one(

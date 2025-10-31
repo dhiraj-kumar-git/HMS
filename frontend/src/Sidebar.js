@@ -1,16 +1,16 @@
 // Sidebar.js
-import React, { useState } from "react";
+import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { Box, Flex, Text, Button, Image } from "@chakra-ui/react";
+import { Box, Flex, Text, Image } from "@chakra-ui/react";
 import {
   FiChevronLeft,
   FiChevronRight,
-  FiLogOut,
   FiHome,
   FiUserPlus,
   FiUsers,
   FiCalendar,
   FiFileText,
+  FiUpload
 } from "react-icons/fi";
 import bitsLogo from "./assets/bits-logo.png";
 
@@ -128,7 +128,8 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
       {isLoggedIn && role === "lab_staff" && (
         <>
           <SidebarItem icon={FiHome} label="Lab Dashboard" to="/lab" />
-          <SidebarItem icon={FiFileText} label="Upload Lab Reports" to="/lab/upload" />
+          <SidebarItem icon={FiFileText} label="Patient Lab Reports" to="/lab/all-reports" />
+          <SidebarItem icon={FiUpload} label="Upload Lab Reports" to="/lab/upload" />
         </>
       )}
     </Box>
