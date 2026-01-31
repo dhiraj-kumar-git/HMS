@@ -1,3 +1,6 @@
+import base64
+import os
+from tempfile import NamedTemporaryFile
 from flask import Flask, request, jsonify
 import database  # Import database functions
 from database import get_doctors_name
@@ -8,6 +11,18 @@ from database import get_patient_by_psr
 import pandas as pd
 import json
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.mime.application import MIMEApplication
+from dotenv import load_dotenv
+
+load_dotenv()
+
+SMTP_SERVER = "smtp.gmail.com"
+SMTP_PORT = 587
+EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = "your_secret_key"  # Change this to a strong secret
@@ -158,6 +173,109 @@ def get_user(username):
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify(user), 200
+
+# Save lab report for a patient (Lab staff only)
+@app.route('/lab/save_report', methods=['POST'])
+@jwt_required()
+def save_lab_report():
+    claims = get_jwt()
+    if claims.get("role") != "lab_staff":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    psr_no = data.get("psr_no")
+    test_name = data.get("test_name")
+    results = data.get("results")
+    remarks = data.get("remarks")
+
+    if not psr_no or not test_name or not results:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    from database import add_lab_report
+    success = add_lab_report(psr_no, {
+        "test_name": test_name,
+        "results": results,
+        "remarks": remarks,
+    })
+
+    if success:
+        return jsonify({"message": "Lab report saved successfully"}), 200
+    else:
+        return jsonify({"error": "Failed to save report"}), 400
+
+# Get all the lab reports for patients (Lab staff only)
+@app.route('/lab/reports', methods=['GET'])
+@jwt_required()
+def get_lab_reports():
+    claims = get_jwt()
+    if claims.get("role") != "lab_staff":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    from database import get_lab_reports
+    reports = get_lab_reports()
+    return jsonify(reports), 200
+
+# Sending Lab report email
+def send_email(recipient_email, subject, body, attachment_path=None):
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_ADDRESS
+        msg['To'] = recipient_email
+        msg['Subject'] = subject
+
+        msg.attach(MIMEText(body, 'plain'))
+
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, 'rb') as f:
+                part = MIMEApplication(f.read(), Name=os.path.basename(attachment_path))
+            part['Content-Disposition'] = f'attachment; filename="%s"' % os.path.basename(attachment_path)
+            msg.attach(part)
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            server.sendmail(EMAIL_ADDRESS, recipient_email, msg.as_string())
+
+        print("Email sent successfully!")
+
+    except Exception as e:
+        print(f"Error sending mail: {e}")
+        raise e
+
+@app.route('/lab/send_email', methods=['POST'])
+@jwt_required()
+def lab_send_email():
+    try:
+        data = request.get_json()
+        print("Incoming email JSON:", data)
+        recipient_email = data.get("recipient_email")
+        subject = data.get("subject")
+        body = data.get("body")
+        pdf_base64 = data.get("pdf_base64")
+        filename = data.get("filename", "LabReport.pdf")
+
+        if not all([recipient_email, subject, body]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        attachment_path = None
+        if pdf_base64:
+            pdf_bytes = base64.b64decode(pdf_base64)
+            tmp_file = NamedTemporaryFile(delete=False, suffix=".pdf")
+            tmp_file.write(pdf_bytes)
+            tmp_file.close()
+            attachment_path = tmp_file.name
+
+        # Updated send_email to handle attachment
+        send_email(recipient_email, subject, body, attachment_path)
+
+        if attachment_path and os.path.exists(attachment_path):
+            os.remove(attachment_path)
+
+        return jsonify({"message": "Email sent successfully"}), 200
+
+    except Exception as e:
+        print(f"Error in sending lab report email: {e}")
+        return jsonify({"error": str(e)}), 500
 
 # Get list of all patients (Admin only)
 @app.route('/patients', methods=['GET'])

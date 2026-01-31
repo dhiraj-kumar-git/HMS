@@ -21,6 +21,7 @@ import AddMedicine from './AddMedicine';
 import InventoryList from './InventoryList';
 import LabTest from './LabTest';
 import AllPatients from './AllPatients';
+import PatientLabReports from "./PatientLabReports";
 import UploadLabReports from "./UploadLabReports";
 
 const theme = extendTheme({
@@ -138,6 +139,16 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             element={
               isLoggedIn && role === 'lab_staff' ? (
                 <LabTest />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/lab/all-reports"
+            element={
+              isLoggedIn && role === 'lab_staff' ? (
+                <PatientLabReports />
               ) : (
                 <Navigate to="/login" />
               )
