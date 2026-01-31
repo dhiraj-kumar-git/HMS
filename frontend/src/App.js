@@ -22,6 +22,7 @@ import InventoryList from "./InventoryList";
 import LabTest from "./LabTest";
 import AllPatients from "./AllPatients";
 import UploadLabReports from "./UploadLabReports";
+import PatientDashboard from "./PatientDashboard";
 
 const theme = extendTheme({
   fonts: {
@@ -172,6 +173,7 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
+          <Route path="/patient-dashboard" element={<PatientDashboard />} />
           {/* Catch-all route */}
           <Route
             path="*"

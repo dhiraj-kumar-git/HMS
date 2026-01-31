@@ -4,7 +4,6 @@ from database import get_doctors_name
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 import uuid
-from database import get_patient_by_psr
 import pandas as pd
 import json
 import os
@@ -38,6 +37,61 @@ def login():
         identity=username, additional_claims={"role": authenticated_user["role"], "session_id": session_id}
     )
     return jsonify({"access_token": access_token, "role": authenticated_user["role"], "session_id": session_id}), 200
+
+@app.route('/login/patient/send-otp', methods=['POST'])
+def send_patient_otp():
+    email = request.json.get("email")
+    patient = database.get_patient_by_email(email)
+    if not patient:
+        return jsonify({"error": "Email not registered"}), 404
+
+    otp = database.generate_otp()
+    database.save_patient_otp(email, otp)
+    print(f"OTP for {email}: {otp}")
+    return jsonify({"message": "OTP sent"}), 200
+
+@app.route('/login/patient/verify-otp', methods=['POST'])
+def verify_patient_otp():
+    data = request.json
+    email = data.get("email")
+    otp = data.get("otp")
+
+    if not database.verify_patient_otp(email, otp):
+        return jsonify({"error": "Invalid or expired OTP"}), 401
+
+    session_id = str(uuid.uuid4())
+    database.start_session(email, session_id)
+
+    access_token = create_access_token(
+        identity=email,
+        additional_claims={"role": "patient", "session_id": session_id}
+    )
+    return jsonify({"access_token": access_token, "role": "patient"}), 200
+
+@app.route('/patient/profile', methods=['GET'])
+@jwt_required()
+def patient_profile():
+    claims = get_jwt()
+    if claims.get("role") != "patient":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    email = get_jwt_identity()
+    profile = database.get_patient_profile_by_email(email)
+    return jsonify(profile), 200
+
+@app.route('/patient/records', methods=['GET'])
+@jwt_required()
+def patient_records():
+    claims = get_jwt()
+    if claims.get("role") != "patient":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    email = get_jwt_identity()
+    records = database.get_patient_records_by_email(email)
+    return jsonify(records), 200
+
+if __name__ == "__main__":
+    app.run(debug=True)
 
 # User logout route
 @app.route('/logout', methods=['POST'])

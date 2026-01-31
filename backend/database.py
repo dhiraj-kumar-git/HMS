@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pymongo import MongoClient
 import os
 import bcrypt
+import random
 from collection_format import Patient, User, Medicine
 
 # MongoDB connection setup
@@ -14,6 +15,7 @@ patients = db.patients
 users = db.users
 sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
+otps = db.otps
 
 # Function to hash passwords
 def hash_password(password):
@@ -105,6 +107,40 @@ def get_patient_by_psr(psr_no):
         patient["_id"] = str(patient["_id"])  # Convert ObjectId to string for JSON response
         return patient
     return None
+
+# Retrieve patient details by email
+def get_patient_by_email(email):
+    return patients.find_one({"email": email})
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+def save_patient_otp(email, otp):
+    otps.update_one(
+        {"email": email},
+        {"$set": {"otp": otp, "expires_at": datetime.utcnow() + timedelta(minutes=5)}},
+        upsert=True
+    )
+
+def verify_patient_otp(email, otp):
+    record = otps.find_one({"email": email})
+    if not record:
+        return False
+    if record["otp"] != otp:
+        return False
+    if record["expires_at"] < datetime.utcnow():
+        return False
+    otps.delete_one({"email": email})
+    return True
+
+def get_patient_profile_by_email(email):
+    return patients.find_one({"email": email}, {"_id": 0})
+
+def get_patient_records_by_email(email):
+    return patients.find_one(
+        {"email": email},
+        {"_id": 0, "prescriptions": 1, "prescription_details": 1, "lab_results": 1, "remarks": 1}
+    )
 
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
