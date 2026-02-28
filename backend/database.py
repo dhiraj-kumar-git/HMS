@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pymongo import MongoClient
 import os
 import bcrypt
+import random
 from collection_format import Patient, User, Medicine
 
 # MongoDB connection setup
@@ -14,6 +15,7 @@ patients = db.patients
 users = db.users
 sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
+otps = db.otps
 
 # Function to hash passwords
 def hash_password(password):
@@ -98,6 +100,40 @@ def register_patient(patient_data):
     patients.insert_one(patient_data)
     return psr_no  # Return the generated PSR number
 
+# Retrieve patient details by email
+def get_patient_by_email(email):
+    return patients.find_one({"email": email})
+
+def generate_otp():
+    return str(random.randint(100000, 999999))
+
+def save_patient_otp(email, otp):
+    otps.update_one(
+        {"email": email},
+        {"$set": {"otp": otp, "expires_at": datetime.utcnow() + timedelta(minutes=5)}},
+        upsert=True
+    )
+
+def verify_patient_otp(email, otp):
+    record = otps.find_one({"email": email})
+    if not record:
+        return False
+    if record["otp"] != otp:
+        return False
+    if record["expires_at"] < datetime.utcnow():
+        return False
+    otps.delete_one({"email": email})
+    return True
+
+def get_patient_profile_by_email(email):
+    return patients.find_one({"email": email}, {"_id": 0})
+
+def get_patient_records_by_email(email):
+    return patients.find_one(
+        {"email": email},
+        {"_id": 0, "prescriptions": 1, "prescription_details": 1, "lab_results": 1, "remarks": 1}
+    )
+
 # Retrieve patient details by PSR number
 def get_patient_by_psr(psr_no):
     patient = patients.find_one({"psr_no": psr_no})
@@ -133,6 +169,24 @@ def add_lab_test(psr_no, lab_test, doctor_username):
         {"$push": {"lab_tests": {"doctor": doctor_username, "lab_test": lab_test, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
+
+# Add a lab report to a patient
+def add_lab_report(psr_no, report_details):
+    result = patients.update_one(
+        {"psr_no": psr_no},
+        {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
+    )
+    return result.modified_count > 0
+
+# Retrieve all patients with lab reports
+def get_lab_reports():
+    reports = list(
+        patients.find(
+            {"lab_reports": {"$exists": True, "$ne": []}},
+            {"_id": 0, "name": 1, "psr_no": 1, "age": 1, "gender": 1, "lab_reports": 1, "email": 1}
+        )
+    )
+    return reports
 
 # Add a remark to a patient (recording the remark separately)
 def add_remark(psr_no, remark, doctor_username):
