@@ -91,7 +91,6 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
-          <Route path="/" element={<ReceptionistDashboard />} />
           <Route path="/schedule" element={<DoctorSchedulePage />} />
           <Route
             path="/doctor"
