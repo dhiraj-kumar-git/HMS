@@ -24,7 +24,7 @@ export default function CreateUser() {
 
   const handleAddUser = async () => {
     const { username, password, role, display_name, department } = newUser;
-    if (!username || !password || !role || !display_name || !department) {
+    if (!username || !password || !role || !display_name || (!department && role === "doctor")) {
       return toast({
         title: "All fields are required!",
         status: "warning",

@@ -67,7 +67,7 @@ export default function ReceptionistDashboard() {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    if (name === "email") {
+    if (name === "email" && patient.patient_type !== "Other") {
       // strip domain if pasted with @pilani.bits-pilani.ac.in
       const cleanedValue = value
         .toLowerCase()
