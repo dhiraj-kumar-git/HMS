@@ -35,7 +35,7 @@ export default function CreateUser() {
 
     try {
       const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5000/create_user", newUser, {
+      await axios.post("https://hms-backend-18lk.onrender.com/create_user", newUser, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

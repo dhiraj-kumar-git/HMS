@@ -231,7 +231,7 @@ function App() {
       if (!token || !session_id) return;
 
       await axios.post(
-        'http://localhost:5000/logout',
+        'https://hms-backend-18lk.onrender.com/logout',
         { session_id },
         { headers: { Authorization: `Bearer ${token}` } }
       );

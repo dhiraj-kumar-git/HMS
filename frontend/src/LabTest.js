@@ -103,7 +103,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       const labRes = await axios.get(
-        "http://localhost:5000/dropdown/labtests",
+        "https://hms-backend-18lk.onrender.com/dropdown/labtests",
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setConfigTests(labRes.data);
@@ -117,7 +117,7 @@ export default function LabTestDashboard() {
     setListLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/lab/patients", {
+      const res = await axios.get("https://hms-backend-18lk.onrender.com/lab/patients", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setPatients(res.data);
@@ -138,10 +138,10 @@ export default function LabTestDashboard() {
     const loadAll = async () => {
       try {
         const [labRes, patRes] = await Promise.all([
-          axios.get("http://localhost:5000/dropdown/labtests", {
+          axios.get("https://hms-backend-18lk.onrender.com/dropdown/labtests", {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          axios.get("http://localhost:5000/lab/patients", {
+          axios.get("https://hms-backend-18lk.onrender.com/lab/patients", {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
@@ -177,7 +177,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       const response = await axios.get(
-        `http://localhost:5000/get_patient/${psrNo}`,
+        `https://hms-backend-18lk.onrender.com/get_patient/${psrNo}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       const patient = response.data;
@@ -277,7 +277,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "http://localhost:5000/lab/save_report",
+        "https://hms-backend-18lk.onrender.com/lab/save_report",
         {
           psr_no: selectedPatient.psr_no,
           test_name: tests[0].lab_test,
@@ -334,7 +334,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(
-        `http://localhost:5000/get_patient/${selectedPatient.psr_no}`,
+        `https://hms-backend-18lk.onrender.com/get_patient/${selectedPatient.psr_no}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
@@ -382,7 +382,7 @@ BITS Pilani
 `;
 
       await axios.post(
-        "http://localhost:5000/lab/send_email",
+        "https://hms-backend-18lk.onrender.com/lab/send_email",
         { to_email: recipientEmail, subject, body },
         { headers: { Authorization: `Bearer ${token}` } }
       );

@@ -1,0 +1,1 @@
+const BASE_URL = "https://hms-backend-18lk.onrender.com";

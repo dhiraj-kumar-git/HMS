@@ -105,7 +105,7 @@ function MedicalCounterDashboard() {
   const fetchRegistrations = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/active_registrations', {
+      const response = await axios.get('https://hms-backend-18lk.onrender.com/active_registrations', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setRegistrations(response.data);
@@ -129,7 +129,7 @@ function MedicalCounterDashboard() {
       const fetchLabTestsConfig = async () => {
         try {
           const token = localStorage.getItem('token');
-          const response = await axios.get('http://localhost:5000/dropdown/labtests', {
+          const response = await axios.get('https://hms-backend-18lk.onrender.com/dropdown/labtests', {
             headers: { Authorization: `Bearer ${token}` },
           });
           setLabTestsConfig(response.data);
@@ -181,7 +181,7 @@ function MedicalCounterDashboard() {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        'http://localhost:5000/submit_lab_tests',
+        'https://hms-backend-18lk.onrender.com/submit_lab_tests',
         {
           psr_no: selectedPatient.psr_no,
           lab_tests: selectedPatient.lab_tests,

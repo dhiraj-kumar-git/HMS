@@ -42,7 +42,7 @@ export default function UsersList() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('http://localhost:5000/users', {
+      const { data } = await axios.get('https://hms-backend-18lk.onrender.com/users', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUsers(data);
@@ -56,7 +56,7 @@ export default function UsersList() {
     if (!window.confirm(`Delete user "${username}"?`)) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`http://localhost:5000/delete_user/${username}`, {
+      await axios.delete(`https://hms-backend-18lk.onrender.com/delete_user/${username}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast({ title: 'User deleted', status: 'success', duration: 2000, isClosable: true });
@@ -81,7 +81,7 @@ export default function UsersList() {
     try {
       const token = localStorage.getItem('token');
       await axios.put(
-        `http://localhost:5000/update_password/${selectedUser.username}`,
+        `https://hms-backend-18lk.onrender.com/update_password/${selectedUser.username}`,
         { new_password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } }
       );

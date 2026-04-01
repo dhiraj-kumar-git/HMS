@@ -54,7 +54,7 @@ export default function ReceptionistDashboard() {
     (async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/doctors", {
+        const res = await axios.get("https://hms-backend-18lk.onrender.com/doctors", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDoctors(res.data);
@@ -87,7 +87,7 @@ export default function ReceptionistDashboard() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "http://localhost:5000/register_patient",
+        "https://hms-backend-18lk.onrender.com/register_patient",
         patientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -119,7 +119,7 @@ export default function ReceptionistDashboard() {
       const session_id = localStorage.getItem("session_id");
       if (token && session_id) {
         await axios.post(
-          "http://localhost:5000/logout",
+          "https://hms-backend-18lk.onrender.com/logout",
           { session_id },
           { headers: { Authorization: `Bearer ${token}` } }
         );

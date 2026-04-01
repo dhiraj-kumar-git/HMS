@@ -45,7 +45,7 @@ export default function PatientLabReports() {
     setRefreshing(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/lab/reports", {
+      const res = await axios.get("https://hms-backend-18lk.onrender.com/lab/reports", {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReports(res.data);
@@ -163,7 +163,7 @@ export default function PatientLabReports() {
       const token = localStorage.getItem("token");
 
       await axios.post(
-        "http://localhost:5000/lab/send_email",
+        "https://hms-backend-18lk.onrender.com/lab/send_email",
         {
           recipient_email: patient.email,
           subject: `Lab Report for ${patient.name} - ${latest.test_name}`,

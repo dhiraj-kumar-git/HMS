@@ -83,7 +83,7 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
     setListLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/doctor/patients', {
+      const res = await axios.get('https://hms-backend-18lk.onrender.com/doctor/patients', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setPatients(res.data);
@@ -118,10 +118,10 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
       try {
         const token = localStorage.getItem('token');
         const [medRes, labRes] = await Promise.all([
-          axios.get('http://localhost:5000/dropdown/medicines', {
+          axios.get('https://hms-backend-18lk.onrender.com/dropdown/medicines', {
             headers: { Authorization: `Bearer ${token}` },
           }),
-          axios.get('http://localhost:5000/dropdown/labtests', {
+          axios.get('https://hms-backend-18lk.onrender.com/dropdown/labtests', {
             headers: { Authorization: `Bearer ${token}` },
           }),
         ]);
@@ -153,7 +153,7 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        'http://localhost:5000/doctor/add_prescription_details',
+        'https://hms-backend-18lk.onrender.com/doctor/add_prescription_details',
         {
           psr_no: selectedPatient.psr_no,
           prescription_details: prescriptionDetails,
@@ -172,7 +172,7 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        'http://localhost:5000/doctor/add_remark',
+        'https://hms-backend-18lk.onrender.com/doctor/add_remark',
         { psr_no: selectedPatient.psr_no, remark },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -190,7 +190,7 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
       await Promise.all(
         selectedMedicines.map(med =>
           axios.post(
-            'http://localhost:5000/doctor/add_prescription',
+            'https://hms-backend-18lk.onrender.com/doctor/add_prescription',
             { psr_no: selectedPatient.psr_no, prescription: med.item_name },
             { headers: { Authorization: `Bearer ${token}` } }
           )
@@ -210,7 +210,7 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
       await Promise.all(
         selectedLabTests.map(test =>
           axios.post(
-            'http://localhost:5000/doctor/add_lab_test',
+            'https://hms-backend-18lk.onrender.com/doctor/add_lab_test',
             { psr_no: selectedPatient.psr_no, lab_test: test.test_name },
             { headers: { Authorization: `Bearer ${token}` } }
           )
@@ -228,7 +228,7 @@ export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        `http://localhost:5000/doctor/complete_patient/${selectedPatient.psr_no}`,
+        `https://hms-backend-18lk.onrender.com/doctor/complete_patient/${selectedPatient.psr_no}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );

@@ -44,7 +44,7 @@ function InventoryList() {
   const fetchInventory = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/inventory', {
+      const response = await axios.get('https://hms-backend-18lk.onrender.com/inventory', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setInventory(response.data);

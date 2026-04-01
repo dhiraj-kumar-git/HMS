@@ -75,7 +75,7 @@ function AddMedicine() {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:5000/inventory/add', formData, {
+      const response = await axios.post('https://hms-backend-18lk.onrender.com/inventory/add', formData, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast({

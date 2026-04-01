@@ -258,7 +258,7 @@ function DashboardHome() {
       try {
         const token = localStorage.getItem('token');
         // Fetch all patients via the admin endpoint.
-        const response = await axios.get("http://localhost:5000/patients", {
+        const response = await axios.get("https://hms-backend-18lk.onrender.com/patients", {
           headers: { Authorization: `Bearer ${token}` }
         });
         // Optionally, filter for active patients (assuming new patients are those with workflow_status === "active")

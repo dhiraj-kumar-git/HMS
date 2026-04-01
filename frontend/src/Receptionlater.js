@@ -37,7 +37,7 @@ function ReceptionistDashboard() {
     const fetchDoctors = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/doctors', {
+        const response = await axios.get('https://hms-backend-18lk.onrender.com/doctors', {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDoctors(response.data);
@@ -118,7 +118,7 @@ function ReceptionistDashboard() {
     try {
       const token = localStorage.getItem('token');
       const response = await axios.post(
-        'http://localhost:5000/register_patient',
+        'https://hms-backend-18lk.onrender.com/register_patient',
         patient,
         { headers: { Authorization: `Bearer ${token}` } }
       );

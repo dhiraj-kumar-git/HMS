@@ -26,7 +26,7 @@ export default function PatientsList() {
   const fetchPatients = async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('http://localhost:5000/patients', {
+      const { data } = await axios.get('https://hms-backend-18lk.onrender.com/patients', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setPatients(data);
