@@ -5,7 +5,7 @@ import bcrypt
 from collection_format import Patient, User, Medicine
 
 # MongoDB connection setup
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://shiven:shiven424@cluster0.x0f38.mongodb.net/")
+MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://hms_user:strongpassword123@hms-cluster.y4grcdf.mongodb.net/hospital_db")
 client = MongoClient(MONGO_URI)
 
 # Database and collections
