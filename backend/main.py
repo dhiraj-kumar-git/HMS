@@ -27,7 +27,7 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
-CORS(app, origins=["https://hms-tau-three.vercel.app"]) # config for frontend endpoint
+CORS(app)
 
 # -------------------- User and Patient Routes --------------------
 
