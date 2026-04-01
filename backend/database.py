@@ -1,11 +1,16 @@
 from datetime import datetime
 from pymongo import MongoClient
+from dotenv import load_dotenv
 import os
 import bcrypt
 from collection_format import Patient, User, Medicine
 
+load_dotenv()
+
 # MongoDB connection setup
-MONGO_URI = os.getenv("MONGO_URI", "mongodb+srv://hms_user:strongpassword123@hms-cluster.y4grcdf.mongodb.net/hospital_db")
+MONGO_URI = os.getenv("MONGO_URI")
+if not MONGO_URI:
+    raise ValueError("MONGO_URI is not set")
 client = MongoClient(MONGO_URI)
 
 # Database and collections
