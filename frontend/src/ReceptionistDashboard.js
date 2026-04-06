@@ -151,7 +151,7 @@ export default function ReceptionistDashboard() {
           h={`${headerHeight}px`}
         >
           <Text fontSize="2xl" fontWeight="bold" color="blue.800">
-            Bitsmed
+            BITS MED-C
           </Text>
 
           <HStack spacing={{ base: "3", md: "4" }}>
@@ -373,6 +373,19 @@ export default function ReceptionistDashboard() {
           onClose={() => {
             setIsPrescriptionOpen(false);
             onClose();
+            // Clear the form for the next user
+            setPatient({
+              name: "",
+              age: "",
+              gender: "",
+              contact_no: "",
+              address: "",
+              psrn_id: "",
+              doctor_assigned: "",
+              patient_type: "",
+              email: "",
+            });
+            setOpdNumber("");
           }}
           prescriptionData={{
             ...patient,

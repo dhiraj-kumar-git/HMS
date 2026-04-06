@@ -201,6 +201,8 @@ def get_doctors_name():
     doctors = db.users.find({"role": "doctor"})
     return {d["username"]: d.get("display_name", d["username"]) for d in doctors}
 
+import hashlib
+
 def add_dummy_users():
     dummy_users = [
         {"username": "receptionist1", "password": "test123", "role": "receptionist", "display_name": "Receptionist 1"},
@@ -211,7 +213,9 @@ def add_dummy_users():
     ]
 
     for user in dummy_users:
-        if not create_user(user["username"], user["password"], user["role"], user.get("display_name")):
+        # Generate the frontend-equivalent SHA256 hash first
+        sha256_pwd = hashlib.sha256(user["password"].encode('utf-8')).hexdigest()
+        if not create_user(user["username"], sha256_pwd, user["role"], user.get("display_name")):
             print(f"User {user['username']} already exists.")
         else:
             print(f"User {user['username']} created successfully.")

@@ -67,7 +67,7 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
             mr={2} // space between logo and text
           />
           <Text fontSize={{ base: "xl", md: "2xl" }} fontWeight="bold">
-            BitsMed
+            BITS MED-C
           </Text>
         </Flex>
       </Box>
