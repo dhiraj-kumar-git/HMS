@@ -162,7 +162,7 @@ export default function AdminDashboard({ username = 'Dr. David Wilson', onLogout
                 fontSize={{ base: 'xl', md: '2xl' }}
                 fontWeight="bold"
               >
-                BitsMed
+                BITS MED-C
               </Text>
             </Box>
         <SidebarItem icon={FiHome} label="Dashboard" to="/admin" />

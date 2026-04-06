@@ -75,10 +75,15 @@ export default function DoctorsDashboard() {
   const [searchPSRN, setSearchPSRN] = useState("");
   const [filterPSRN, setFilterPSRN] = useState("");
 
+  // PAGINATION
+  const [currentPage, setCurrentPage] = useState(1);
+  const patientsPerPage = 10;
+
   // Whenever the search box is cleared, also clear the filter
   useEffect(() => {
     if (!searchPSRN) {
       setFilterPSRN("");
+      setCurrentPage(1);
     }
   }, [searchPSRN]);
 
@@ -333,6 +338,12 @@ export default function DoctorsDashboard() {
     ? patients.filter((p) => p.psr_no.includes(filterPSRN))
     : patients;
 
+  // Pagination logic
+  const indexOfLastPatient = currentPage * patientsPerPage;
+  const indexOfFirstPatient = indexOfLastPatient - patientsPerPage;
+  const currentPatients = displayedPatients.slice(indexOfFirstPatient, indexOfLastPatient);
+  const totalPages = Math.ceil(displayedPatients.length / patientsPerPage);
+
   // DEFINE totalCount HERE
   const totalCount = patients.length;
 
@@ -420,7 +431,7 @@ export default function DoctorsDashboard() {
         py="6"
         mx="8"
         maxW="1200px"
-        overflow="hidden"
+        overflowY="auto"
       >
         {/* Top cards */}
         <Grid templateColumns={{ base: "1fr", lg: "3fr 3fr" }} gap="0" mb="8">
@@ -487,7 +498,10 @@ export default function DoctorsDashboard() {
                   px="6"
                   fontWeight="medium"
                   fontSize="sm"
-                  onClick={() => setFilterPSRN(searchPSRN.trim())}
+                  onClick={() => {
+                    setFilterPSRN(searchPSRN.trim());
+                    setCurrentPage(1);
+                  }}
                 >
                   Search
                 </Button>
@@ -549,7 +563,7 @@ export default function DoctorsDashboard() {
         </Flex>
 
         {/* Upcoming Patients List */}
-        <Box maxH="60vh" overflowY="auto" position="relative" pb="12">
+        <Box position="relative" pb="12">
           {listLoading ? (
             <Flex
               position="absolute"
@@ -596,14 +610,14 @@ export default function DoctorsDashboard() {
                 </Box>
               </Flex>
 
-              {displayedPatients.length === 0 ? (
+              {currentPatients.length === 0 ? (
                 <Flex h="100px" align="center" justify="center">
                   <Text color="gray.500" fontSize="lg">
                     No patients right now.
                   </Text>
                 </Flex>
               ) : (
-                displayedPatients.map((p, i) => (
+                currentPatients.map((p, i) => (
                   <Flex
                     key={i}
                     p="3"
@@ -678,6 +692,29 @@ export default function DoctorsDashboard() {
                     </Box>
                   </Flex>
                 ))
+              )}
+              {totalPages > 1 && (
+                <Flex justify="center" mt="4" mb="4" align="center" gap="4">
+                  <Button
+                    size="sm"
+                    colorScheme="gray"
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    isDisabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <Text fontSize="sm" fontWeight="medium" color="gray.700">
+                    Page {currentPage} of {totalPages}
+                  </Text>
+                  <Button
+                    size="sm"
+                    colorScheme="gray"
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    isDisabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </Flex>
               )}
             </>
           )}

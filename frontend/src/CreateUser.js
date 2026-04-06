@@ -23,6 +23,13 @@ export default function CreateUser() {
   });
   const toast = useToast();
 
+  const hashPassword = async (password) => {
+    const msgUint8 = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
   const handleAddUser = async () => {
     const { username, password, role, display_name, department } = newUser;
     if (!username || !password || !role || !display_name || (!department && role === "doctor")) {
@@ -36,7 +43,8 @@ export default function CreateUser() {
 
     try {
       const token = localStorage.getItem("token");
-      await axios.post(`${BASE_URL}/create_user`, newUser, {
+      const hashedPassword = await hashPassword(newUser.password);
+      await axios.post(`${BASE_URL}/create_user`, { ...newUser, password: hashedPassword }, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

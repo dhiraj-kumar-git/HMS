@@ -203,6 +203,22 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Set up an Axios interceptor to catch 401 Unauthorized responses globally
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response && error.response.status === 401) {
+          // If token is invalid or expired, clear local storage and state
+          localStorage.clear();
+          setIsLoggedIn(false);
+          setUsername('');
+          setRole('');
+          setSessionId('');
+        }
+        return Promise.reject(error);
+      }
+    );
+
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('username');
     const userRole = localStorage.getItem('role');
@@ -215,6 +231,11 @@ function App() {
       setSessionId(session);
     }
     setLoading(false);
+
+    // Clean up interceptor on unmount
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
   }, []);
 
   // Called from Login.js when login is successful.
