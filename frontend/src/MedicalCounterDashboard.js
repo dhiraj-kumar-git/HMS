@@ -39,6 +39,7 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 // Utility to convert numbers to words (up to 9999)
 const numberToWords = (num) => {
@@ -105,7 +106,7 @@ function MedicalCounterDashboard() {
   const fetchRegistrations = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('https://hms-backend-18lk.onrender.com/active_registrations', {
+      const response = await axios.get(`${BASE_URL}/active_registrations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setRegistrations(response.data);
@@ -129,7 +130,7 @@ function MedicalCounterDashboard() {
       const fetchLabTestsConfig = async () => {
         try {
           const token = localStorage.getItem('token');
-          const response = await axios.get('https://hms-backend-18lk.onrender.com/dropdown/labtests', {
+          const response = await axios.get(`${BASE_URL}/dropdown/labtests`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setLabTestsConfig(response.data);
@@ -181,7 +182,7 @@ function MedicalCounterDashboard() {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        'https://hms-backend-18lk.onrender.com/submit_lab_tests',
+        `${BASE_URL}/submit_lab_tests`,
         {
           psr_no: selectedPatient.psr_no,
           lab_tests: selectedPatient.lab_tests,

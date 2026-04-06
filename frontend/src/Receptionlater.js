@@ -14,6 +14,7 @@ import {
   HStack,
 } from '@chakra-ui/react';
 import axios from 'axios';
+import BASE_URL from './Config';
 import PrescriptionModal from './PrescriptionModal';
 
 function ReceptionistDashboard() {
@@ -37,7 +38,7 @@ function ReceptionistDashboard() {
     const fetchDoctors = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('https://hms-backend-18lk.onrender.com/doctors', {
+        const response = await axios.get(`${BASE_URL}/doctors`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDoctors(response.data);
@@ -117,11 +118,7 @@ function ReceptionistDashboard() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        'https://hms-backend-18lk.onrender.com/register_patient',
-        patient,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await axios.post(`${BASE_URL}/register_patient`, patient, { headers: { Authorization: `Bearer ${token}` } });
 
       if (response.status === 201) {
         setOpdNumber(response.data.psr_no);

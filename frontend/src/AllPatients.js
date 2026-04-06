@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import BASE_URL from './Config';
 import {
   Box,
   Flex,
@@ -156,7 +157,7 @@ export default function AllPatients({ onLogout }) {
     const fetchAllPatients = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('https://hms-backend-18lk.onrender.com/doctor/all_patients', {
+        const response = await axios.get(`${BASE_URL}/doctor/all_patients`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setPatients(response.data);
