@@ -24,6 +24,7 @@ import {
 } from '@chakra-ui/react';
 import { FiTrash2, FiPlus, FiEdit } from 'react-icons/fi';
 import axios from 'axios';
+import BASE_URL from './Config';
 import { useNavigate } from 'react-router-dom';
 
 export default function UsersList() {
@@ -42,7 +43,7 @@ export default function UsersList() {
   const fetchUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('https://hms-backend-18lk.onrender.com/users', {
+      const { data } = await axios.get(`${BASE_URL}/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUsers(data);
@@ -56,7 +57,7 @@ export default function UsersList() {
     if (!window.confirm(`Delete user "${username}"?`)) return;
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`https://hms-backend-18lk.onrender.com/delete_user/${username}`, {
+      await axios.delete(`${BASE_URL}/delete_user/${username}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast({ title: 'User deleted', status: 'success', duration: 2000, isClosable: true });
@@ -81,7 +82,7 @@ export default function UsersList() {
     try {
       const token = localStorage.getItem('token');
       await axios.put(
-        `https://hms-backend-18lk.onrender.com/update_password/${selectedUser.username}`,
+        `${BASE_URL}/update_password/${selectedUser.username}`,
         { new_password: newPassword },
         { headers: { Authorization: `Bearer ${token}` } }
       );

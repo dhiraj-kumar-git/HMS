@@ -24,6 +24,7 @@ import {
 import { FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import BASE_URL from './Config';
 import PrescriptionModal from "./PrescriptionModal";
 
 const headerHeight = 64; // same header height as AdminDashboard
@@ -54,7 +55,7 @@ export default function ReceptionistDashboard() {
     (async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("https://hms-backend-18lk.onrender.com/doctors", {
+        const res = await axios.get(`${BASE_URL}/doctors`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDoctors(res.data);
@@ -87,7 +88,7 @@ export default function ReceptionistDashboard() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "https://hms-backend-18lk.onrender.com/register_patient",
+        `${BASE_URL}/register_patient`,
         patientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -119,7 +120,7 @@ export default function ReceptionistDashboard() {
       const session_id = localStorage.getItem("session_id");
       if (token && session_id) {
         await axios.post(
-          "https://hms-backend-18lk.onrender.com/logout",
+          `${BASE_URL}/logout`,
           { session_id },
           { headers: { Authorization: `Bearer ${token}` } }
         );

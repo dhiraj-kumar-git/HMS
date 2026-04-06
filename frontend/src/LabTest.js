@@ -49,6 +49,7 @@ import {
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import BASE_URL from './Config';
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");
@@ -102,10 +103,7 @@ export default function LabTestDashboard() {
   const fetchConfigTests = async () => {
     try {
       const token = localStorage.getItem("token");
-      const labRes = await axios.get(
-        "https://hms-backend-18lk.onrender.com/dropdown/labtests",
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const labRes = await axios.get(`${BASE_URL}/dropdown/labtests`, { headers: { Authorization: `Bearer ${token}` } });
       setConfigTests(labRes.data);
     } catch (e) {
       console.error("Error fetching config tests:", e);
@@ -117,9 +115,7 @@ export default function LabTestDashboard() {
     setListLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("https://hms-backend-18lk.onrender.com/lab/patients", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await axios.get(`${BASE_URL}/lab/patients`, { headers: { Authorization: `Bearer ${token}` } });
       setPatients(res.data);
     } catch (e) {
       toast({
@@ -138,12 +134,8 @@ export default function LabTestDashboard() {
     const loadAll = async () => {
       try {
         const [labRes, patRes] = await Promise.all([
-          axios.get("https://hms-backend-18lk.onrender.com/dropdown/labtests", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          axios.get("https://hms-backend-18lk.onrender.com/lab/patients", {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          axios.get(`${BASE_URL}/dropdown/labtests`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${BASE_URL}/lab/patients`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
         setConfigTests(labRes.data);
         setPatients(patRes.data);
@@ -176,10 +168,7 @@ export default function LabTestDashboard() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get(
-        `https://hms-backend-18lk.onrender.com/get_patient/${psrNo}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await axios.get(`${BASE_URL}/get_patient/${psrNo}`, { headers: { Authorization: `Bearer ${token}` } });
       const patient = response.data;
       setSelectedPatient(patient);
 
@@ -277,7 +266,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "https://hms-backend-18lk.onrender.com/lab/save_report",
+        `${BASE_URL}/lab/save_report`,
         {
           psr_no: selectedPatient.psr_no,
           test_name: tests[0].lab_test,
@@ -333,10 +322,7 @@ export default function LabTestDashboard() {
     setEmailLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(
-        `https://hms-backend-18lk.onrender.com/get_patient/${selectedPatient.psr_no}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await axios.get(`${BASE_URL}/get_patient/${selectedPatient.psr_no}`, { headers: { Authorization: `Bearer ${token}` } });
 
       const patientData = res.data;
       const recipientEmail = patientData.email;
@@ -382,7 +368,7 @@ BITS Pilani
 `;
 
       await axios.post(
-        "https://hms-backend-18lk.onrender.com/lab/send_email",
+        `${BASE_URL}/lab/send_email`,
         { to_email: recipientEmail, subject, body },
         { headers: { Authorization: `Bearer ${token}` } }
       );
