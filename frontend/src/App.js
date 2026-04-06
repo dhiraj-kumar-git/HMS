@@ -8,6 +8,7 @@ import {
   useLocation
 } from 'react-router-dom';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 import SidebarComponent from './Sidebar';
 import Login from './Login';
@@ -231,7 +232,7 @@ function App() {
       if (!token || !session_id) return;
 
       await axios.post(
-        'http://localhost:5000/logout',
+        `${BASE_URL}/logout`,
         { session_id },
         { headers: { Authorization: `Bearer ${token}` } }
       );

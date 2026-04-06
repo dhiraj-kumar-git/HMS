@@ -27,6 +27,7 @@ import {
 } from "@chakra-ui/react";
 import { FiMail, FiCopy, FiRefreshCw, FiEye } from "react-icons/fi";
 import axios from "axios";
+import BASE_URL from './Config';
 
 export default function PatientLabReports() {
   const toast = useToast();
@@ -45,7 +46,7 @@ export default function PatientLabReports() {
     setRefreshing(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/lab/reports", {
+      const res = await axios.get(`${BASE_URL}/lab/reports`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReports(res.data);
@@ -162,17 +163,7 @@ export default function PatientLabReports() {
 
       const token = localStorage.getItem("token");
 
-      await axios.post(
-        "http://localhost:5000/lab/send_email",
-        {
-          recipient_email: patient.email,
-          subject: `Lab Report for ${patient.name} - ${latest.test_name}`,
-          body: `Dear ${patient.name},\n\nPlease find attached your latest lab test report.\n\nRegards,\nBITS Pilani Medical Centre`,
-          pdf_base64: pdfBase64,
-          filename: `${patient.name}_LabReport.pdf`,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await axios.post(`${BASE_URL}/lab/send_email`, { recipient_email: patient.email, subject: `Lab Report for ${patient.name} - ${latest.test_name}`, body: `Dear ${patient.name},\n\nPlease find attached your latest lab test report.\n\nRegards,\nBITS Pilani Medical Centre`, pdf_base64: pdfBase64, filename: `${patient.name}_LabReport.pdf` }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast({
         title: "Email sent successfully!",

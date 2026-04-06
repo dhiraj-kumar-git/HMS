@@ -25,6 +25,7 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 function InventoryList() {
   const [inventory, setInventory] = useState([]);
@@ -44,7 +45,7 @@ function InventoryList() {
   const fetchInventory = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/inventory', {
+      const response = await axios.get(`${BASE_URL}/inventory`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setInventory(response.data);
