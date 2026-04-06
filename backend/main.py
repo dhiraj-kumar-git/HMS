@@ -25,7 +25,7 @@ EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
 app = Flask(__name__)
-app.config["JWT_SECRET_KEY"] = "your_secret_key"  # Change this to a strong secret
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
 CORS(app)
 
@@ -636,4 +636,6 @@ def dropdown_labtests():
     return jsonify(lab_tests), 200
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)

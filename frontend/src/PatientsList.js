@@ -13,6 +13,7 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
@@ -26,7 +27,7 @@ export default function PatientsList() {
   const fetchPatients = async () => {
     try {
       const token = localStorage.getItem('token');
-      const { data } = await axios.get('http://localhost:5000/patients', {
+      const { data } = await axios.get(`${BASE_URL}/patients`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setPatients(data);
