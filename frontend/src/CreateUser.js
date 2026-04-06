@@ -11,6 +11,7 @@ import {
   useToast,
 } from "@chakra-ui/react";
 import axios from "axios";
+import BASE_URL from './Config';
 
 export default function CreateUser() {
   const [newUser, setNewUser] = useState({
@@ -35,7 +36,7 @@ export default function CreateUser() {
 
     try {
       const token = localStorage.getItem("token");
-      await axios.post("http://localhost:5000/create_user", newUser, {
+      await axios.post(`${BASE_URL}/create_user`, newUser, {
         headers: { Authorization: `Bearer ${token}` },
       });
 

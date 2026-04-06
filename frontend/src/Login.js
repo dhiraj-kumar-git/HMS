@@ -17,6 +17,7 @@ import {
 import { FaLock, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import BASE_URL from './Config';
 
 import bitsLogo from "./assets/bits-logo.png";
 import medicalCenterBg from "./assets/medical-center.jpg";
@@ -43,7 +44,7 @@ function Login({ onLogin }) {
     setError("");
     setLoading(true);
     try {
-      const response = await axios.post("http://localhost:5000/login", {
+      const response = await axios.post(`${BASE_URL}/login`, {
         username,
         password,
       });

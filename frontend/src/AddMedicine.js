@@ -23,6 +23,7 @@ import {
 } from '@chakra-ui/react';
 import { FiBell, FiMail, FiLogOut, FiUser } from 'react-icons/fi';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 function AddMedicine() {
   // Initial form state for adding medicine
@@ -75,7 +76,7 @@ function AddMedicine() {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post('http://localhost:5000/inventory/add', formData, {
+      const response = await axios.post(`${BASE_URL}/inventory/add`, formData, {
         headers: { Authorization: `Bearer ${token}` },
       });
       toast({
