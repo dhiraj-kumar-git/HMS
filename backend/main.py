@@ -325,14 +325,18 @@ def create_user():
     role = data.get("role")
     display_name = data.get("display_name")
     department = data.get("department")
+    schedule = data.get("schedule", [])
 
     if not all([username, password, role, display_name]):
         return jsonify({"error": "Missing required fields"}), 400
     
-    if role == "doctor" and not department:
-        return jsonify({"error": "Department is required for doctors"}), 400
+    if role == "doctor":
+        if not department:
+            return jsonify({"error": "Department is required for doctors"}), 400
+        if not schedule or len(schedule) == 0:
+            return jsonify({"error": "Schedule is required for doctors"}), 400
 
-    if database.create_user(username, password, role, display_name, department):
+    if database.create_user(username, password, role, display_name, department, schedule):
         return jsonify({"message": "User created successfully"}), 201
     return jsonify({"error": "User already exists"}), 400
 
@@ -640,7 +644,7 @@ def dropdown_labtests():
 @app.route('/api/public/doctors', methods=['GET'])
 def public_get_doctors():
     doctors = database.get_all_doctors()
-    safe_docs = [{"username": d.get("username"), "display_name": d.get("display_name", d.get("username"))} for d in doctors]
+    safe_docs = [{"username": d.get("username"), "display_name": d.get("display_name", d.get("username")), "department": d.get("department"), "schedule": d.get("schedule", [])} for d in doctors]
     return jsonify(safe_docs), 200
 
 @app.route('/api/public/register', methods=['POST'])

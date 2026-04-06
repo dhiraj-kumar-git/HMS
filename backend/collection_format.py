@@ -35,6 +35,7 @@ class User:
     role: str  # receptionist, doctor, medical_store, lab_staff, admin
     display_name: str  # Added field for Display Name
     department: Optional[str] = ""
+    schedule: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         user_dict = asdict(self)

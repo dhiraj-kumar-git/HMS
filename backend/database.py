@@ -30,7 +30,7 @@ def check_password(password, hashed_password):
     return bcrypt.checkpw(password.encode('utf-8'), hashed_password)
 
 # Create a new user (Receptionist, Doctor, Medical Store, Lab Staff, Admin)
-def create_user(username, password, role, display_name, department=None):
+def create_user(username, password, role, display_name, department=None, schedule=None):
     existing_user = users.find_one({"username": username})
     if not existing_user:
         hashed_password = hash_password(password)
@@ -39,7 +39,8 @@ def create_user(username, password, role, display_name, department=None):
             password=hashed_password.decode('utf-8'),
             role=role,
             display_name=display_name or username,  # fallback to username
-            department=department
+            department=department,
+            schedule=schedule or []
         )
         users.insert_one(user.to_dict())
         return True

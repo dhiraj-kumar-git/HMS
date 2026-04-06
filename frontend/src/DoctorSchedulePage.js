@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Box,
   Flex,
@@ -9,6 +9,8 @@ import {
   Input,
 } from "@chakra-ui/react";
 import { useNavigate, useLocation } from "react-router-dom";
+import axios from "axios";
+import BASE_URL from "./Config";
 
 export default function DoctorSchedulePage() {
   const navigate = useNavigate();
@@ -17,39 +19,48 @@ export default function DoctorSchedulePage() {
   const [viewMode, setViewMode] = useState("calendar"); // "calendar" | "list"
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Doctor schedule by days
-  const schedule = {
-    Monday: [{ name: "Dr. Pooja Shah (ENT)", time: "5:30 PM – 6:30 PM" }],
-    Tuesday: [
-      { name: "Dr. Kishore Singh (Dermatologist)", time: "6:00 PM – 7:30 PM" },
-    ],
-    Wednesday: [
-      { name: "Dr. Ramesh P Jajoo (Ayurvedic)", time: "8:00 AM – 10:00 AM" },
-      { name: "Dr. Preety Maan (Dentist)", time: "5:00 PM – 6:30 PM" },
-      {
-        name: "Dr. Karan Singh Beniwal (Paediatrician)",
-        time: "6:00 PM – 7:00 PM",
-      },
-      { name: "Dr. Prashant Singh (Orthopaedics)", time: "7:00 PM – 8:00 PM" },
-      { name: "Dr. Rinku Singh (Gynaecology)", time: "7:00 PM – 8:00 PM" },
-    ],
-    Thursday: [{ name: "Dr. Pooja Shah (ENT)", time: "5:30 PM – 6:30 PM" }],
-    Friday: [
-      {
-        name: "Dr. Karan Singh Beniwal (Paediatrician)",
-        time: "6:00 PM – 7:00 PM",
-      },
-      { name: "Dr. Prashant Singh (Orthopaedics)", time: "7:00 PM – 8:00 PM" },
-      { name: "Dr. Rinku Singh (Gynaecology)", time: "7:00 PM – 8:00 PM" },
-    ],
-    Saturday: [
-      { name: "Dr. Diwakar Pathak (Homeopathic)", time: "5:30 PM – 6:30 PM" },
-      { name: "Dr. Preety Maan (Dentist)", time: "5:00 PM – 6:30 PM" },
-    ],
-    Sunday: [
-      { name: "Dr. Ramesh P Jajoo (Ayurvedic)", time: "8:00 AM – 10:00 AM" },
-    ],
-  };
+  const [schedule, setSchedule] = useState({
+    Monday: [],
+    Tuesday: [],
+    Wednesday: [],
+    Thursday: [],
+    Friday: [],
+    Saturday: [],
+    Sunday: [],
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const response = await axios.get(`${BASE_URL}/api/public/doctors`);
+        const newSchedule = {
+          Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: []
+        };
+
+        response.data.forEach((doc) => {
+          if (doc.schedule && doc.schedule.length > 0) {
+            doc.schedule.forEach((shift) => {
+              shift.duty_days.forEach((day) => {
+                if (newSchedule[day]) {
+                  newSchedule[day].push({
+                    name: `Dr. ${doc.display_name} (${doc.department})`,
+                    time: `${shift.start_time} - ${shift.end_time}`,
+                  });
+                }
+              });
+            });
+          }
+        });
+        setSchedule(newSchedule);
+      } catch (err) {
+        console.error("Error fetching doctor schedule", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDoctors();
+  }, []);
 
   const days = [
     "Monday",
