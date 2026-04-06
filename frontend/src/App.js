@@ -25,6 +25,10 @@ import AllPatients from './AllPatients';
 import PatientLabReports from "./PatientLabReports";
 import UploadLabReports from "./UploadLabReports";
 
+import PatientPortal from './PatientPortal';
+import PatientRegistration from './PatientRegistration';
+import PatientBooking from './PatientBooking';
+
 const theme = extendTheme({
   fonts: {
     heading: `'Inter', sans-serif`,
@@ -184,6 +188,11 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
+          {/* Public Portal Routes */}
+          <Route path="/portal" element={<PatientPortal />} />
+          <Route path="/portal/register" element={<PatientRegistration />} />
+          <Route path="/portal/book" element={<PatientBooking />} />
+
           {/* Catch-all route */}
           <Route
             path="*"

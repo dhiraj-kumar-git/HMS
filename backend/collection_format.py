@@ -13,6 +13,9 @@ class Patient:
     patient_type: str
     registration_time: datetime
     doctor_assigned: Optional[str] = None
+    institute_id: Optional[str] = None
+    email: Optional[str] = None
+    appointments: list = field(default_factory=list)
     prescriptions: list = field(default_factory=list)  # (Legacy field, if needed)
     lab_tests: list = field(default_factory=list)
     remarks: list = field(default_factory=list)  # For storing remarks (multiple)

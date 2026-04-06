@@ -27,7 +27,7 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
-CORS(app)
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 
 # -------------------- User and Patient Routes --------------------
 
@@ -634,6 +634,106 @@ def dropdown_medicines():
 def dropdown_labtests():
     lab_tests = load_lab_tests_from_config()
     return jsonify(lab_tests), 200
+
+# -------------------- Public Patient Portal Endpoints --------------------
+
+@app.route('/api/public/doctors', methods=['GET'])
+def public_get_doctors():
+    doctors = database.get_all_doctors()
+    safe_docs = [{"username": d.get("username"), "display_name": d.get("display_name", d.get("username"))} for d in doctors]
+    return jsonify(safe_docs), 200
+
+@app.route('/api/public/register', methods=['POST'])
+def public_register_patient():
+    data = request.json
+    name = data.get("name")
+    age = data.get("age")
+    gender = data.get("gender")
+    contact_no = data.get("contact_no")
+    institute_id = data.get("institute_id")
+    address = data.get("address")
+    email = data.get("email")
+    patient_type = data.get("patient_type")
+    
+    if not institute_id:
+        return jsonify({"error": "Institute ID is required"}), 400
+        
+    if not all([name, age, gender, contact_no, address, email, patient_type]):
+        return jsonify({"error": "Missing required fields"}), 400
+
+    patient_data = {
+        "name": name,
+        "age": age,
+        "gender": gender,
+        "contact_no": contact_no,
+        "institute_id": institute_id,
+        "email": email,
+        "address": address,
+        "patient_type": patient_type,
+        "workflow_status": "active",
+        "bill_status": "Pending",
+        "lab_tests": [],
+        "appointments": []
+    }
+
+    psr_no = database.register_patient(patient_data)
+    return jsonify({"message": "Patient registered successfully", "psr_no": psr_no}), 201
+
+@app.route('/api/public/verify', methods=['POST'])
+def public_verify_patient():
+    data = request.json
+    institute_id = data.get("institute_id")
+    if not institute_id:
+        return jsonify({"error": "Institute ID is required"}), 400
+        
+    patient = database.patients.find_one({"institute_id": institute_id})
+    if not patient:
+        return jsonify({"error": "No patient found with this Institute ID"}), 404
+        
+    return jsonify({
+        "message": "Patient verified", 
+        "psr_no": patient.get("psr_no"), 
+        "name": patient.get("name")
+    }), 200
+
+@app.route('/api/public/book', methods=['POST'])
+def public_book_appointment():
+    data = request.json
+    psr_no = data.get("psr_no")
+    doctor_username = data.get("doctor_username")
+    appointment_time = data.get("time") 
+    
+    if not all([psr_no, doctor_username, appointment_time]):
+        return jsonify({"error": "Missing required fields"}), 400
+        
+    doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
+    doctor_name = doctor.get("display_name") if doctor else doctor_username
+    
+    import datetime
+    appointment_obj = {
+        "doctor_username": doctor_username,
+        "doctor_name": doctor_name,
+        "time": appointment_time,
+        "booked_at": datetime.datetime.now().isoformat(),
+        "status": "upcoming"
+    }
+    
+    result = database.patients.update_one(
+        {"psr_no": psr_no},
+        {
+            "$set": {
+                "doctor_assigned": doctor_username,
+                "workflow_status": "active"
+            },
+            "$push": {
+                "appointments": appointment_obj
+            }
+        }
+    )
+    
+    if result.modified_count > 0:
+        return jsonify({"message": "Appointment booked successfully"}), 200
+    return jsonify({"error": "Failed to book appointment"}), 400
 
 if __name__ == "__main__":
     import os
