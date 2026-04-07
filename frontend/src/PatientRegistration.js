@@ -24,7 +24,10 @@ const PatientRegistration = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
-
+  const hostels = ["Ashok Bhawan", "Bhagirath Bhawan", "Budh Bhawan",
+    "CVR Bhawan", "Gandhi Bhawan", "Krishna Bhawan", "Malviya Studio Apartment (MSA)",
+    "Malviya Bhawan - A block", "Malviya Bhawan - B block", "Malviya Bhawan - C block",
+    "Meera Bhawan", "Ram Bhawan", "Rana Pratap Bhawan", "Shankar Bhawan", "Vishwakarma Bhawan", "Vyas Bhawan"];
   const [formData, setFormData] = useState({
     institute_id: '',
     name: '',
@@ -44,7 +47,7 @@ const PatientRegistration = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
+
     // Process final address
     const finalAddress = formData.address === 'Other' ? formData.customAddress : formData.address;
     const submissionData = {
@@ -104,10 +107,10 @@ const PatientRegistration = () => {
           <VStack spacing={6}>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="100%">
               <FormControl isRequired>
-                <FormLabel color="gray.700">Institute ID</FormLabel>
+                <FormLabel color="gray.700">BITS Institute ID</FormLabel>
                 <Input
                   name="institute_id"
-                  placeholder="e.g. 2021A7PS0001G"
+                  placeholder="e.g. 2025H1120147P"
                   value={formData.institute_id}
                   onChange={handleChange}
                   focusBorderColor="blue.500"
@@ -118,7 +121,7 @@ const PatientRegistration = () => {
                 <FormLabel color="gray.700">Full Name</FormLabel>
                 <Input
                   name="name"
-                  placeholder="e.g. John Doe"
+                  placeholder="e.g. Dhiraj Kumar"
                   value={formData.name}
                   onChange={handleChange}
                   focusBorderColor="blue.500"
@@ -128,11 +131,11 @@ const PatientRegistration = () => {
 
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="100%">
               <FormControl isRequired>
-                <FormLabel color="gray.700">Email ID</FormLabel>
+                <FormLabel color="gray.700">BITS Email ID</FormLabel>
                 <Input
                   name="email"
                   type="email"
-                  placeholder="e.g. student@bits.edu"
+                  placeholder="e.g. h20250147@pilani.bits-pilani.ac.in"
                   value={formData.email}
                   onChange={handleChange}
                   focusBorderColor="blue.500"
@@ -204,14 +207,16 @@ const PatientRegistration = () => {
                 <FormLabel color="gray.700">Address / Hostel</FormLabel>
                 <Select
                   name="address"
-                  placeholder="Select Address/Hostel"
+                  placeholder="Select Address / Hostel"
                   value={formData.address}
                   onChange={handleChange}
                   focusBorderColor="blue.500"
                 >
-                  <option value="A">A</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
+                  {hostels.map((hostel) => (
+                    <option key={hostel} value={hostel}>
+                      {hostel}
+                    </option>
+                  ))}
                   <option value="Other">Other</option>
                 </Select>
               </FormControl>
