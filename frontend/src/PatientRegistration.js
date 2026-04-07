@@ -67,7 +67,7 @@ const PatientRegistration = () => {
       });
       // Transition automatically to Booking
       setTimeout(() => {
-        navigate('/portal/book', { state: { autoFillInstituteId: formData.institute_id } });
+        navigate('/portal/book-appointment', { state: { autoFillInstituteId: formData.institute_id } });
       }, 1500);
     } catch (err) {
       toast({

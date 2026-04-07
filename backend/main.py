@@ -732,7 +732,7 @@ def public_verify_patient():
         "name": patient.get("name")
     }), 200
 
-@app.route('/api/public/book', methods=['POST'])
+@app.route('/api/public/book-appointment', methods=['POST'])
 def public_book_appointment():
     data = request.json
     institute_id = data.get("institute_id")
