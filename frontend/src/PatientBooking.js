@@ -105,7 +105,7 @@ const PatientBooking = () => {
     setBookingLoading(true);
     try {
       await axios.post(`${BASE_URL}/api/public/book`, {
-        psr_no: verifiedPatient.psr_no,
+        institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
         time: bookingData.time
       });
@@ -190,7 +190,7 @@ const PatientBooking = () => {
               <Box>
                 <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Profile</Text>
                 <Text fontSize="lg" color="teal.900">{verifiedPatient.name}</Text>
-                <Text fontSize="xs" color="teal.600">PSR: {verifiedPatient.psr_no}</Text>
+                <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
               </Box>
             </Flex>
 

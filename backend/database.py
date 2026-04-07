@@ -103,25 +103,25 @@ def end_session(username, session_id):
     )
     return result.modified_count > 0  # Return True if session was updated
 
-# Generate a unique PSR number for each patient
-def generate_psr_number():
-    today = datetime.now().strftime("%Y%m%d")
-    count = patients.count_documents({"psr_no": {"$regex": f"^{today}"}})
-    return f"{today}{str(count + 1).zfill(4)}"  # Format: YYYYMMDDXXXX
 
 # Register a new patient
 def register_patient(patient_data):
-    psr_no = generate_psr_number()
-    registration_time = datetime.now()
+    institute_id = patient_data.get("institute_id")
+    if not institute_id:
+        raise ValueError("Institute ID is required for registration")
+    
+    # Optional: check if already exists to prevent duplicate primary IDs
+    if patients.find_one({"institute_id": institute_id}):
+        return None # Indicate duplicate
 
-    patient_data["psr_no"] = psr_no
+    registration_time = datetime.now()
     patient_data["registration_time"] = registration_time
     patients.insert_one(patient_data)
-    return psr_no  # Return the generated PSR number
+    return institute_id  # Return the Institute ID
 
-# Retrieve patient details by PSR number
-def get_patient_by_psr(psr_no):
-    patient = patients.find_one({"psr_no": psr_no})
+# Retrieve patient details by Institute ID
+def get_patient_by_id(institute_id):
+    patient = patients.find_one({"institute_id": institute_id})
     if patient:
         patient["_id"] = str(patient["_id"])  # Convert ObjectId to string for JSON response
         return patient
@@ -132,33 +132,33 @@ def get_patients_by_doctor(doctor_username):
     return list(patients.find({"doctor_assigned": doctor_username, "workflow_status": "active"}, {"_id": 0}))
 
 # Add a prescription to a patient (recording the doctor's note)
-def add_prescription(psr_no, prescription, doctor_username):
+def add_prescription(institute_id, prescription, doctor_username):
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$push": {"prescriptions": {"doctor": doctor_username, "note": prescription, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a prescription to a patient by setting a new 'prescription_details' field
-def add_prescription_details(psr_no, prescription_details, doctor_username):
+def add_prescription_details(institute_id, prescription_details, doctor_username):
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$push": {"prescription_details": {"doctor": doctor_username, "prescription_details": prescription_details, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a lab test to a patient (recording only the lab test details)
-def add_lab_test(psr_no, lab_test, doctor_username):
+def add_lab_test(institute_id, lab_test, doctor_username):
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$push": {"lab_tests": {"doctor": doctor_username, "lab_test": lab_test, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a lab report to a patient
-def add_lab_report(psr_no, report_details):
+def add_lab_report(institute_id, report_details):
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
@@ -168,23 +168,23 @@ def get_lab_reports():
     reports = list(
         patients.find(
             {"lab_reports": {"$exists": True, "$ne": []}},
-            {"_id": 0, "name": 1, "psr_no": 1, "age": 1, "gender": 1, "lab_reports": 1, "email": 1}
+            {"_id": 0, "name": 1, "institute_id": 1, "age": 1, "gender": 1, "lab_reports": 1, "email": 1}
         )
     )
     return reports
 
 # Add a remark to a patient (recording the remark separately)
-def add_remark(psr_no, remark, doctor_username):
+def add_remark(institute_id, remark, doctor_username):
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$push": {"remarks": {"doctor": doctor_username, "remark": remark, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Mark a patient as complete (workflow_status "completed")
-def complete_patient(psr_no):
+def complete_patient(institute_id):
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$set": {"workflow_status": "completed"}}
     )
     return result.modified_count > 0
@@ -236,10 +236,10 @@ def add_dummy_users():
         else:
             print(f"User {user['username']} created successfully.")
 
-def submit_lab_tests(psr_no):
+def submit_lab_tests(institute_id):
     # Update the patient document with the lab tests, order time, and mark bill_status as "Paid"
     result = patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$set": {"lab_order_time": datetime.now(), "bill_status": "Paid"}}
     )
     return result.modified_count > 0

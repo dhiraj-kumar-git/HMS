@@ -7,7 +7,7 @@ from database import get_doctors_name
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity, get_jwt
 import uuid
-from database import get_patient_by_psr
+from database import get_patient_by_id
 import pandas as pd
 import json
 import os
@@ -122,11 +122,13 @@ def register_patient():
     address = data.get("address")
     doctor_assigned = data.get("doctor_assigned")
     patient_type = data.get("patient_type")
+    institute_id = data.get("institute_id")
 
-    if not all([name, age, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type]):
+    if not all([name, age, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type, institute_id]):
         return jsonify({"error": "Missing required fields"}), 400
 
     patient_data = {
+        "institute_id": institute_id,
         "name": name,
         "age": age,
         "gender": gender,
@@ -142,14 +144,17 @@ def register_patient():
         "lab_results": []
     }
 
-    psr_no = database.register_patient(patient_data)
-    return jsonify({"message": "Patient registered successfully", "psr_no": psr_no}), 201
+    result_id = database.register_patient(patient_data)
+    if result_id is None:
+        return jsonify({"error": "Patient with this Institute ID already exists"}), 409
+        
+    return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
 
 # Protected route to fetch patient details
-@app.route('/get_patient/<psr_no>', methods=['GET'])
+@app.route('/get_patient/<institute_id>', methods=['GET'])
 @jwt_required()
-def get_patient(psr_no):
-    patient = database.get_patient_by_psr(psr_no)
+def get_patient(institute_id):
+    patient = database.get_patient_by_id(institute_id)
     if patient:
         return jsonify(patient), 200
     return jsonify({"error": "Patient not found"}), 404
@@ -183,16 +188,16 @@ def save_lab_report():
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     test_name = data.get("test_name")
     results = data.get("results")
     remarks = data.get("remarks")
 
-    if not psr_no or not test_name or not results:
+    if not institute_id or not test_name or not results:
         return jsonify({"error": "Missing required fields"}), 400
 
     from database import add_lab_report
-    success = add_lab_report(psr_no, {
+    success = add_lab_report(institute_id, {
         "test_name": test_name,
         "results": results,
         "remarks": remarks,
@@ -397,14 +402,14 @@ def add_prescription_route():
         return jsonify({"error": "Unauthorized access"}), 403
 
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     prescription = data.get("prescription")
 
-    if not psr_no or not prescription:
+    if not institute_id or not prescription:
         return jsonify({"error": "Missing required fields"}), 400
 
     doctor_username = get_jwt_identity()
-    if database.add_prescription(psr_no, prescription, doctor_username):
+    if database.add_prescription(institute_id, prescription, doctor_username):
         return jsonify({"message": "Prescription added successfully"}), 200
     return jsonify({"error": "Failed to add prescription"}), 400
 
@@ -417,14 +422,14 @@ def add_prescription_details_route():
         return jsonify({"error": "Unauthorized access"}), 403
 
     data = request.json    
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     prescription_details = data.get("prescription_details")
 
-    if not psr_no or not prescription_details:
+    if not institute_id or not prescription_details:
         return jsonify({"error": "Missing required fields"}), 400
 
     doctor_username = get_jwt_identity()
-    if database.add_prescription_details(psr_no, prescription_details, doctor_username):
+    if database.add_prescription_details(institute_id, prescription_details, doctor_username):
         return jsonify({"message": "Prescription details added successfully"}), 200
     return jsonify({"error": "Failed to add prescription details"}), 400
 
@@ -437,14 +442,14 @@ def add_lab_test_route():
         return jsonify({"error": "Unauthorized access"}), 403
 
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     lab_test = data.get("lab_test")
 
-    if not psr_no or not lab_test:
+    if not institute_id or not lab_test:
         return jsonify({"error": "Missing required fields"}), 400
 
     doctor_username = get_jwt_identity()
-    if database.add_lab_test(psr_no, lab_test, doctor_username):
+    if database.add_lab_test(institute_id, lab_test, doctor_username):
         return jsonify({"message": "Lab test added successfully"}), 200
     return jsonify({"error": "Failed to add lab test"}), 400
 
@@ -457,26 +462,26 @@ def add_remark_route():
         return jsonify({"error": "Unauthorized access"}), 403
 
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     remark = data.get("remark")
 
-    if not psr_no or not remark:
+    if not institute_id or not remark:
         return jsonify({"error": "Missing required fields"}), 400
 
     doctor_username = get_jwt_identity()
-    if database.add_remark(psr_no, remark, doctor_username):
+    if database.add_remark(institute_id, remark, doctor_username):
         return jsonify({"message": "Remark added successfully"}), 200
     return jsonify({"error": "Failed to add remark"}), 400
 
 # Endpoint for doctor to mark a patient as complete
-@app.route('/doctor/complete_patient/<psr_no>', methods=['POST'])
+@app.route('/doctor/complete_patient/<institute_id>', methods=['POST'])
 @jwt_required()
-def complete_patient_route(psr_no):
+def complete_patient_route(institute_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
-    if database.complete_patient(psr_no):
+    if database.complete_patient(institute_id):
         return jsonify({"message": "Patient marked as complete"}), 200
     return jsonify({"error": "Failed to mark patient as complete"}), 400
 
@@ -515,12 +520,12 @@ def submit_lab_tests_route():
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     lab_tests = data.get("lab_tests")
-    if not psr_no or not lab_tests:
+    if not institute_id or not lab_tests:
         return jsonify({"error": "Missing required fields"}), 400
 
-    success = database.submit_lab_tests(psr_no)
+    success = database.submit_lab_tests(institute_id)
     if success:
         return jsonify({"message": "Lab tests submitted successfully"}), 200
     else:
@@ -550,14 +555,14 @@ def submit_lab_results():
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     results = data.get("results")
     
-    if not psr_no or not results:
+    if not institute_id or not results:
         return jsonify({"error": "Missing required fields"}), 400
 
     result = database.patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {"$set": {"lab_results": results, "workflow_status": "completed"}}
     )
     
@@ -704,8 +709,11 @@ def public_register_patient():
         "appointments": []
     }
 
-    psr_no = database.register_patient(patient_data)
-    return jsonify({"message": "Patient registered successfully", "psr_no": psr_no}), 201
+    result_id = database.register_patient(patient_data)
+    if result_id is None:
+        return jsonify({"error": "Patient with this Institute ID already exists"}), 409
+        
+    return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
 
 @app.route('/api/public/verify', methods=['POST'])
 def public_verify_patient():
@@ -720,18 +728,18 @@ def public_verify_patient():
         
     return jsonify({
         "message": "Patient verified", 
-        "psr_no": patient.get("psr_no"), 
+        "institute_id": patient.get("institute_id"), 
         "name": patient.get("name")
     }), 200
 
 @app.route('/api/public/book', methods=['POST'])
 def public_book_appointment():
     data = request.json
-    psr_no = data.get("psr_no")
+    institute_id = data.get("institute_id")
     doctor_username = data.get("doctor_username")
     appointment_time = data.get("time") 
     
-    if not all([psr_no, doctor_username, appointment_time]):
+    if not all([institute_id, doctor_username, appointment_time]):
         return jsonify({"error": "Missing required fields"}), 400
         
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
@@ -747,7 +755,7 @@ def public_book_appointment():
     }
     
     result = database.patients.update_one(
-        {"psr_no": psr_no},
+        {"institute_id": institute_id},
         {
             "$set": {
                 "doctor_assigned": doctor_username,
