@@ -112,9 +112,35 @@ export default function CreateUser() {
       if (hasTimeError) {
         return toast({
           title: "Invalid Shift Timing",
-          description: "End time must be strictly after Start time.",
+          description: "End time must be strictly after Start time for every shift.",
           status: "error",
-          duration: 3000,
+          duration: 4000,
+          isClosable: true,
+        });
+      }
+
+      // Check for overlapping shifts — only flag if two shifts share a common day AND their times overlap
+      const hasOverlap = schedule.some((a, i) =>
+        schedule.some((b, j) => {
+          if (i >= j) return false; // only compare each unique pair once
+          // First: do they share any common duty day?
+          const sharedDay = a.duty_days.some(day => b.duty_days.includes(day));
+          if (!sharedDay) return false; // different days — no conflict
+          // Second: do their time windows overlap?
+          const aStart = convertToMins(a.start_hr, a.start_min, a.start_ampm);
+          const aEnd   = convertToMins(a.end_hr, a.end_min, a.end_ampm);
+          const bStart = convertToMins(b.start_hr, b.start_min, b.start_ampm);
+          const bEnd   = convertToMins(b.end_hr, b.end_min, b.end_ampm);
+          return aStart < bEnd && bStart < aEnd;
+        })
+      );
+
+      if (hasOverlap) {
+        return toast({
+          title: "Overlapping Shifts Detected",
+          description: "Two or more shifts have overlapping time ranges. Please review and correct the shift timings before saving.",
+          status: "warning",
+          duration: 5000,
           isClosable: true,
         });
       }
@@ -161,11 +187,14 @@ export default function CreateUser() {
       });
 
     } catch (error) {
+      const errMsg = error.response?.data?.error || error.response?.data?.message || error.message;
       toast({
-        title: "Error adding user",
-        description: error.response?.data?.message || error.message,
+        title: errMsg === "User already exists" ? "Username already exists" : "Error adding user",
+        description: errMsg === "User already exists"
+          ? `The username "${newUser.username}" already exists. Please choose a different username.`
+          : errMsg,
         status: "error",
-        duration: 3000,
+        duration: 4000,
         isClosable: true,
       });
     }

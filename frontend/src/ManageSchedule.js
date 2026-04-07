@@ -130,9 +130,35 @@ export default function ManageSchedule() {
     if (hasTimeError) {
       return toast({
         title: "Invalid Shift Timing",
-        description: "End time must be strictly after Start time.",
+        description: "End time must be strictly after Start time for every shift.",
         status: "error",
-        duration: 3000,
+        duration: 4000,
+        isClosable: true,
+      });
+    }
+
+    // Check for overlapping shifts — only flag if two shifts share a common day AND their times overlap
+    const hasOverlap = scheduleState.some((a, i) =>
+      scheduleState.some((b, j) => {
+        if (i >= j) return false;
+        // First: do they share any common duty day?
+        const sharedDay = a.duty_days.some(day => b.duty_days.includes(day));
+        if (!sharedDay) return false; // different days — no conflict
+        // Second: do their time windows overlap?
+        const aStart = convertToMins(a.start_hr, a.start_min, a.start_ampm);
+        const aEnd   = convertToMins(a.end_hr, a.end_min, a.end_ampm);
+        const bStart = convertToMins(b.start_hr, b.start_min, b.start_ampm);
+        const bEnd   = convertToMins(b.end_hr, b.end_min, b.end_ampm);
+        return aStart < bEnd && bStart < aEnd;
+      })
+    );
+
+    if (hasOverlap) {
+      return toast({
+        title: "Overlapping Shifts Detected",
+        description: "Two or more shifts have overlapping time ranges. Please review and correct the shift timings before saving.",
+        status: "warning",
+        duration: 5000,
         isClosable: true,
       });
     }
