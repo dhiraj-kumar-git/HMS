@@ -209,7 +209,7 @@ const PatientBooking = () => {
                   >
                     {doctors.map((doc, idx) => (
                       <option key={idx} value={doc.username}>
-                        Dr. {doc.display_name}
+                        {doc.display_name}
                       </option>
                     ))}
                   </Select>

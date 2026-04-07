@@ -15,7 +15,9 @@ import {
   Text,
   Divider,
   IconButton,
-  Flex
+  Flex,
+  InputGroup,
+  InputLeftAddon
 } from "@chakra-ui/react";
 import { FiPlus, FiTrash2 } from "react-icons/fi";
 import axios from "axios";
@@ -47,7 +49,28 @@ export default function CreateUser() {
 
   const handleAddUser = async () => {
     const { username, password, role, display_name, department, schedule } = newUser;
-    if (!username || !password || !role || !display_name || (!department && role === "doctor")) {
+
+    const cleanName = display_name.trim();
+
+    if (!cleanName) {
+      return toast({
+        title: role === "doctor" ? "Doctor Name required" : "Display Name required",
+        description:
+          role === "doctor"
+            ? "Please enter doctor's name (Dr. is added automatically)"
+            : "Please enter display name",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+
+    if (
+      !username ||
+      !password ||
+      !role ||
+      (role === "doctor" && !department)
+    ) {
       return toast({
         title: "All fields are required!",
         status: "warning",
@@ -57,8 +80,12 @@ export default function CreateUser() {
     }
 
     let finalSchedule = [];
+
     if (role === "doctor") {
-      const isValidSchedule = schedule.every(s => s.duty_days.length > 0 && s.start_hr && s.end_hr);
+      const isValidSchedule = schedule.every(
+        s => s.duty_days.length > 0 && s.start_hr && s.end_hr
+      );
+
       if (!isValidSchedule) {
         return toast({
           title: "Incomplete Schedule",
@@ -93,17 +120,24 @@ export default function CreateUser() {
       }
 
       finalSchedule = schedule.map(s => ({
-         duty_days: s.duty_days,
-         start_time: `${s.start_hr}:${s.start_min} ${s.start_ampm}`,
-         end_time: `${s.end_hr}:${s.end_min} ${s.end_ampm}`
+        duty_days: s.duty_days,
+        start_time: `${s.start_hr}:${s.start_min} ${s.start_ampm}`,
+        end_time: `${s.end_hr}:${s.end_min} ${s.end_ampm}`
       }));
     }
 
     try {
       const token = localStorage.getItem("token");
       const hashedPassword = await hashPassword(newUser.password);
-      await axios.post(`${BASE_URL}/create_user`, { 
-        ...newUser, 
+
+      const finalDisplayName =
+        role === "doctor"
+          ? `Dr. ${cleanName}`
+          : cleanName;
+
+      await axios.post(`${BASE_URL}/create_user`, {
+        ...newUser,
+        display_name: finalDisplayName,
         password: hashedPassword,
         schedule: finalSchedule
       }, {
@@ -116,7 +150,16 @@ export default function CreateUser() {
         duration: 3000,
         isClosable: true,
       });
-      setNewUser({ username: "", password: "", role: "", display_name: "", department: "", schedule: [{ ...DEFAULT_SCHEDULE }] });
+
+      setNewUser({
+        username: "",
+        password: "",
+        role: "",
+        display_name: "",
+        department: "",
+        schedule: [{ ...DEFAULT_SCHEDULE }]
+      });
+
     } catch (error) {
       toast({
         title: "Error adding user",
@@ -129,15 +172,7 @@ export default function CreateUser() {
   };
 
   return (
-    <Box
-      bg="white"
-      p="8"
-      borderRadius="lg"
-      boxShadow="md"
-      maxW="600px"
-      w="full"
-      mx="auto"
-    >
+    <Box bg="white" p="8" borderRadius="lg" boxShadow="md" maxW="600px" w="full" mx="auto">
       <Heading size="lg" mb="6" color="brand.700">
         Create User
       </Heading>
@@ -149,7 +184,9 @@ export default function CreateUser() {
             size="lg"
             placeholder="Select role"
             value={newUser.role}
-            onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+            onChange={(e) =>
+              setNewUser({ ...newUser, role: e.target.value })
+            }
           >
             <option value="receptionist">Receptionist</option>
             <option value="doctor">Doctor</option>
@@ -159,15 +196,37 @@ export default function CreateUser() {
         </FormControl>
 
         <FormControl>
-          <FormLabel>Display Name</FormLabel>
-          <Input
-            size="lg"
-            placeholder="Enter display name (e.g. Dr. Doctor Name)"
-            value={newUser.display_name}
-            onChange={(e) =>
-              setNewUser({ ...newUser, display_name: e.target.value })
-            }
-          />
+          <FormLabel>
+            {newUser.role === "doctor" ? "Doctor Name" : "Display Name"}
+          </FormLabel>
+
+          {newUser.role === "doctor" ? (
+            <InputGroup size="lg">
+              <InputLeftAddon
+                children="Dr."
+                borderRight="0"
+                borderColor="gray.300"
+                borderRadius="md"
+              />
+              <Input
+                placeholder="Enter Doctor Name"
+                value={newUser.display_name}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, display_name: e.target.value })
+                }
+                borderLeftRadius="0"
+              />
+            </InputGroup>
+          ) : (
+            <Input
+              size="lg"
+              placeholder="Enter Display Name"
+              value={newUser.display_name}
+              onChange={(e) =>
+                setNewUser({ ...newUser, display_name: e.target.value })
+              }
+            />
+          )}
         </FormControl>
 
         {newUser.role === "doctor" && (
@@ -300,7 +359,7 @@ export default function CreateUser() {
                       </Select>
                     </Flex>
                   </FormControl>
-
+        
                   <FormControl w="auto">
                     <FormLabel fontSize="sm">End Time</FormLabel>
                     <Flex gap="2">

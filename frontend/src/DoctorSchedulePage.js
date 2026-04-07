@@ -44,7 +44,7 @@ export default function DoctorSchedulePage() {
               shift.duty_days.forEach((day) => {
                 if (newSchedule[day]) {
                   newSchedule[day].push({
-                    name: `Dr. ${doc.display_name} (${doc.department})`,
+                    name: `${doc.display_name} (${doc.department})`,
                     time: `${shift.start_time} - ${shift.end_time}`,
                   });
                 }

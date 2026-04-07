@@ -309,7 +309,14 @@ def get_doctors():
         return jsonify({"error": "Unauthorized access"}), 403
 
     doctors = database.get_all_doctors()
-    return jsonify(doctors), 200
+    # Return a safe consistent subset that always includes department and schedule
+    safe_docs = [{
+        "username": d.get("username"),
+        "display_name": d.get("display_name", d.get("username")),
+        "department": d.get("department", ""),
+        "schedule": d.get("schedule", [])
+    } for d in doctors]
+    return jsonify(safe_docs), 200
 
 # Create a new user (Admin only)
 @app.route('/create_user', methods=['POST'])
@@ -339,6 +346,23 @@ def create_user():
     if database.create_user(username, password, role, display_name, department, schedule):
         return jsonify({"message": "User created successfully"}), 201
     return jsonify({"error": "User already exists"}), 400
+
+# Update a user's shift schedule (Admin only)
+@app.route('/api/update_doctor/<username>', methods=['PUT'])
+@jwt_required()
+def update_doctor(username):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    schedule = data.get("schedule")
+    if schedule is None or not isinstance(schedule, list):
+        return jsonify({"error": "Schedule is missing or invalid"}), 400
+
+    if database.update_doctor_schedule(username, schedule):
+        return jsonify({"message": "Doctor schedule updated successfully"}), 200
+    return jsonify({"error": "Failed to update or doctor not found"}), 404
 
 # Delete a user (Admin only)
 @app.route('/delete_user/<username>', methods=['DELETE'])
