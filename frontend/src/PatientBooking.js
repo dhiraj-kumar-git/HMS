@@ -13,6 +13,16 @@ import {
   useToast,
   Icon,
   Divider,
+  Grid,
+  GridItem,
+  Badge,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  Alert,
+  AlertIcon,
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiCheckCircle, FiCalendar } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -31,9 +41,47 @@ const PatientBooking = () => {
   const [doctors, setDoctors] = useState([]);
   const [bookingData, setBookingData] = useState({
     doctor_username: '',
-    time: ''
+    date: '',
+    timeSlot: '',
   });
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [scheduleWarning, setScheduleWarning] = useState('');
+  const [alternativeDoctor, setAlternativeDoctor] = useState(null);
+
+  const parseShiftTime = (timeStr) => {
+    if (!timeStr) return "09:00";
+    const parts = timeStr.split(' ');
+    if (parts.length !== 2) return "09:00";
+    const [time, modifier] = parts;
+    let [hours, minutes] = time.split(':');
+    if (!hours || !minutes) return "09:00";
+    if (hours === '12') hours = '00';
+    if (modifier.toUpperCase() === 'PM') hours = String(parseInt(hours, 10) + 12);
+    return `${hours.padStart(2, '0')}:${minutes}`;
+  };
+
+  const getTodayName = () => {
+    return new Date().toLocaleDateString('en-US', { weekday: 'long' });
+  };
+
+  const generateTimeSlots = (start, end) => {
+    const slots = [];
+    let [startH, startM] = start.split(':').map(Number);
+    let [endH, endM] = end.split(':').map(Number);
+    
+    let current = new Date(2000, 0, 1, startH, startM);
+    const endTime = new Date(2000, 0, 1, endH, endM);
+    
+    while (current <= endTime) {
+      const hh = String(current.getHours()).padStart(2, '0');
+      const mm = String(current.getMinutes()).padStart(2, '0');
+      slots.push(`${hh}:${mm}`);
+      current.setMinutes(current.getMinutes() + 5);
+    }
+    return slots;
+  };
+
+
 
   // Check if we came directly from registration
   useEffect(() => {
@@ -80,12 +128,133 @@ const PatientBooking = () => {
     }
   };
 
+  const handleSwitchAlternative = () => {
+    if (alternativeDoctor) {
+      setBookingData({ ...bookingData, doctor_username: alternativeDoctor.username });
+      setScheduleWarning("");
+      setAlternativeDoctor(null);
+    }
+  };
+
+  const handleQuickBook = (docUsername) => {
+    const doc = doctors.find(d => d.username === docUsername);
+    let targetDate = new Date();
+    
+    if (doc) {
+       const todayName = getTodayName();
+       const shift = doc.schedule.find(s => s.duty_days.includes(todayName));
+       if (shift) {
+           const parsedStart = parseShiftTime(shift.start_time);
+           const parsedEnd = parseShiftTime(shift.end_time);
+           
+           const startTimeDate = new Date();
+           startTimeDate.setHours(parseInt(parsedStart.split(':')[0]), parseInt(parsedStart.split(':')[1]), 0, 0);
+           
+           const endTimeDate = new Date();
+           endTimeDate.setHours(parseInt(parsedEnd.split(':')[0]), parseInt(parsedEnd.split(':')[1]), 0, 0);
+           
+           const now = new Date();
+           if (now < startTimeDate) {
+               targetDate = startTimeDate; // Before shift -> default to start time
+           } else if (now > endTimeDate) {
+               targetDate = endTimeDate;   // After shift -> default to end time
+           } else {
+               // During shift -> round to nearest 5 mins
+               const ms = 1000 * 60 * 5;
+               targetDate = new Date(Math.round(now.getTime() / ms) * ms);
+           }
+       }
+    } else {
+       const ms = 1000 * 60 * 5;
+       targetDate = new Date(Math.round(new Date().getTime() / ms) * ms);
+    }
+    
+    // Format to YYYY-MM-DD
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+    const hours = String(targetDate.getHours()).padStart(2, '0');
+    const minutes = String(targetDate.getMinutes()).padStart(2, '0');
+    
+    const formattedDate = `${year}-${month}-${day}`;
+    const formattedTimeSlot = `${hours}:${minutes}`;
+    
+    setAlternativeDoctor(null);
+    setScheduleWarning("");
+    setBookingData({ ...bookingData, doctor_username: docUsername, date: formattedDate, timeSlot: formattedTimeSlot });
+    
+    toast({
+      title: "Doctor Selected",
+      description: "Form pre-filled with the nearest available time.",
+      status: "info",
+      duration: 2000,
+      position: 'top',
+    });
+  };
+
+  const handleDoctorChange = (e) => {
+    const docUsername = e.target.value;
+    let warning = "";
+    let altDoc = null;
+
+    if (docUsername && bookingData.date) {
+      const doc = doctors.find(d => d.username === docUsername);
+      if (doc) {
+        // Adding timezone trick to prevent date skew:
+        const [year, month, day] = bookingData.date.split('-');
+        const dateObj = new Date(year, month - 1, day);
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
+        if (!shift) {
+          warning = `Warning: Dr. ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          altDoc = doctors.find(alt => 
+             alt.username !== doc.username && 
+             alt.department === doc.department && 
+             alt.schedule && 
+             alt.schedule.some(s => s.duty_days.includes(dayName))
+          );
+        }
+      }
+    }
+    setAlternativeDoctor(altDoc);
+    setScheduleWarning(warning);
+    setBookingData({ ...bookingData, doctor_username: docUsername, timeSlot: '' });
+  };
+
+  const handleDateChange = (e) => {
+    const newDate = e.target.value; // YYYY-MM-DD
+    let warning = "";
+    let altDoc = null;
+    
+    if (bookingData.doctor_username && newDate) {
+      const doc = doctors.find(d => d.username === bookingData.doctor_username);
+      if (doc) {
+        const [year, month, day] = newDate.split('-');
+        const dateObj = new Date(year, month - 1, day);
+        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
+        if (!shift) {
+          warning = `Warning: Dr. ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          altDoc = doctors.find(alt => 
+             alt.username !== doc.username && 
+             alt.department === doc.department && 
+             alt.schedule && 
+             alt.schedule.some(s => s.duty_days.includes(dayName))
+          );
+        }
+      }
+    }
+    setAlternativeDoctor(altDoc);
+    setScheduleWarning(warning);
+    setBookingData({ ...bookingData, date: newDate, timeSlot: '' });
+  };
+
   const handleBooking = async (e) => {
     e.preventDefault();
-    if (!bookingData.doctor_username || !bookingData.time) {
+    if (!bookingData.doctor_username || !bookingData.date || !bookingData.timeSlot) {
       toast({
         title: "Error",
-        description: "Please select a doctor and time.",
+        description: "Please select a doctor, date, and time slot.",
         status: "warning",
         duration: 3000,
         isClosable: true,
@@ -94,12 +263,14 @@ const PatientBooking = () => {
       return;
     }
 
+    const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
+
     setBookingLoading(true);
     try {
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
-        time: bookingData.time
+        time: fullTime
       });
 
       toast({
@@ -112,7 +283,7 @@ const PatientBooking = () => {
       });
 
       // Clear the form after success
-      setBookingData({ doctor_username: '', time: '' });
+      setBookingData({ doctor_username: '', date: '', timeSlot: '' });
       setTimeout(() => navigate('/portal'), 2000);
 
     } catch (err) {
@@ -129,9 +300,47 @@ const PatientBooking = () => {
     }
   };
 
+  const todayName = getTodayName();
+  const doctorsAvailableToday = doctors.filter(doc => 
+    doc.schedule && doc.schedule.some(s => s.duty_days.includes(todayName))
+  );
+
+  const prevDoc = verifiedPatient && verifiedPatient.doctor_assigned 
+    ? doctors.find(d => d.username === verifiedPatient.doctor_assigned) 
+    : null;
+
+  // Calculate Available Time Slots for UI Generation
+  let availableTimeSlots = [];
+  if (bookingData.doctor_username && bookingData.date) {
+      const doc = doctors.find(d => d.username === bookingData.doctor_username);
+      const [year, month, day] = bookingData.date.split('-');
+      const dateObj = new Date(year, month - 1, day);
+      const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+      const shift = doc?.schedule?.find(s => s.duty_days.includes(dayName));
+      
+      if (shift) {
+         const parsedStart = parseShiftTime(shift.start_time);
+         const parsedEnd = parseShiftTime(shift.end_time);
+         availableTimeSlots = generateTimeSlots(parsedStart, parsedEnd);
+      } else {
+         // Fallback if doctor off duty - allow standard clinic hours
+         availableTimeSlots = generateTimeSlots("09:00", "17:00");
+      }
+  }
+
   return (
-    <Flex minH="100vh" bg="gray.50" align="center" justify="center" p={6}>
-      <Box w="100%" maxW="600px" bg="white" borderRadius="2xl" boxShadow="xl" p={8}>
+    <Flex minH="100vh" bg="gray.50" align="flex-start" justify="center" p={{ base: 4, md: 8 }}>
+      <style>
+        {`
+          @keyframes pulse-green {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(72, 187, 120, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(72, 187, 120, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(72, 187, 120, 0); }
+          }
+          .pulsing-dot { animation: pulse-green 2s infinite; }
+        `}
+      </style>
+      <Box w="100%" maxW={verifiedPatient ? "1100px" : "600px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
@@ -176,64 +385,213 @@ const PatientBooking = () => {
             </Button>
           </VStack>
         ) : (
-          <VStack spacing={6} align="stretch">
-            <Flex align="center" p={4} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200">
-              <Icon as={FiCheckCircle} w={6} h={6} color="teal.500" mr={3} />
-              <Box>
-                <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Profile</Text>
-                <Text fontSize="lg" color="teal.900">{verifiedPatient.name}</Text>
-                <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
-              </Box>
-            </Flex>
+          <Grid templateColumns={{ base: '1fr', lg: '1fr 1fr' }} gap={8}>
+            {/* LEFT COLUMN: Booking Form */}
+            <GridItem>
+              <VStack spacing={6} align="stretch" bg="gray.50" p={6} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                <Flex align="center" p={4} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200">
+                  <Icon as={FiCheckCircle} w={6} h={6} color="teal.500" mr={3} />
+                  <Box>
+                    <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Profile</Text>
+                    <Text fontSize="lg" color="teal.900">{verifiedPatient.name}</Text>
+                    <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
+                  </Box>
+                </Flex>
 
-            <Divider />
+                {prevDoc && (
+                  <Box p={4} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200">
+                    <Text fontSize="sm" color="blue.800" mb={3}>
+                      You previously visited <strong>Dr. {prevDoc.display_name}</strong> ({prevDoc.department}).
+                    </Text>
+                    <Button 
+                      size="sm" 
+                      colorScheme="blue" 
+                      onClick={() => {
+                         setBookingData({ ...bookingData, doctor_username: prevDoc.username });
+                         setScheduleWarning("");
+                         setAlternativeDoctor(null);
+                      }}
+                    >
+                      Book with Dr. {prevDoc.display_name} Again
+                    </Button>
+                  </Box>
+                )}
 
-            <form onSubmit={handleBooking}>
-              <VStack spacing={5}>
-                <FormControl isRequired>
-                  <FormLabel color="gray.700">Select Doctor</FormLabel>
-                  <Select
-                    placeholder="Choose an available doctor"
-                    value={bookingData.doctor_username}
-                    onChange={(e) => setBookingData({ ...bookingData, doctor_username: e.target.value })}
-                    focusBorderColor="teal.500"
-                    size="lg"
-                  >
-                    {doctors.map((doc, idx) => (
-                      <option key={idx} value={doc.username}>
-                        {doc.display_name}
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
+                <Divider />
 
-                <FormControl isRequired>
-                  <FormLabel color="gray.700">Appointment Time</FormLabel>
-                  {/* Since doctors dashboard accepts free form time currently, we use datetime-local or text. We use text string similar to existing flow, or datetime-local */}
-                  <Input
-                    type="datetime-local"
-                    value={bookingData.time}
-                    onChange={(e) => setBookingData({ ...bookingData, time: e.target.value })}
-                    focusBorderColor="teal.500"
-                    size="lg"
-                  />
-                </FormControl>
+                <form onSubmit={handleBooking}>
+                  <VStack spacing={5}>
+                    <FormControl isRequired>
+                      <FormLabel color="gray.700">Select Doctor</FormLabel>
+                      <Select
+                        placeholder="Choose a doctor"
+                        value={bookingData.doctor_username}
+                        onChange={handleDoctorChange}
+                        focusBorderColor="teal.500"
+                        size="lg"
+                        bg="white"
+                      >
+                        {doctors.map((doc, idx) => (
+                          <option key={idx} value={doc.username}>
+                            {doc.display_name} ({doc.department})
+                          </option>
+                        ))}
+                      </Select>
+                    </FormControl>
 
-                <Button
-                  type="submit"
-                  colorScheme="teal"
-                  size="lg"
-                  w="100%"
-                  borderRadius="xl"
-                  mt={4}
-                  isLoading={bookingLoading}
-                  loadingText="Confirming..."
-                >
-                  Confirm Appointment
-                </Button>
+                    <FormControl isRequired>
+                      <FormLabel color="gray.700">Appointment Date</FormLabel>
+                      <Input
+                        type="date"
+                        value={bookingData.date}
+                        onChange={handleDateChange}
+                        focusBorderColor="teal.500"
+                        size="lg"
+                        bg="white"
+                      />
+                    </FormControl>
+
+                    <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username}>
+                      <FormLabel color="gray.700">Time Slot (5-min intervals)</FormLabel>
+                      <Select
+                        placeholder="Select a 5-min slot"
+                        value={bookingData.timeSlot}
+                        onChange={(e) => setBookingData({ ...bookingData, timeSlot: e.target.value })}
+                        focusBorderColor="teal.500"
+                        size="lg"
+                        bg="white"
+                      >
+                        {availableTimeSlots.map((slot, idx) => {
+                           // Quick formatting to AM/PM for display
+                           const [h, m] = slot.split(':');
+                           const hours = parseInt(h);
+                           const ampm = hours >= 12 ? 'PM' : 'AM';
+                           const displayH = hours % 12 || 12;
+                           const displayTime = `${displayH}:${m} ${ampm}`;
+                           return (
+                             <option key={idx} value={slot}>{displayTime}</option>
+                           );
+                        })}
+                      </Select>
+                    </FormControl>
+
+                    {scheduleWarning && (
+                      <Alert status="warning" borderRadius="md" flexDirection="column" alignItems="flex-start">
+                        <Flex align="center">
+                          <AlertIcon />
+                          <Text>{scheduleWarning}</Text>
+                        </Flex>
+                        {alternativeDoctor && (
+                          <Box mt={3} ml={7}>
+                            <Text fontSize="sm" mb={2} color="orange.800">
+                              However, <strong>Dr. {alternativeDoctor.display_name}</strong> is available in the {alternativeDoctor.department} department today.
+                            </Text>
+                            <Button size="sm" colorScheme="orange" onClick={handleSwitchAlternative}>
+                              Switch to Dr. {alternativeDoctor.display_name}
+                            </Button>
+                          </Box>
+                        )}
+                      </Alert>
+                    )}
+
+                    <Button
+                      type="submit"
+                      colorScheme="teal"
+                      size="lg"
+                      w="100%"
+                      borderRadius="xl"
+                      mt={4}
+                      isLoading={bookingLoading}
+                      loadingText="Confirming..."
+                    >
+                      Confirm Appointment
+                    </Button>
+                    <Text fontSize="xs" color="gray.500" textAlign="center" mt={2} px={4}>
+                      *Note: Exact timing is an estimate and is subject to the live clinic queue.
+                    </Text>
+                  </VStack>
+                </form>
               </VStack>
-            </form>
-          </VStack>
+            </GridItem>
+
+            {/* RIGHT COLUMN: Doctors Schedule */}
+            <GridItem display="flex" flexDirection="column" gap={6}>
+
+              {/* Available Today Widget */}
+              <Box bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
+                  <Box w="3" h="3" bg="green.400" borderRadius="full" mr={3} className="pulsing-dot" />
+                  Doctors Available Today ({todayName})
+                </Heading>
+                {doctorsAvailableToday.length > 0 ? (
+                  <VStack align="stretch" spacing={3}>
+                    {doctorsAvailableToday.map((doc, idx) => {
+                      const shift = doc.schedule.find(s => s.duty_days.includes(todayName));
+                      return (
+                        <Flex key={idx} justify="space-between" align="center" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                          <Box flex="1">
+                            <Text fontWeight="bold" color="gray.700">{doc.display_name} ({doc.department})</Text>
+                            <Badge colorScheme="green" px={2} py={1} mt={1} borderRadius="md" textTransform="none" fontSize="xs">
+                              {shift.start_time} - {shift.end_time}
+                            </Badge>
+                          </Box>
+                          <Button 
+                            size="sm" 
+                            colorScheme="teal" 
+                            variant="solid" 
+                            onClick={() => handleQuickBook(doc.username)}
+                          >
+                            Book Now
+                          </Button>
+                        </Flex>
+                      )
+                    })}
+                  </VStack>
+                ) : (
+                  <Text color="gray.500" fontSize="sm">No doctors are officially scheduled for today.</Text>
+                )}
+              </Box>
+
+              {/* Full Schedule Accordion */}
+              <Box bg="white" borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="sm" overflow="hidden">
+                <Accordion allowMultiple>
+                  <AccordionItem border="none">
+                    <h2>
+                      <AccordionButton _expanded={{ bg: "gray.100" }} p={4}>
+                        <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
+                          View Full Visiting Doctors Schedule
+                        </Box>
+                        <AccordionIcon />
+                      </AccordionButton>
+                    </h2>
+                    <AccordionPanel pb={4} bg="white">
+                      {doctors.length > 0 ? (
+                        <VStack align="stretch" spacing={4}>
+                          {doctors.map((doc, idx) => (
+                            <Box key={idx} borderBottom="1px solid" borderColor="gray.100" pb={3}>
+                              <Text fontWeight="bold" color="gray.700">{doc.display_name} ({doc.department})</Text>
+                              {doc.schedule && doc.schedule.length > 0 ? (
+                                doc.schedule.map((shift, s_idx) => (
+                                  <Text key={s_idx} fontSize="sm" color="gray.600">
+                                    • {shift.duty_days.join(", ")}: {shift.start_time} - {shift.end_time}
+                                  </Text>
+                                ))
+                              ) : (
+                                <Text fontSize="sm" color="gray.500">• No schedule assigned</Text>
+                              )}
+                            </Box>
+                          ))}
+                        </VStack>
+                      ) : (
+                        <Text fontSize="sm" color="gray.500">Loading schedule...</Text>
+                      )}
+                    </AccordionPanel>
+                  </AccordionItem>
+                </Accordion>
+              </Box>
+
+            </GridItem>
+          </Grid>
         )}
       </Box>
     </Flex>

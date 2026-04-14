@@ -729,7 +729,8 @@ def public_verify_patient():
     return jsonify({
         "message": "Patient verified", 
         "institute_id": patient.get("institute_id"), 
-        "name": patient.get("name")
+        "name": patient.get("name"),
+        "doctor_assigned": patient.get("doctor_assigned")
     }), 200
 
 @app.route('/api/public/book-appointment', methods=['POST'])
