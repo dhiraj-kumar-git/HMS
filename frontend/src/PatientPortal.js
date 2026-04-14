@@ -102,7 +102,7 @@ const PatientPortal = () => {
               colorScheme="teal"
               w="100%"
               borderRadius="xl"
-              onClick={() => navigate('/portal/book')}
+              onClick={() => navigate('/portal/book-appointment')}
             >
               Book Appointment
             </Button>

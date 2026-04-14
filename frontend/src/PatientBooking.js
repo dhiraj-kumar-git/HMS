@@ -65,14 +65,6 @@ const PatientBooking = () => {
     try {
       const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id });
       setVerifiedPatient(response.data);
-      toast({
-        title: "Verified",
-        description: `Welcome back, ${response.data.name}`,
-        status: "success",
-        duration: 2000,
-        position: 'top',
-        isClosable: true,
-      });
     } catch (err) {
       setVerifiedPatient(null);
       toast({
@@ -104,8 +96,8 @@ const PatientBooking = () => {
 
     setBookingLoading(true);
     try {
-      await axios.post(`${BASE_URL}/api/public/book`, {
-        psr_no: verifiedPatient.psr_no,
+      await axios.post(`${BASE_URL}/api/public/book-appointment`, {
+        institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
         time: bookingData.time
       });
@@ -122,7 +114,7 @@ const PatientBooking = () => {
       // Clear the form after success
       setBookingData({ doctor_username: '', time: '' });
       setTimeout(() => navigate('/portal'), 2000);
-      
+
     } catch (err) {
       toast({
         title: "Booking Failed",
@@ -190,7 +182,7 @@ const PatientBooking = () => {
               <Box>
                 <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Profile</Text>
                 <Text fontSize="lg" color="teal.900">{verifiedPatient.name}</Text>
-                <Text fontSize="xs" color="teal.600">PSR: {verifiedPatient.psr_no}</Text>
+                <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
               </Box>
             </Flex>
 

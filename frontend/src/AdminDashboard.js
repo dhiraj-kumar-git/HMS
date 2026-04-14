@@ -383,7 +383,7 @@ function DashboardHome() {
               </Thead>
               <Tbody>
                 {newPatients.slice(0, 3).map((p) => (
-                  <Tr key={p.psr_no}>
+                  <Tr key={p.institute_id}>
                     <Td>{p.name}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>
@@ -439,7 +439,7 @@ function DashboardHome() {
               </Thead>
               <Tbody>
                 {newPatients.map((p) => (
-                  <Tr key={p.psr_no}>
+                  <Tr key={p.institute_id}>
                     <Td>{p.name}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>

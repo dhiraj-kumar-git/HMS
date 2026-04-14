@@ -191,7 +191,7 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
           {/* Public Portal Routes */}
           <Route path="/portal" element={<PatientPortal />} />
           <Route path="/portal/register" element={<PatientRegistration />} />
-          <Route path="/portal/book" element={<PatientBooking />} />
+          <Route path="/portal/book-appointment" element={<PatientBooking />} />
 
           {/* Catch-all route */}
           <Route

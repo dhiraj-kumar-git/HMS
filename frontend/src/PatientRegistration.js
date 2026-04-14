@@ -59,7 +59,7 @@ const PatientRegistration = () => {
       const response = await axios.post(`${BASE_URL}/api/public/register`, submissionData);
       toast({
         title: "Registration Successful",
-        description: `Your PSRN is ${response.data.psr_no}. Directing to booking...`,
+        description: `Your Institute ID is ${response.data.institute_id}. Directing to booking...`,
         status: "success",
         duration: 3000,
         isClosable: true,
@@ -67,7 +67,7 @@ const PatientRegistration = () => {
       });
       // Transition automatically to Booking
       setTimeout(() => {
-        navigate('/portal/book', { state: { autoFillInstituteId: formData.institute_id } });
+        navigate('/portal/book-appointment', { state: { autoFillInstituteId: formData.institute_id } });
       }, 1500);
     } catch (err) {
       toast({

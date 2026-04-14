@@ -82,8 +82,8 @@ export default function DoctorsDashboard() {
   const [labTestSearch, setLabTestSearch] = useState("");
 
   // SEARCH PATIENT BOX
-  const [searchPSRN, setSearchPSRN] = useState("");
-  const [filterPSRN, setFilterPSRN] = useState("");
+  const [searchInstituteId, setSearchInstituteId] = useState("");
+  const [filterInstituteId, setFilterInstituteId] = useState("");
 
   // ADDITIONAL FILTERS
   const [dateFilter, setDateFilter] = useState('');
@@ -95,15 +95,15 @@ export default function DoctorsDashboard() {
 
   // Whenever the search box is cleared, also clear the filter
   useEffect(() => {
-    if (!searchPSRN) {
-      setFilterPSRN("");
+    if (!searchInstituteId) {
+      setFilterInstituteId("");
       setCurrentPage(1);
     }
-  }, [searchPSRN]);
+  }, [searchInstituteId]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateFilter, sortBy, filterPSRN]);
+  }, [dateFilter, sortBy, filterInstituteId]);
 
   useEffect(() => {
   const fetchDisplayName = async () => {
@@ -167,8 +167,8 @@ export default function DoctorsDashboard() {
     } finally {
       setListLoading(false);
       // if no search term, reset filter to show all
-      if (!searchPSRN) {
-        setFilterPSRN("");
+      if (!searchInstituteId) {
+        setFilterInstituteId("");
       }
     }
   };
@@ -226,7 +226,7 @@ export default function DoctorsDashboard() {
       await axios.post(
         `${BASE_URL}/doctor/add_prescription_details`,
         {
-          psr_no: selectedPatient.psr_no,
+          institute_id: selectedPatient.institute_id,
           prescription_details: prescriptionDetails,
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -244,7 +244,7 @@ export default function DoctorsDashboard() {
       const token = localStorage.getItem("token");
       await axios.post(
         `${BASE_URL}/doctor/add_remark`,
-        { psr_no: selectedPatient.psr_no, remark },
+        { institute_id: selectedPatient.institute_id, remark },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast({ title: "Remark Saved", status: "success" });
@@ -262,7 +262,7 @@ export default function DoctorsDashboard() {
         selectedMedicines.map((med) =>
           axios.post(
             `${BASE_URL}/doctor/add_prescription`,
-            { psr_no: selectedPatient.psr_no, prescription: med.item_name },
+            { institute_id: selectedPatient.institute_id, prescription: med.item_name },
             { headers: { Authorization: `Bearer ${token}` } }
           )
         )
@@ -282,7 +282,7 @@ export default function DoctorsDashboard() {
         selectedLabTests.map((test) =>
           axios.post(
             `${BASE_URL}/doctor/add_lab_test`,
-            { psr_no: selectedPatient.psr_no, lab_test: test.test_name },
+            { institute_id: selectedPatient.institute_id, lab_test: test.test_name },
             { headers: { Authorization: `Bearer ${token}` } }
           )
         )
@@ -299,7 +299,7 @@ export default function DoctorsDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/doctor/complete_patient/${selectedPatient.psr_no}`,
+        `${BASE_URL}/doctor/complete_patient/${selectedPatient.institute_id}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -362,12 +362,12 @@ export default function DoctorsDashboard() {
   // Filtered patients list
   let displayedPatients = [...patients];
 
-  // Search by name or PSRN
-  if (filterPSRN) {
-    const q = filterPSRN.toLowerCase();
+  // Search by name or Institute ID
+  if (filterInstituteId) {
+    const q = filterInstituteId.toLowerCase();
     displayedPatients = displayedPatients.filter((p) =>
       (p.name && p.name.toLowerCase().includes(q)) ||
-      (p.psr_no && p.psr_no.toLowerCase().includes(q))
+      (p.institute_id && p.institute_id.toLowerCase().includes(q))
     );
   }
 
@@ -534,15 +534,15 @@ export default function DoctorsDashboard() {
               </Text>
               <Flex gap="3">
                 <Input
-                  placeholder="Enter PSRN No."
+                  placeholder="Enter Institute ID"
                   bg="blue.100"
                   border="2px solid white"
                   borderRadius="lg"
                   fontSize="sm"
                   color="black"
                   _placeholder={{ color: "gray.600" }}
-                  value={searchPSRN}
-                  onChange={(e) => setSearchPSRN(e.target.value)}
+                  value={searchInstituteId}
+                  onChange={(e) => setSearchInstituteId(e.target.value)}
                 />
                 <Button
                   bg="white"
@@ -553,7 +553,7 @@ export default function DoctorsDashboard() {
                   fontWeight="medium"
                   fontSize="sm"
                   onClick={() => {
-                    setFilterPSRN(searchPSRN.trim());
+                    setFilterInstituteId(searchInstituteId.trim());
                     setCurrentPage(1);
                   }}
                 >
@@ -643,10 +643,10 @@ export default function DoctorsDashboard() {
               </InputLeftElement>
               <Input
                 placeholder="Search..."
-                value={searchPSRN}
+                value={searchInstituteId}
                 onChange={(e) => {
-                  setSearchPSRN(e.target.value);
-                  setFilterPSRN(e.target.value);
+                  setSearchInstituteId(e.target.value);
+                  setFilterInstituteId(e.target.value);
                 }}
               />
             </InputGroup>
@@ -713,7 +713,7 @@ export default function DoctorsDashboard() {
                   <Table variant="simple">
                     <Thead bg="gray.100">
                       <Tr>
-                        <Th>PSRN No.</Th>
+                        <Th>Institute ID</Th>
                         <Th>Name</Th>
                         <Th>Age</Th>
                         <Th>Gender</Th>
@@ -730,7 +730,7 @@ export default function DoctorsDashboard() {
                         >
                           <Td>
                             <Flex align="center">
-                              <Text fontSize="sm" color="gray.600">{p.psr_no}</Text>
+                              <Text fontSize="sm" color="gray.600">{p.institute_id}</Text>
                               <IconButton
                                 aria-label="Copy PSRN"
                                 icon={<FiCopy size={14} />}
@@ -739,7 +739,7 @@ export default function DoctorsDashboard() {
                                 variant="ghost"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  navigator.clipboard.writeText(p.psr_no);
+                                  navigator.clipboard.writeText(p.institute_id);
                                   toast({
                                     title: "Copied to clipboard",
                                     status: "success",
@@ -806,7 +806,7 @@ export default function DoctorsDashboard() {
         <ModalContent borderRadius="2xl">
           <ModalHeader>
             {selectedPatient
-              ? `${selectedPatient.name} (PSR: ${selectedPatient.psr_no})`
+              ? `${selectedPatient.name} (ID: ${selectedPatient.institute_id})`
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton />

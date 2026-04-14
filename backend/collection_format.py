@@ -4,7 +4,7 @@ from datetime import datetime
 
 @dataclass
 class Patient:
-    psr_no: str  # Unique ID for each patient
+    institute_id: str  # Unique ID for each patient (BITS Institute ID)
     name: str
     age: int
     gender: str
@@ -13,7 +13,6 @@ class Patient:
     patient_type: str
     registration_time: datetime
     doctor_assigned: Optional[str] = None
-    institute_id: Optional[str] = None
     email: Optional[str] = None
     appointments: list = field(default_factory=list)
     prescriptions: list = field(default_factory=list)  # (Legacy field, if needed)

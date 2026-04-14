@@ -94,7 +94,7 @@ function MedicalCounterDashboard() {
       const filtered = registrations.filter(
         (patient) =>
           (patient.name && patient.name.toLowerCase().includes(q)) ||
-          (patient.psr_no && patient.psr_no.toLowerCase().includes(q)) ||
+          (patient.institute_id && patient.institute_id.toLowerCase().includes(q)) ||
           (patient.age && String(patient.age).toLowerCase().includes(q))
       );
       setFilteredRegistrations(filtered);
@@ -184,7 +184,7 @@ function MedicalCounterDashboard() {
       await axios.post(
         `${BASE_URL}/submit_lab_tests`,
         {
-          psr_no: selectedPatient.psr_no,
+          institute_id: selectedPatient.institute_id,
           lab_tests: selectedPatient.lab_tests,
         },
         { headers: { Authorization: `Bearer ${token}` } }
@@ -230,8 +230,8 @@ function MedicalCounterDashboard() {
               <tr>
                 <td>Invoice No.:</td>
                 <td>${selectedPatient.invoice_no || ''}</td>
-                <td>PSRN/ID No:</td>
-                <td>${selectedPatient.psr_no}</td>
+                <td>Institute ID:</td>
+                <td>${selectedPatient.institute_id}</td>
               </tr>
               <tr>
                 <td>UMR:</td>
@@ -340,7 +340,7 @@ function MedicalCounterDashboard() {
           <Divider borderColor="black" borderWidth="1px" my={2} />
           <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm" mb={2}>
             <Text>Invoice No.: {selectedPatient.invoice_no}</Text>
-            <Text>PSRN/ID No: {selectedPatient.psr_no}</Text>
+            <Text>Institute ID: {selectedPatient.institute_id}</Text>
             <Text>UMR: {selectedPatient.umrn}</Text>
             <Text>Age/Gender: {selectedPatient.age}/{selectedPatient.gender}</Text>
             <Text>Patient: {selectedPatient.name}</Text>
@@ -469,7 +469,7 @@ function MedicalCounterDashboard() {
               <FiSearch color="gray" />
             </InputLeftElement>
             <Input
-              placeholder="Search by name, PSRN or age"
+              placeholder="Search by name, Institute ID or age"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -480,7 +480,7 @@ function MedicalCounterDashboard() {
             <Table variant="simple">
               <Thead bg={tableHeaderBg}>
                 <Tr>
-                  <Th>PSRN No</Th>
+                  <Th>Institute ID</Th>
                   <Th>Name</Th>
                   <Th>Age</Th>
                 </Tr>
@@ -488,11 +488,11 @@ function MedicalCounterDashboard() {
               <Tbody>
                 {filteredRegistrations.map((patient) => (
                   <Tr
-                    key={patient.psr_no}
+                    key={patient.institute_id}
                     _hover={{ bg: 'gray.50', cursor: 'pointer' }}
                     onClick={() => handleSelectPatient(patient)}
                   >
-                    <Td>{patient.psr_no}</Td>
+                    <Td>{patient.institute_id}</Td>
                     <Td>{patient.name}</Td>
                     <Td>{patient.age || 'N/A'}</Td>
                   </Tr>
@@ -526,7 +526,7 @@ function MedicalCounterDashboard() {
               {selectedPatient && (
                 <Flex direction="column" align="center">
                   <Heading size="md">
-                    {selectedPatient.name} (PSRN: {selectedPatient.psr_no})
+                    {selectedPatient.name} (ID: {selectedPatient.institute_id})
                   </Heading>
                   <Text fontSize="sm">Age: {selectedPatient.age || 'N/A'}</Text>
                 </Flex>
