@@ -30,6 +30,13 @@ function Login({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const hashPassword = async (password) => {
+    const msgUint8 = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
   const handleLogin = async () => {
     let errors = {};
     if (!username.trim()) errors.username = "Username is required";
@@ -44,9 +51,10 @@ function Login({ onLogin }) {
     setError("");
     setLoading(true);
     try {
+      const hashedPassword = await hashPassword(password);
       const response = await axios.post(`${BASE_URL}/login`, {
         username,
-        password,
+        password: hashedPassword,
       });
       if (response.status === 200) {
         const { access_token, role, session_id } = response.data;
@@ -96,7 +104,7 @@ function Login({ onLogin }) {
             mb={4}
           />
           <Heading size="lg" mb="6" textAlign="center" color="brand.500">
-            Login to BitsMed
+            Login to BITS MED-C
           </Heading>
 
           {error && (
@@ -150,6 +158,16 @@ function Login({ onLogin }) {
               isLoading={loading}
             >
               Login
+            </Button>
+
+            <Button
+              variant="ghost"
+              colorScheme="gray"
+              size="sm"
+              onClick={() => navigate('/portal')}
+              mt={4}
+            >
+              Back to Patient Portal
             </Button>
           </Stack>
         </Box>

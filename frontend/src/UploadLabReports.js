@@ -15,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 
 function UploadLabReports() {
-  const [psrNo, setPsrNo] = useState("");
+  const [instituteId, setInstituteId] = useState("");
   const [doctorName, setDoctorName] = useState("");
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState({});
@@ -38,7 +38,7 @@ function UploadLabReports() {
 
   const validate = () => {
     const newErrors = {};
-    if (!psrNo.trim()) newErrors.psrNo = "PSRN No. is required";
+    if (!instituteId.trim()) newErrors.instituteId = "Institute ID is required";
     if (!doctorName.trim()) newErrors.doctorName = "Doctor name is required";
     if (!file) newErrors.file = "Lab report file is required";
     setErrors(newErrors);
@@ -52,7 +52,7 @@ function UploadLabReports() {
     const previewUrl = URL.createObjectURL(file);
 
     const newReport = {
-      psrNo,
+      instituteId,
       doctorName,
       previewUrl,
       fileName: file.name,
@@ -64,7 +64,7 @@ function UploadLabReports() {
     toast({ title: "Report uploaded successfully", status: "success" });
 
     // Reset form
-    setPsrNo("");
+    setInstituteId("");
     setDoctorName("");
     setFile(null);
   };
@@ -85,14 +85,14 @@ function UploadLabReports() {
         </Heading>
 
         <Stack spacing={4} mb={6}>
-          <FormControl isInvalid={errors.psrNo}>
-            <FormLabel>Patient PSRN No.</FormLabel>
+          <FormControl isInvalid={errors.instituteId}>
+            <FormLabel>Patient Institute ID</FormLabel>
             <Input
-              placeholder="Enter PSRN No."
-              value={psrNo}
-              onChange={(e) => setPsrNo(e.target.value)}
+              placeholder="Enter Institute ID"
+              value={instituteId}
+              onChange={(e) => setInstituteId(e.target.value)}
             />
-            {errors.psrNo && <FormErrorMessage>{errors.psrNo}</FormErrorMessage>}
+            {errors.instituteId && <FormErrorMessage>{errors.instituteId}</FormErrorMessage>}
           </FormControl>
 
           <FormControl isInvalid={errors.doctorName}>
@@ -143,7 +143,7 @@ function UploadLabReports() {
                   shadow="sm"
                 >
                   <Text fontWeight="bold" mb={2}>
-                    PSR: {report.psrNo} | Doctor: {report.doctorName}
+                    ID: {report.instituteId} | Doctor: {report.doctorName}
                   </Text>
                   <Text fontSize="sm" color="gray.500" mb={2}>
                     Uploaded at: {report.uploadedAt}
