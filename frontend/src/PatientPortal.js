@@ -26,6 +26,7 @@ const PatientPortal = () => {
       justify="center"
       p={6}
       flexDir="column"
+      position="relative"
     >
       <VStack spacing={8} maxW="800px" w="100%">
         <Box textAlign="center">
@@ -37,7 +38,7 @@ const PatientPortal = () => {
             fontWeight="extrabold"
             mb={4}
           >
-            Welcome to the Patient Portal
+            Welcome to BITS Medical Center Patient Portal
           </Heading>
           <Text fontSize="lg" color="gray.600">
             Self-service platform for seamless registration and appointment booking.
@@ -109,6 +110,16 @@ const PatientPortal = () => {
           </Box>
         </Flex>
       </VStack>
+      <Button
+        mt={12}
+        variant="ghost"
+        colorScheme="gray"
+        onClick={() => navigate('/login')}
+        size="sm"
+        _hover={{ bg: useColorModeValue('gray.200', 'gray.700') }}
+      >
+        Clinic Staff Login
+      </Button>
     </Flex>
   );
 };

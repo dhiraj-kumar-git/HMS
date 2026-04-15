@@ -159,6 +159,16 @@ function Login({ onLogin }) {
             >
               Login
             </Button>
+
+            <Button
+              variant="ghost"
+              colorScheme="gray"
+              size="sm"
+              onClick={() => navigate('/portal')}
+              mt={4}
+            >
+              Back to Patient Portal
+            </Button>
           </Stack>
         </Box>
       </Flex>

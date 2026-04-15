@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChakraProvider, extendTheme, Box, Flex } from '@chakra-ui/react';
+import { ChakraProvider, extendTheme, Box, Flex, Text, Spinner, VStack } from '@chakra-ui/react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -53,8 +53,9 @@ const theme = extendTheme({
 // This component is rendered within the Router so that useLocation works.
 function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
   const location = useLocation();
-  // Hide the sidebar if the user is not logged in or if the current route is "/login"
-  const hideSidebar = !isLoggedIn || location.pathname === '/login';
+  // Hide the sidebar if the user is not logged in, if the route is login, or if navigating the public portal
+  const isPortalRoute = location.pathname.startsWith('/portal');
+  const hideSidebar = !isLoggedIn || location.pathname === '/login' || isPortalRoute;
 
   return (
     <Flex minH="100vh" w="100%" bg="gray.50">
@@ -193,11 +194,10 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
           <Route path="/portal/register" element={<PatientRegistration />} />
           <Route path="/portal/book-appointment" element={<PatientBooking />} />
 
-          {/* Catch-all route */}
-          <Route
-            path="*"
-            element={<Navigate to={isLoggedIn ? '/dashboard' : '/login'} />}
-          />
+          {/* Base and Catch-all routes */}
+          <Route path="/" element={<Navigate to={isLoggedIn ? '/dashboard' : '/portal'} />} />
+          <Route path="*" element={<Navigate to={isLoggedIn ? '/dashboard' : '/portal'} />} />
+
         </Routes>
       </Box>
     </Flex>
@@ -210,6 +210,7 @@ function App() {
   const [role, setRole] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     // Set up an Axios interceptor to catch 401 Unauthorized responses globally
@@ -256,6 +257,7 @@ function App() {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       const token = localStorage.getItem('token');
       const session_id = localStorage.getItem('session_id');
@@ -274,11 +276,24 @@ function App() {
       setSessionId('');
     } catch (err) {
       console.error('Logout failed:', err);
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (loading || isLoggingOut) {
+    return (
+      <ChakraProvider theme={theme}>
+        <Flex minH="100vh" align="center" justify="center" bg="gray.50">
+          <VStack textAlign="center" spacing={4}>
+             <Spinner size="xl" color="brand.500" thickness="4px" speed="0.65s" />
+             <Text fontSize="xl" fontWeight="medium" color="gray.600">
+               {isLoggingOut ? "Logging out safely..." : "Loading system..."}
+             </Text>
+          </VStack>
+        </Flex>
+      </ChakraProvider>
+    );
   }
 
   return (
