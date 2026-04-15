@@ -42,11 +42,11 @@ export default function PatientsList() {
     }
   };
 
-  // filter by psr_no, name, or contact_no
+  // filter by institute_id, name, or contact_no
   const filtered = patients.filter(p =>
-    p.psr_no.toString().includes(search.toLowerCase()) ||
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.contact_no.includes(search)
+    (p.institute_id && p.institute_id.toString().toLowerCase().includes(search.toLowerCase())) ||
+    (p.name && p.name.toLowerCase().includes(search.toLowerCase())) ||
+    (p.contact_no && p.contact_no.includes(search))
   );
 
   return (
@@ -74,7 +74,7 @@ export default function PatientsList() {
       {/* Search bar */}
       <Flex mb="4">
         <Input
-          placeholder="Search by PSR No, name, or contact..."
+          placeholder="Search by Institute ID, name, or contact..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           bg="gray.50"
@@ -86,15 +86,15 @@ export default function PatientsList() {
         <Table variant="simple" size="md">
           <Thead bg="gray.100">
             <Tr>
-              <Th>PSR No</Th>
+              <Th>Institute ID</Th>
               <Th>Name</Th>
               <Th>Contact No</Th>
             </Tr>
           </Thead>
           <Tbody>
             {filtered.map((p) => (
-              <Tr key={p.psr_no}>
-                <Td>{p.psr_no}</Td>
+              <Tr key={p.institute_id}>
+                <Td>{p.institute_id}</Td>
                 <Td>{p.name}</Td>
                 <Td>{p.contact_no}</Td>
               </Tr>

@@ -40,7 +40,7 @@ export default function ReceptionistDashboard() {
     gender: "",
     contact_no: "",
     address: "",
-    psrn_id: "",
+    institute_id: "",
     doctor_assigned: "",
     patient_type: "",
     email: "",
@@ -92,10 +92,10 @@ export default function ReceptionistDashboard() {
         patientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setOpdNumber(res.data.psr_no);
+      setOpdNumber(res.data.institute_id);
       toast({
         title: "Patient Registered",
-        description: `PSR No: ${res.data.psr_no}`,
+        description: `Institute ID: ${res.data.institute_id}`,
         status: "success",
         duration: 3000,
         isClosable: true,
@@ -284,10 +284,10 @@ export default function ReceptionistDashboard() {
                 </FormControl>
                 {patient.patient_type !== "Other" && (
                   <FormControl>
-                    <FormLabel>PSRN/ID No</FormLabel>
+                    <FormLabel>Institute ID</FormLabel>
                     <Input
-                      name="psrn_id"
-                      value={patient.psrn_id}
+                      name="institute_id"
+                      value={patient.institute_id}
                       onChange={handleChange}
                     />
                   </FormControl>
@@ -380,7 +380,7 @@ export default function ReceptionistDashboard() {
               gender: "",
               contact_no: "",
               address: "",
-              psrn_id: "",
+              institute_id: "",
               doctor_assigned: "",
               patient_type: "",
               email: "",
@@ -390,8 +390,8 @@ export default function ReceptionistDashboard() {
           prescriptionData={{
             ...patient,
             opdNumber,
-            psrn_id:
-              patient.patient_type === "Other" ? undefined : patient.psrn_id,
+            institute_id:
+              patient.patient_type === "Other" ? undefined : patient.institute_id,
             email:
               patient.patient_type === "Student" && patient.email
                 ? `${patient.email.toLowerCase()}@pilani.bits-pilani.ac.in`
