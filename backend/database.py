@@ -181,11 +181,34 @@ def add_remark(institute_id, remark, doctor_username):
     )
     return result.modified_count > 0
 
-# Mark a patient as complete (workflow_status "completed")
+# Mark a patient as complete (workflow_status "completed") and update visit history
 def complete_patient(institute_id):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+    
+    # Extract historical notes for the current visit
+    prescriptions = [p.get("prescription") for p in patient.get("prescriptions", [])]
+    lab_tests = [l.get("lab_test") for l in patient.get("lab_tests", [])]
+    remarks = [r.get("remark") for r in patient.get("remarks", [])]
+    prescription_details = [pd.get("prescription_details") for pd in patient.get("prescription_details", [])]
+    
+    appointments = patient.get("appointments", [])
+    
+    # Update the latest 'upcoming' appointment to 'completed' and attach history
+    for app in reversed(appointments):
+        if app.get("status") == "upcoming":
+            app["status"] = "completed"
+            app["prescription_summary"] = prescriptions + prescription_details
+            app["lab_test_summary"] = lab_tests
+            app["diagnosis_note"] = remarks
+            break
+
     result = patients.update_one(
         {"institute_id": institute_id},
-        {"$set": {"workflow_status": "completed"}}
+        {"$set": {
+            "workflow_status": "completed",
+            "appointments": appointments
+        }}
     )
     return result.modified_count > 0
 
@@ -195,11 +218,11 @@ def get_inactive_patients_by_doctor(doctor_username):
 
 def get_active_pending_patients():
     """
-    Returns patients who are active, have a pending bill, and have been prescribed
+    Returns patients who are active/completed, have a pending bill, and have been prescribed
     either medicines or lab tests.
     """
     query = {
-        "workflow_status": "active",
+        "workflow_status": {"$in": ["active", "completed"]},
         "bill_status": "Pending",
         "$or": [
             {"prescriptions": {"$exists": True, "$ne": []}},

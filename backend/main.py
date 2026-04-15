@@ -730,7 +730,8 @@ def public_verify_patient():
         "message": "Patient verified", 
         "institute_id": patient.get("institute_id"), 
         "name": patient.get("name"),
-        "doctor_assigned": patient.get("doctor_assigned")
+        "doctor_assigned": patient.get("doctor_assigned"),
+        "appointments": patient.get("appointments", [])
     }), 200
 
 @app.route('/api/public/book-appointment', methods=['POST'])
