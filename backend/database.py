@@ -187,7 +187,7 @@ def complete_patient(institute_id):
     if not patient: return False
     
     # Extract historical notes for the current visit
-    prescriptions = [p.get("prescription") for p in patient.get("prescriptions", [])]
+    prescriptions = [p.get("note") for p in patient.get("prescriptions", [])]
     lab_tests = [l.get("lab_test") for l in patient.get("lab_tests", [])]
     remarks = [r.get("remark") for r in patient.get("remarks", [])]
     prescription_details = [pd.get("prescription_details") for pd in patient.get("prescription_details", [])]
@@ -198,7 +198,8 @@ def complete_patient(institute_id):
     for app in reversed(appointments):
         if app.get("status") == "upcoming":
             app["status"] = "completed"
-            app["prescription_summary"] = prescriptions + prescription_details
+            app["prescription_summary"] = prescriptions # Only medicines
+            app["prescription_remarks_summary"] = prescription_details # Only prescription remarks
             app["lab_test_summary"] = lab_tests
             app["diagnosis_note"] = remarks
             break

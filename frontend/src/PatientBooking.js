@@ -381,7 +381,7 @@ const PatientBooking = () => {
             <FormControl>
               <FormLabel color="gray.700">Institute ID</FormLabel>
               <Input
-                placeholder="e.g. 2021A7PS0001G"
+                placeholder="e.g. 2025H1120147P"
                 value={instituteId}
                 onChange={(e) => setInstituteId(e.target.value)}
                 focusBorderColor="teal.500"
@@ -478,45 +478,53 @@ const PatientBooking = () => {
                     </Heading>
                     <Accordion allowMultiple>
                       {verifiedPatient.appointments.filter(a => a.status === 'completed').slice().reverse().map((app, idx) => (
-                         <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
-                           <h2>
-                             <AccordionButton _expanded={{ bg: "gray.50" }}>
-                               <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
-                                 {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
-                               </Box>
-                               <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
-                               <AccordionIcon />
-                             </AccordionButton>
-                           </h2>
-                           <AccordionPanel pb={4} bg="gray.50">
-                             <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
-                               <Box>
-                                 <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescriptions</Text>
-                                 {app.prescription_summary && app.prescription_summary.length > 0 ? (
-                                   <VStack align="start" spacing={1}>
-                                      {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
-                                   </VStack>
-                                 ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                               </Box>
-                               <Box>
-                                 <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
-                                 {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
-                                   <VStack align="start" spacing={1}>
-                                      {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
-                                   </VStack>
-                                 ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                               </Box>
-                               <Box gridColumn={{ md: "span 2" }}>
-                                 <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
-                                 {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
-                                   <VStack align="start" spacing={1}>
-                                      {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
-                                   </VStack>
-                                 ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                               </Box>
-                             </Grid>
-                           </AccordionPanel>
-                         </AccordionItem>
+                        <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
+                          <h2>
+                            <AccordionButton _expanded={{ bg: "gray.50" }}>
+                              <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
+                                {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
+                              </Box>
+                              <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
+                              <AccordionIcon />
+                            </AccordionButton>
+                          </h2>
+                          <AccordionPanel pb={4} bg="gray.50">
+                            <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
+                              <Box>
+                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
+                                {app.prescription_summary && app.prescription_summary.length > 0 ? (
+                                  <VStack align="start" spacing={1}>
+                                    {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
+                                  </VStack>
+                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                              </Box>
+                              <Box>
+                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
+                                {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
+                                  <VStack align="start" spacing={1}>
+                                    {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
+                                  </VStack>
+                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                              </Box>
+                              <Box gridColumn={{ md: "span 2" }}>
+                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
+                                {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
+                                  <VStack align="start" spacing={1}>
+                                    {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
+                                  </VStack>
+                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                              </Box>
+                              <Box gridColumn={{ md: "span 2" }}>
+                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
+                                {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
+                                  <VStack align="start" spacing={1}>
+                                    {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
+                                  </VStack>
+                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                              </Box>
+                            </Grid>
+                          </AccordionPanel>
+                        </AccordionItem>
                       ))}
                     </Accordion>
                   </Box>
