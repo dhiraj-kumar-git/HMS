@@ -4,7 +4,7 @@ from datetime import datetime
 
 @dataclass
 class Patient:
-    psr_no: str  # Unique ID for each patient
+    institute_id: str  # Unique ID for each patient (BITS Institute ID)
     name: str
     age: int
     gender: str
@@ -13,6 +13,8 @@ class Patient:
     patient_type: str
     registration_time: datetime
     doctor_assigned: Optional[str] = None
+    email: Optional[str] = None
+    appointments: list = field(default_factory=list)
     prescriptions: list = field(default_factory=list)  # (Legacy field, if needed)
     lab_tests: list = field(default_factory=list)
     remarks: list = field(default_factory=list)  # For storing remarks (multiple)
@@ -32,6 +34,7 @@ class User:
     role: str  # receptionist, doctor, medical_store, lab_staff, admin
     display_name: str  # Added field for Display Name
     department: Optional[str] = ""
+    schedule: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         user_dict = asdict(self)

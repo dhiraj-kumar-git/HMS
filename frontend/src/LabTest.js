@@ -161,14 +161,14 @@ export default function LabTestDashboard() {
   };
 
   // FETCH PATIENT DETAILS & PROCESS TESTS
-  const handlePatientSelect = async (psrNo) => {
+  const handlePatientSelect = async (instituteId) => {
     // ensure configTests is loaded
     if (!configTests.length) await fetchConfigTests();
     setTestsLoading(true);
 
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/get_patient/${psrNo}`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await axios.get(`${BASE_URL}/get_patient/${instituteId}`, { headers: { Authorization: `Bearer ${token}` } });
       const patient = response.data;
       setSelectedPatient(patient);
 
@@ -229,7 +229,7 @@ export default function LabTestDashboard() {
   };
 
   const openPatientModal = async (p) => {
-    await handlePatientSelect(p.psr_no);
+    await handlePatientSelect(p.institute_id);
     onOpen();
   };
 
@@ -268,7 +268,7 @@ export default function LabTestDashboard() {
       await axios.post(
         `${BASE_URL}/lab/save_report`,
         {
-          psr_no: selectedPatient.psr_no,
+          institute_id: selectedPatient.institute_id,
           test_name: tests[0].lab_test,
           results: tests.reduce((acc, t) => {
             if (t.type === "individual") acc[t.lab_test] = t.result;
@@ -308,7 +308,7 @@ export default function LabTestDashboard() {
 
   // Email Report
   const handleMailing = async () => {
-    if (!selectedPatient?.psr_no) {
+    if (!selectedPatient?.institute_id) {
       toast({
         title: "No patient selected",
         description: "Please open a patient report first.",
@@ -322,7 +322,7 @@ export default function LabTestDashboard() {
     setEmailLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`${BASE_URL}/get_patient/${selectedPatient.psr_no}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${BASE_URL}/get_patient/${selectedPatient.institute_id}`, { headers: { Authorization: `Bearer ${token}` } });
 
       const patientData = res.data;
       const recipientEmail = patientData.email;
@@ -355,7 +355,7 @@ export default function LabTestDashboard() {
         })
         .join("\n");
 
-      const subject = `Lab Report for ${patientData.name} (PSR ${selectedPatient.psr_no})`;
+      const subject = `Lab Report for ${patientData.name} (ID ${selectedPatient.institute_id})`;
       const body = `Dear ${patientData.name},
 
 Your lab test report is now available.
@@ -503,8 +503,8 @@ BITS Pilani
                 }</span></div>
               </div>
               <div class="patient-right">
-                <div><span>PSRN/ID No</span><span>: ${
-                  selectedPatient?.psr_no || ""
+                <div><span>Institute ID</span><span>: ${
+                  selectedPatient?.institute_id || ""
                 }</span></div>
                 <div><span>Date & Time</span><span>: ${currentDateTime}</span></div>
               </div>
@@ -900,7 +900,7 @@ BITS Pilani
                   Name
                 </Box>
                 <Box w="16%" minW="120px">
-                  PSRN No.
+                  Institute ID
                 </Box>
                 <Box w="10%" minW="40px">
                   Age
@@ -956,7 +956,7 @@ BITS Pilani
                       alignItems="center"
                     >
                       <Text fontSize="sm" color="gray.600">
-                        {p.psr_no}
+                        {p.institute_id}
                       </Text>
                       <IconButton
                         aria-label="Copy PSRN"
@@ -966,7 +966,7 @@ BITS Pilani
                         variant="ghost"
                         onClick={(e) => {
                           e.stopPropagation();
-                          navigator.clipboard.writeText(p.psr_no);
+                          navigator.clipboard.writeText(p.institute_id);
                           toast({
                             title: "Copied!",
                             status: "success",
@@ -1009,7 +1009,7 @@ BITS Pilani
         <ModalContent>
           <ModalHeader bg="blue.600" color="white">
             {selectedPatient
-              ? `${selectedPatient.name} (PSR: ${selectedPatient.psr_no})`
+              ? `${selectedPatient.name} (ID: ${selectedPatient.institute_id})`
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton color="white" />
