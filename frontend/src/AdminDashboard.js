@@ -69,6 +69,7 @@ import CreateUser from './CreateUser';
 import UsersList from './UsersList';
 import PatientsList from './PatientsList';
 import DoctorSchedulePage from "./DoctorSchedulePage";
+import ManageSchedule from "./ManageSchedule";
 
 // Reusable component for the sidebar nav items
 const SidebarItem = ({ icon, label, to }) => (
@@ -137,7 +138,7 @@ const patientTypeData = [
   { category: 'Other', count: 1250 }
 ];
 
-export default function AdminDashboard({ username = 'Dr. David Wilson', onLogout }) {
+export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout }) {
   const navigate = useNavigate();
   const headerHeight = 64; // Define header height (in pixels)
 
@@ -162,13 +163,14 @@ export default function AdminDashboard({ username = 'Dr. David Wilson', onLogout
                 fontSize={{ base: 'xl', md: '2xl' }}
                 fontWeight="bold"
               >
-                BitsMed
+                BITS MED-C
               </Text>
             </Box>
         <SidebarItem icon={FiHome} label="Dashboard" to="/admin" />
         <SidebarItem icon={FiUserPlus} label="Create User" to="/admin/create-user" />
         <SidebarItem icon={FiUsers} label="Users List" to="/admin/users-list" />
         <SidebarItem icon={FiUsers} label="Patients List" to="/admin/patients-list" />
+        <SidebarItem icon={FiCalendar} label="Manage Schedules" to="/admin/manage-schedule" />
         <SidebarItem icon={FiCalendar} label="Visiting Doctor Schedule" to="/admin/schedule" />
         <SidebarItem icon={FiCalendar} label="Appointments" to="/admin/appointments" />
         <SidebarItem icon={FiFileText} label="Reports" to="/admin/reports" />
@@ -238,6 +240,7 @@ export default function AdminDashboard({ username = 'Dr. David Wilson', onLogout
             <Route path="create-user" element={<CreateUser />} />
             <Route path="users-list" element={<UsersList />} />
             <Route path="patients-list" element={<PatientsList />} />
+            <Route path="manage-schedule" element={<ManageSchedule />} />
             <Route path="schedule" element={<DoctorSchedulePage />} />
             <Route path="*" element={<Navigate to="" />} />
           </Routes>
@@ -380,7 +383,7 @@ function DashboardHome() {
               </Thead>
               <Tbody>
                 {newPatients.slice(0, 3).map((p) => (
-                  <Tr key={p.psr_no}>
+                  <Tr key={p.institute_id}>
                     <Td>{p.name}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>
@@ -436,7 +439,7 @@ function DashboardHome() {
               </Thead>
               <Tbody>
                 {newPatients.map((p) => (
-                  <Tr key={p.psr_no}>
+                  <Tr key={p.institute_id}>
                     <Td>{p.name}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>

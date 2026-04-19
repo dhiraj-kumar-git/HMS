@@ -43,7 +43,7 @@ import axios from 'axios';
 import BASE_URL from './Config';
 import Multiselect from 'multiselect-react-dropdown';
 
-export default function DoctorsDashboard({ username = 'Dr. John Doe' }) {
+export default function DoctorsDashboard({ username = 'Dr. Doctor Name' }) {
   const navigate = useNavigate();
   const toast = useToast();
 

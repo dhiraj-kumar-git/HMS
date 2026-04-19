@@ -208,8 +208,8 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                   <Text>: {prescriptionData?.opdNumber || ''}</Text>
                 </Flex>
                 <Flex mb={1}>
-                  <Text width="100px">PSRN/ID No</Text>
-                  <Text>: {prescriptionData?.psrn_id || ''}</Text>
+                  <Text width="100px">Institute ID</Text>
+                  <Text>: {prescriptionData?.institute_id || ''}</Text>
                 </Flex>
                 <Flex mb={1}>
                   <Text width="100px">Date & Time</Text>
