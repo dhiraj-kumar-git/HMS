@@ -290,7 +290,15 @@ def get_patients():
     if claims.get("role") != "admin":
         return jsonify({"error": "Unauthorized"}), 403
 
-    patients_list = database.get_all_patients()
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 0))
+    except ValueError:
+        page = 1
+        limit = 0
+        
+    skip = (page - 1) * limit if limit > 0 else 0
+    patients_list = database.get_all_patients(skip, limit)
     return jsonify(patients_list), 200
 
 
@@ -301,8 +309,15 @@ def get_all_patients_for_doctor():
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized"}), 403
 
-    # Reuse the same database function for returning all patients
-    all_patients = database.get_all_patients()
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 0))
+    except ValueError:
+        page = 1
+        limit = 0
+        
+    skip = (page - 1) * limit if limit > 0 else 0
+    all_patients = database.get_all_patients(skip, limit)
     return jsonify(all_patients), 200
 
 # Endpoint to fetch the list of doctors (accessible by receptionists and admins)
@@ -539,11 +554,7 @@ def get_lab_patients():
     if claims.get("role") != "lab_staff":
         return jsonify({"error": "Unauthorized"}), 403
 
-    patients_list = list(database.patients.find({
-        "bill_status": "Paid",
-        "workflow_status": "active"
-    }, {"_id": 0}))
-    
+    patients_list = database.get_lab_patients()
     return jsonify(patients_list), 200
 
 # Submit lab test results
@@ -561,12 +572,7 @@ def submit_lab_results():
     if not institute_id or not results:
         return jsonify({"error": "Missing required fields"}), 400
 
-    result = database.patients.update_one(
-        {"institute_id": institute_id},
-        {"$set": {"lab_results": results, "workflow_status": "completed"}}
-    )
-    
-    if result.modified_count > 0:
+    if database.submit_lab_results(institute_id, results):
         return jsonify({"message": "Results submitted successfully"}), 200
     return jsonify({"error": "Failed to submit results"}), 400
 
@@ -722,7 +728,7 @@ def public_verify_patient():
     if not institute_id:
         return jsonify({"error": "Institute ID is required"}), 400
         
-    patient = database.patients.find_one({"institute_id": institute_id})
+    patient = database.get_patient_by_id(institute_id)
     if not patient:
         return jsonify({"error": "No patient found with this Institute ID"}), 404
         
@@ -747,29 +753,7 @@ def public_book_appointment():
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
     doctor_name = doctor.get("display_name") if doctor else doctor_username
     
-    import datetime
-    appointment_obj = {
-        "doctor_username": doctor_username,
-        "doctor_name": doctor_name,
-        "time": appointment_time,
-        "booked_at": datetime.datetime.now().isoformat(),
-        "status": "upcoming"
-    }
-    
-    result = database.patients.update_one(
-        {"institute_id": institute_id},
-        {
-            "$set": {
-                "doctor_assigned": doctor_username,
-                "workflow_status": "active"
-            },
-            "$push": {
-                "appointments": appointment_obj
-            }
-        }
-    )
-    
-    if result.modified_count > 0:
+    if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
         return jsonify({"message": "Appointment booked successfully"}), 200
     return jsonify({"error": "Failed to book appointment"}), 400
 

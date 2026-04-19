@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -28,7 +26,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"
-      
+
     # Make sure the API is awake before slamming NGINX into production
     depends_on:
       - backend
