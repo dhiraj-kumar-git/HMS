@@ -93,16 +93,25 @@ def update_doctor_schedule(username, schedule_list):
 
 # Get all patients (Admin only)
 def get_all_patients(skip=0, limit=0):
-    cursor = patients.find({})
+    pipeline = []
     if skip > 0:
-        cursor = cursor.skip(skip)
+        pipeline.append({"$skip": skip})
     if limit > 0:
-        cursor = cursor.limit(limit)
-    pts = list(cursor)
+        pipeline.append({"$limit": limit})
+        
+    pipeline.append({
+        "$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
+        }
+    })
     
+    pts = list(patients.aggregate(pipeline))
     result = []
     for p in pts:
-        assembled = _assemble_patient(p)
+        assembled = _map_aggregated_patient(p)
         if assembled:
             assembled.pop("_id", None)
             result.append(assembled)
@@ -178,14 +187,14 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
     )
     return result.modified_count > 0
 
-def _assemble_patient(patient):
+def _map_aggregated_patient(patient):
     if not patient:
         return None
     if "_id" in patient:
         patient["_id"] = str(patient["_id"])
     
-    institute_id = patient.get("institute_id")
-    patient_visits = list(visits.find({"institute_id": institute_id}, {"_id": 0}).sort("booked_at", 1))
+    patient_visits = patient.pop("patient_visits", [])
+    patient_visits = sorted(patient_visits, key=lambda x: x.get("booked_at", ""))
     
     patient["appointments"] = []
     patient["prescriptions"] = []
@@ -216,13 +225,37 @@ def _assemble_patient(patient):
 
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):
-    patient = patients.find_one({"institute_id": institute_id})
-    return _assemble_patient(patient)
+    pipeline = [
+        {"$match": {"institute_id": institute_id}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    result = list(patients.aggregate(pipeline))
+    if not result:
+        return None
+    return _map_aggregated_patient(result[0])
 
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
-    pts = list(patients.find({"doctor_assigned": doctor_username, "workflow_status": "active"}))
-    return [_assemble_patient(p) for p in pts]
+    pipeline = [
+        {"$match": {"doctor_assigned": doctor_username, "workflow_status": "active"}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    pts = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in pts]
 
 # Helper to get the active visit ID for a patient
 def _get_active_visit_id(institute_id):
@@ -275,12 +308,22 @@ def add_lab_report(institute_id, report_details):
 
 # Retrieve all patients with lab reports
 def get_lab_reports():
-    # Use aggregation to find patients who have visits with lab reports
+    pipeline = [
+        {"$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
+        }},
+        {"$match": {
+            "patient_visits.lab_reports": {"$exists": True, "$not": {"$size": 0}}
+        }}
+    ]
+    pts = list(patients.aggregate(pipeline))
     reports = []
-    all_patients = list(patients.find({}))
-    for patient in all_patients:
-        assembled = _assemble_patient(patient)
-        if assembled and assembled.get("lab_reports"):
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
             assembled.pop("_id", None)
             reports.append(assembled)
     return reports
@@ -330,22 +373,43 @@ def complete_patient(institute_id):
 
 # Get inactive patients assigned to a specific doctor (i.e. workflow_status not "active")
 def get_inactive_patients_by_doctor(doctor_username):
-    pts = list(patients.find({"doctor_assigned": doctor_username, "workflow_status": {"$ne": "active"}}))
-    return [_assemble_patient(p) for p in pts]
+    pipeline = [
+        {"$match": {"doctor_assigned": doctor_username, "workflow_status": {"$ne": "active"}}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    pts = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in pts]
 
 def get_active_pending_patients():
     """
     Returns patients who are active/completed, have a pending bill, and have been prescribed
     either medicines or lab tests.
     """
-    query = {
-        "workflow_status": {"$in": ["active", "completed"]},
-        "bill_status": "Pending"
-    }
-    raw_patients = list(patients.find(query))
+    pipeline = [
+        {"$match": {
+            "workflow_status": {"$in": ["active", "completed"]},
+            "bill_status": "Pending"
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    raw_patients = list(patients.aggregate(pipeline))
     result = []
     for p in raw_patients:
-        assembled = _assemble_patient(p)
+        assembled = _map_aggregated_patient(p)
         if assembled:
             if assembled.get("prescriptions") or assembled.get("lab_tests") or assembled.get("prescription_details"):
                 assembled.pop("_id", None)
@@ -353,14 +417,24 @@ def get_active_pending_patients():
     return result
 
 def get_lab_patients():
-    query = {
-        "bill_status": "Paid",
-        "workflow_status": "active"
-    }
-    raw_patients = list(patients.find(query))
+    pipeline = [
+        {"$match": {
+            "bill_status": "Paid",
+            "workflow_status": "active"
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    raw_patients = list(patients.aggregate(pipeline))
     result = []
     for p in raw_patients:
-        assembled = _assemble_patient(p)
+        assembled = _map_aggregated_patient(p)
         if assembled:
             assembled.pop("_id", None)
             result.append(assembled)
