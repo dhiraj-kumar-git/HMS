@@ -20,18 +20,44 @@ function UploadLabReports() {
   const [file, setFile] = useState(null);
   const [errors, setErrors] = useState({});
   const [uploadedReports, setUploadedReports] = useState([]);
+  const [doctors, setDoctors] = useState([]); // ✅ FIXED
   const toast = useToast();
 
-  // Fake doctors list (later can be fetched from backend)
-  const doctors = ["Dr. dr1", "Dr. doctor1"];
+  const token = localStorage.getItem("token");
 
-  // Load reports from localStorage on mount
+  // ✅ Fetch doctors from backend
+  useEffect(() => {
+    const fetchDoctors = async () => {
+      try {
+        const res = await fetch("http://localhost:5000/api/public/doctors");
+
+        if (!res.ok) throw new Error("Failed to fetch doctors");
+
+        const data = await res.json();
+
+        // backend returns: display_name
+        const doctorNames = data.map((doc) => doc.display_name);
+        setDoctors(doctorNames);
+
+      } catch (err) {
+        console.error(err);
+        toast({
+          title: "Failed to load doctors",
+          status: "error",
+        });
+      }
+    };
+
+    fetchDoctors();
+  }, []);
+
+  // Load reports from localStorage
   useEffect(() => {
     const savedReports = JSON.parse(localStorage.getItem("labReports")) || [];
     setUploadedReports(savedReports);
   }, []);
 
-  // Save reports to localStorage whenever updated
+  // Save reports
   useEffect(() => {
     localStorage.setItem("labReports", JSON.stringify(uploadedReports));
   }, [uploadedReports]);
@@ -45,28 +71,86 @@ function UploadLabReports() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleUpload = () => {
+  // ✅ FULLY FIXED upload flow
+  const handleUpload = async () => {
     if (!validate()) return;
 
-    // Create temporary image URL for preview
-    const previewUrl = URL.createObjectURL(file);
+    try {
+      // 1. Get presigned URL
+      const res = await fetch("http://localhost:5000/s3/upload-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          content_type: file.type,
+          instituteId: instituteId
+        }),
+      });
 
-    const newReport = {
-      instituteId,
-      doctorName,
-      previewUrl,
-      fileName: file.name,
-      uploadedAt: new Date().toLocaleString(),
-    };
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to get upload URL");
 
-    setUploadedReports([...uploadedReports, newReport]);
+      const { upload_url, key } = data;
 
-    toast({ title: "Report uploaded successfully", status: "success" });
+      // 2. Upload to S3
+      const uploadRes = await fetch(upload_url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
 
-    // Reset form
-    setInstituteId("");
-    setDoctorName("");
-    setFile(null);
+      if (!uploadRes.ok) throw new Error("S3 upload failed");
+
+      await fetch("http://localhost:5000/s3/save-metadata", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          instituteId,
+          key,
+          filename: file.name
+        }),
+      });
+
+      // 3. Preview (local only)
+      const previewUrl = URL.createObjectURL(file);
+
+      const newReport = {
+        instituteId,
+        doctorName,
+        previewUrl,
+        fileName: file.name,
+        uploadedAt: new Date().toLocaleString(),
+        s3Key: key, // ✅ IMPORTANT
+      };
+
+      setUploadedReports([...uploadedReports, newReport]);
+
+      toast({
+        title: "Report uploaded successfully",
+        status: "success",
+      });
+
+      // Reset
+      setInstituteId("");
+      setDoctorName("");
+      setFile(null);
+
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Upload failed",
+        description: err.message,
+        status: "error",
+      });
+    }
   };
 
   return (
@@ -92,7 +176,9 @@ function UploadLabReports() {
               value={instituteId}
               onChange={(e) => setInstituteId(e.target.value)}
             />
-            {errors.instituteId && <FormErrorMessage>{errors.instituteId}</FormErrorMessage>}
+            {errors.instituteId && (
+              <FormErrorMessage>{errors.instituteId}</FormErrorMessage>
+            )}
           </FormControl>
 
           <FormControl isInvalid={errors.doctorName}>
@@ -117,10 +203,12 @@ function UploadLabReports() {
             <FormLabel>Upload Lab Report</FormLabel>
             <Input
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf" // ✅ FIXED
               onChange={(e) => setFile(e.target.files[0])}
             />
-            {errors.file && <FormErrorMessage>{errors.file}</FormErrorMessage>}
+            {errors.file && (
+              <FormErrorMessage>{errors.file}</FormErrorMessage>
+            )}
           </FormControl>
 
           <Button colorScheme="blue" onClick={handleUpload}>
@@ -148,6 +236,7 @@ function UploadLabReports() {
                   <Text fontSize="sm" color="gray.500" mb={2}>
                     Uploaded at: {report.uploadedAt}
                   </Text>
+
                   <Image
                     src={report.previewUrl}
                     alt={report.fileName}

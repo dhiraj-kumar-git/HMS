@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -842,11 +843,13 @@ def debug_s3():
         return {"error": str(e)}
     
 @app.route('/s3/upload-url', methods=['POST'])
-@jwt_required
+@jwt_required()
 def generate_upload_url():
     data = request.json
+    instituteId=data.get("instituteId")
     filename = data.get("filename")
     content_type = data.get("content_type")
+
 
     if not filename or not content_type:
         return jsonify({"error": "Missing fields"}), 400
@@ -864,7 +867,7 @@ def generate_upload_url():
                 "Key": key,
                 "ContentType": content_type
             },
-            ExpiresIn=300
+            ExpiresIn=600
         )
 
         return jsonify({
@@ -874,9 +877,40 @@ def generate_upload_url():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/s3/save-metadata', methods=['POST'])
+@jwt_required()
+def save_s3_metadata():
+    data = request.json
+
+    institute_id = data.get("instituteId")
+    key = data.get("key")
+    filename = data.get("filename")
+
+    if not institute_id or not key or not filename:
+        return jsonify({"error": "Missing fields"}), 400
+
+    user = get_jwt_identity()
+
+    report_data = {
+        "file_name": filename,
+        "s3_key": key,
+        "uploaded_by": user,
+        "uploaded_at": datetime.utcnow()
+    }
+
+    try:
+        if database.add_lab_report(institute_id,report_data):
+            return jsonify({"message": "Metadata saved"}), 200
+
+        else:
+            return jsonify({"error": "Patient not found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/s3/view-url', methods=['POST'])
-@jwt_required
+@jwt_required()
 def generate_view_url():
     data = request.json
     key = data.get("key")
