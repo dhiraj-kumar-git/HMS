@@ -24,9 +24,19 @@ SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 
+import time
+
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
+
+@jwt.token_in_blocklist_loader
+def check_if_token_is_revoked(jwt_header, jwt_payload):
+    jti = jwt_payload["jti"]
+    if database.redis_client:
+        token_in_redis = database.redis_client.get(f"blocklist_{jti}")
+        return token_in_redis is not None
+    return False
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 
 # -------------------- User and Patient Routes --------------------
@@ -61,11 +71,13 @@ def logout():
     username = get_jwt_identity()
     claims = get_jwt()
     session_id = claims.get("session_id")
+    jti = claims.get("jti")
+    exp = claims.get("exp")
 
     if not session_id:
         return jsonify({"error": "Invalid session"}), 400
 
-    database.end_session(username, session_id)  # Remove session from DB
+    database.end_session(username, session_id, jti, exp)  # Remove session from DB and add to Redis blocklist
     return jsonify({"message": f"User '{username}' has logged out successfully."}), 200
 
 # Endpoint to update a user's password (Admin only)
@@ -663,24 +675,66 @@ def load_medicines_from_config():
 @app.route('/dropdown/medicines', methods=['GET'])
 @jwt_required()
 def dropdown_medicines():
+    t0 = time.time()
+    if database.redis_client:
+        cached_md = database.redis_client.get("medicines_config")
+        if cached_md:
+            ms = (time.time() - t0) * 1000
+            print(f"[REDIS CACHE] /dropdown/medicines served in {ms:.3f} ms", flush=True)
+            return cached_md, 200, {'Content-Type': 'application/json'}
+
     medicines = load_medicines_from_config()
-    # Expect each medicine object to have "item_name" property.
+    
+    if database.redis_client:
+        database.redis_client.setex("medicines_config", 86400, json.dumps(medicines))
+
     return jsonify(medicines), 200
 
 # Updated dropdown endpoint to return lab tests using the JSON config file.
 @app.route('/dropdown/labtests', methods=['GET'])
 @jwt_required()
 def dropdown_labtests():
+    t0 = time.time()
+    if database.redis_client:
+        cached_lt = database.redis_client.get("labtests_config")
+        if cached_lt:
+            ms = (time.time() - t0) * 1000
+            print(f"[REDIS CACHE] /dropdown/labtests served in {ms:.3f} ms", flush=True)
+            return cached_lt, 200, {'Content-Type': 'application/json'}
+
     lab_tests = load_lab_tests_from_config()
+    
+    if database.redis_client:
+        database.redis_client.setex("labtests_config", 86400, json.dumps(lab_tests))
+
     return jsonify(lab_tests), 200
 
 # -------------------- Public Patient Portal Endpoints --------------------
 
 @app.route('/api/public/doctors', methods=['GET'])
 def public_get_doctors():
+    t0 = time.time()
+    
+    # 1. Check Cache
+    if database.redis_client:
+        cached_doctors = database.redis_client.get("public_doctors_list")
+        if cached_doctors:
+            ms = (time.time() - t0) * 1000
+            print(f"[REDIS CACHE] /api/public/doctors served in {ms:.3f} ms", flush=True)
+            return cached_doctors, 200, {'Content-Type': 'application/json'}
+
+    # 2. Fetch natively if not cached or if redis is offline
     doctors = database.get_all_doctors()
     safe_docs = [{"username": d.get("username"), "display_name": d.get("display_name", d.get("username")), "department": d.get("department"), "schedule": d.get("schedule", [])} for d in doctors]
-    return jsonify(safe_docs), 200
+    
+    # 3. Save into cache natively passing json string
+    result_json = json.dumps(safe_docs)
+    if database.redis_client:
+        database.redis_client.setex("public_doctors_list", 43200, result_json)
+        
+    ms = (time.time() - t0) * 1000
+    print(f"[MONGODB FETCH] /api/public/doctors served in {ms:.3f} ms", flush=True)
+    return result_json, 200, {'Content-Type': 'application/json'}
 
 @app.route('/api/public/register', methods=['POST'])
 def public_register_patient():

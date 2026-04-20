@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 import os
 import uuid
 import bcrypt
+import redis
 from collection_format import Patient, Visit, User, Medicine
 
 load_dotenv()
@@ -13,6 +14,17 @@ MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
     raise ValueError("MONGO_URI is not set")
 client = MongoClient(MONGO_URI)
+
+# Redis connection setup with Graceful Fallback
+redis_client = None
+try:
+    # Look for docker container named 'redis' 
+    redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+    redis_client.ping()
+    print("Successfully connected to Redis cache.")
+except (redis.ConnectionError, redis.TimeoutError):
+    print("Warning: Redis container not found or offline. Caching disabled.")
+    redis_client = None
 
 # Database and collections
 db = client.hospital_db
@@ -135,11 +147,21 @@ def start_session(username, session_id):
     sessions.insert_one(session_data)
 
 # End a session for a specific user
-def end_session(username, session_id):
+def end_session(username, session_id, jti=None, exp=None):
     result = sessions.update_one(
         {"username": username, "session_id": session_id, "active": True},
         {"$set": {"active": False, "logout_time": datetime.now().isoformat()}}
     )
+    
+    # Blocklist the JWT using redis
+    if redis_client and jti and exp:
+        # Calculate time remaining on the token
+        now = datetime.timestamp(datetime.now())
+        expires_in = int(exp - now)
+        if expires_in > 0:
+            # We save the JTI with an expiration matching the token's remaining lifespan.
+            redis_client.setex(f"blocklist_{jti}", expires_in, "true")
+            
     return result.modified_count > 0  # Return True if session was updated
 
 
