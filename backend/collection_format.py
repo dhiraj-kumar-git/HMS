@@ -14,11 +14,6 @@ class Patient:
     registration_time: datetime
     doctor_assigned: Optional[str] = None
     email: Optional[str] = None
-    appointments: list = field(default_factory=list)
-    prescriptions: list = field(default_factory=list)  # (Legacy field, if needed)
-    lab_tests: list = field(default_factory=list)
-    remarks: list = field(default_factory=list)  # For storing remarks (multiple)
-    prescription_details: list = field(default_factory=list)  # New field for storing prescription details
     bill_status: Optional[str] = "Pending"
     workflow_status: str = "active"
 
@@ -26,6 +21,30 @@ class Patient:
         patient_dict = asdict(self)
         patient_dict["registration_time"] = self.registration_time.isoformat()
         return patient_dict
+
+@dataclass
+class Visit:
+    visit_id: str
+    institute_id: str
+    doctor_username: str
+    status: str = "upcoming"
+    time: Optional[str] = None
+    booked_at: datetime = field(default_factory=datetime.now)
+    prescriptions: list = field(default_factory=list)
+    lab_tests: list = field(default_factory=list)
+    lab_reports: list = field(default_factory=list)
+    remarks: list = field(default_factory=list)
+    prescription_details: list = field(default_factory=list)
+    prescription_summary: list = field(default_factory=list)
+    prescription_remarks_summary: list = field(default_factory=list)
+    lab_test_summary: list = field(default_factory=list)
+    diagnosis_note: list = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        visit_dict = asdict(self)
+        visit_dict["booked_at"] = self.booked_at.isoformat()
+        return visit_dict
+
 
 @dataclass
 class User:

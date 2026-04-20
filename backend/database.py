@@ -2,8 +2,10 @@ from datetime import datetime
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
+import uuid
 import bcrypt
-from collection_format import Patient, User, Medicine
+import redis
+from collection_format import Patient, Visit, User, Medicine
 
 load_dotenv()
 
@@ -13,12 +15,39 @@ if not MONGO_URI:
     raise ValueError("MONGO_URI is not set")
 client = MongoClient(MONGO_URI)
 
+# Redis connection setup with Graceful Fallback
+redis_client = None
+try:
+    # Look for docker container named 'redis' 
+    redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+    redis_client.ping()
+    print("Successfully connected to Redis cache.")
+except (redis.ConnectionError, redis.TimeoutError):
+    print("Warning: Redis container not found or offline. Caching disabled.")
+    redis_client = None
+
 # Database and collections
 db = client.hospital_db
 patients = db.patients
 users = db.users
 sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
+visits = db.visits # Collection for storing individual patient visits
+
+# Ensure Indexes Configuration
+try:
+    patients.create_index("institute_id", unique=True)
+    patients.create_index("doctor_assigned")
+    patients.create_index([("workflow_status", 1), ("bill_status", 1)])
+    users.create_index("username", unique=True)
+    inventory.create_index("medicine_id", unique=True)
+    sessions.create_index("session_id", unique=True)
+    sessions.create_index("login_time", expireAfterSeconds=86400) # TTL index 24 hours
+    visits.create_index("visit_id", unique=True)
+    visits.create_index("institute_id")
+    visits.create_index("doctor_username")
+except Exception as e:
+    print(f"Error creating indexes: {e}")
 
 # Function to hash passwords
 def hash_password(password):
@@ -75,8 +104,30 @@ def update_doctor_schedule(username, schedule_list):
     return result.matched_count > 0
 
 # Get all patients (Admin only)
-def get_all_patients():
-    return list(patients.find({}, {"_id": 0}))
+def get_all_patients(skip=0, limit=0):
+    pipeline = []
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    if limit > 0:
+        pipeline.append({"$limit": limit})
+        
+    pipeline.append({
+        "$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
+        }
+    })
+    
+    pts = list(patients.aggregate(pipeline))
+    result = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
 
 # Authenticate user and return role if valid
 def authenticate_user(username, password):
@@ -96,11 +147,21 @@ def start_session(username, session_id):
     sessions.insert_one(session_data)
 
 # End a session for a specific user
-def end_session(username, session_id):
+def end_session(username, session_id, jti=None, exp=None):
     result = sessions.update_one(
         {"username": username, "session_id": session_id, "active": True},
         {"$set": {"active": False, "logout_time": datetime.now().isoformat()}}
     )
+    
+    # Blocklist the JWT using redis
+    if redis_client and jti and exp:
+        # Calculate time remaining on the token
+        now = datetime.timestamp(datetime.now())
+        expires_in = int(exp - now)
+        if expires_in > 0:
+            # We save the JTI with an expiration matching the token's remaining lifespan.
+            redis_client.setex(f"blocklist_{jti}", expires_in, "true")
+            
     return result.modified_count > 0  # Return True if session was updated
 
 
@@ -116,67 +177,185 @@ def register_patient(patient_data):
 
     registration_time = datetime.now()
     patient_data["registration_time"] = registration_time
+    # Note: patient_data from main.py might have legacy arrays. Ensure they are stripped or just ignore since we don't query them.
+    for k in ["appointments", "prescriptions", "lab_tests", "remarks", "prescription_details", "lab_results"]:
+        patient_data.pop(k, None)
+    
     patients.insert_one(patient_data)
     return institute_id  # Return the Institute ID
 
+def book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
+    # Create the Visit
+    v = Visit(
+        visit_id=str(uuid.uuid4()),
+        institute_id=institute_id,
+        doctor_username=doctor_username,
+        status="upcoming",
+        time=appointment_time
+    )
+    visit_dict = v.to_dict()
+    visit_dict["doctor_name"] = doctor_name
+    visits.insert_one(visit_dict)
+    
+    # Update active status
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {
+            "$set": {
+                "doctor_assigned": doctor_username,
+                "workflow_status": "active"
+            }
+        }
+    )
+    return result.modified_count > 0
+
+def _map_aggregated_patient(patient):
+    if not patient:
+        return None
+    if "_id" in patient:
+        patient["_id"] = str(patient["_id"])
+    
+    patient_visits = patient.pop("patient_visits", [])
+    patient_visits = sorted(patient_visits, key=lambda x: x.get("booked_at", ""))
+    
+    patient["appointments"] = []
+    patient["prescriptions"] = []
+    patient["prescription_details"] = []
+    patient["lab_tests"] = []
+    patient["lab_reports"] = []
+    patient["remarks"] = []
+    
+    for v in patient_visits:
+        patient["appointments"].append({
+            "doctor_username": v.get("doctor_username"),
+            "doctor_name": v.get("doctor_name", v.get("doctor_username")),
+            "status": v.get("status"),
+            "time": v.get("time"),
+            "booked_at": v.get("booked_at"),
+            "prescription_summary": v.get("prescription_summary", []),
+            "prescription_remarks_summary": v.get("prescription_remarks_summary", []),
+            "lab_test_summary": v.get("lab_test_summary", []),
+            "diagnosis_note": v.get("diagnosis_note", [])
+        })
+        patient["prescriptions"].extend(v.get("prescriptions", []))
+        patient["prescription_details"].extend(v.get("prescription_details", []))
+        patient["lab_tests"].extend(v.get("lab_tests", []))
+        patient["lab_reports"].extend(v.get("lab_reports", []))
+        patient["remarks"].extend(v.get("remarks", []))
+        
+    return patient
+
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):
-    patient = patients.find_one({"institute_id": institute_id})
-    if patient:
-        patient["_id"] = str(patient["_id"])  # Convert ObjectId to string for JSON response
-        return patient
-    return None
+    pipeline = [
+        {"$match": {"institute_id": institute_id}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    result = list(patients.aggregate(pipeline))
+    if not result:
+        return None
+    return _map_aggregated_patient(result[0])
 
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
-    return list(patients.find({"doctor_assigned": doctor_username, "workflow_status": "active"}, {"_id": 0}))
+    pipeline = [
+        {"$match": {"doctor_assigned": doctor_username, "workflow_status": "active"}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    pts = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in pts]
+
+# Helper to get the active visit ID for a patient
+def _get_active_visit_id(institute_id):
+    # Find the most recent active visit
+    visit = visits.find_one({"institute_id": institute_id, "status": "upcoming"}, sort=[("booked_at", -1)])
+    if visit:
+        return visit["visit_id"]
+    return None
 
 # Add a prescription to a patient (recording the doctor's note)
 def add_prescription(institute_id, prescription, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"prescriptions": {"doctor": doctor_username, "note": prescription, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a prescription to a patient by setting a new 'prescription_details' field
 def add_prescription_details(institute_id, prescription_details, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"prescription_details": {"doctor": doctor_username, "prescription_details": prescription_details, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a lab test to a patient (recording only the lab test details)
 def add_lab_test(institute_id, lab_test, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"lab_tests": {"doctor": doctor_username, "lab_test": lab_test, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a lab report to a patient
 def add_lab_report(institute_id, report_details):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    # Find the most recent visit, active or not, to attach the report
+    visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+    if not visit: return False
+    result = visits.update_one(
+        {"visit_id": visit["visit_id"]},
         {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Retrieve all patients with lab reports
 def get_lab_reports():
-    reports = list(
-        patients.find(
-            {"lab_reports": {"$exists": True, "$ne": []}},
-            {"_id": 0, "name": 1, "institute_id": 1, "age": 1, "gender": 1, "lab_reports": 1, "email": 1}
-        )
-    )
+    pipeline = [
+        {"$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
+        }},
+        {"$match": {
+            "patient_visits.lab_reports": {"$exists": True, "$not": {"$size": 0}}
+        }}
+    ]
+    pts = list(patients.aggregate(pipeline))
+    reports = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            reports.append(assembled)
     return reports
 
 # Add a remark to a patient (recording the remark separately)
 def add_remark(institute_id, remark, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"remarks": {"doctor": doctor_username, "remark": remark, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
@@ -186,52 +365,116 @@ def complete_patient(institute_id):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
-    # Extract historical notes for the current visit
-    prescriptions = [p.get("note") for p in patient.get("prescriptions", [])]
-    lab_tests = [l.get("lab_test") for l in patient.get("lab_tests", [])]
-    remarks = [r.get("remark") for r in patient.get("remarks", [])]
-    prescription_details = [pd.get("prescription_details") for pd in patient.get("prescription_details", [])]
-    
-    appointments = patient.get("appointments", [])
-    
-    # Update the latest 'upcoming' appointment to 'completed' and attach history
-    for app in reversed(appointments):
-        if app.get("status") == "upcoming":
-            app["status"] = "completed"
-            app["prescription_summary"] = prescriptions # Only medicines
-            app["prescription_remarks_summary"] = prescription_details # Only prescription remarks
-            app["lab_test_summary"] = lab_tests
-            app["diagnosis_note"] = remarks
-            break
+    visit_id = _get_active_visit_id(institute_id)
+    if visit_id:
+        visit = visits.find_one({"visit_id": visit_id})
+        if visit:
+            prescriptions = [p.get("note") for p in visit.get("prescriptions", [])]
+            lab_tests = [l.get("lab_test") for l in visit.get("lab_tests", [])]
+            remarks = [r.get("remark") for r in visit.get("remarks", [])]
+            prescription_details = [pd.get("prescription_details") for pd in visit.get("prescription_details", [])]
+            
+            visits.update_one(
+                {"visit_id": visit_id},
+                {"$set": {
+                    "status": "completed",
+                    "prescription_summary": prescriptions,
+                    "prescription_remarks_summary": prescription_details,
+                    "lab_test_summary": lab_tests,
+                    "diagnosis_note": remarks
+                }}
+            )
 
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
-            "workflow_status": "completed",
-            "appointments": appointments
+            "workflow_status": "completed"
         }}
     )
     return result.modified_count > 0
 
 # Get inactive patients assigned to a specific doctor (i.e. workflow_status not "active")
 def get_inactive_patients_by_doctor(doctor_username):
-    return list(patients.find({"doctor_assigned": doctor_username, "workflow_status": {"$ne": "active"}}, {"_id": 0}))
+    pipeline = [
+        {"$match": {"doctor_assigned": doctor_username, "workflow_status": {"$ne": "active"}}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    pts = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in pts]
 
 def get_active_pending_patients():
     """
     Returns patients who are active/completed, have a pending bill, and have been prescribed
     either medicines or lab tests.
     """
-    query = {
-        "workflow_status": {"$in": ["active", "completed"]},
-        "bill_status": "Pending",
-        "$or": [
-            {"prescriptions": {"$exists": True, "$ne": []}},
-            {"lab_tests": {"$exists": True, "$ne": []}},
-            {"prescription_details": {"$exists": True, "$ne": []}}
-        ]
-    }
-    return list(patients.find(query, {"_id": 0}))
+    pipeline = [
+        {"$match": {
+            "workflow_status": {"$in": ["active", "completed"]},
+            "bill_status": "Pending"
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    raw_patients = list(patients.aggregate(pipeline))
+    result = []
+    for p in raw_patients:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            if assembled.get("prescriptions") or assembled.get("lab_tests") or assembled.get("prescription_details"):
+                assembled.pop("_id", None)
+                result.append(assembled)
+    return result
+
+def get_lab_patients():
+    pipeline = [
+        {"$match": {
+            "bill_status": "Paid",
+            "workflow_status": "active"
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    raw_patients = list(patients.aggregate(pipeline))
+    result = []
+    for p in raw_patients:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
+
+def submit_lab_results(institute_id, results):
+    # Depending on your workflow, you might update the visit or patient.
+    # We will mark patient as completed and attach results to the active visit.
+    visit_id = _get_active_visit_id(institute_id)
+    if visit_id:
+        visits.update_one(
+            {"visit_id": visit_id},
+            {"$set": {"lab_results": results, "status": "completed"}}
+        )
+    return patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"workflow_status": "completed"}}
+    ).modified_count > 0
 
 def get_doctors_name():
 
