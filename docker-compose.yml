@@ -1,11 +1,18 @@
-version: '3.8'
-
 services:
+  redis:
+    image: "redis:alpine"
+    container_name: hms-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
   backend:
     build:
       context: ./backend
     container_name: hms-backend
     restart: unless-stopped
+    depends_on:
+      - redis
     ports:
       - "5000:5000"
     # Safely load the .env file (containing secret MONGO_URI) from the backend directly
@@ -28,7 +35,7 @@ services:
     restart: unless-stopped
     ports:
       - "3000:80"
-      
+
     # Make sure the API is awake before slamming NGINX into production
     depends_on:
       - backend
