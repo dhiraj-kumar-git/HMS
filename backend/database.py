@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
@@ -48,6 +48,24 @@ try:
     visits.create_index("doctor_username")
 except Exception as e:
     print(f"Error creating indexes: {e}")
+
+# ---------------------------------------------------------------------------
+# COMPUTE_AGE_STAGE — MongoDB aggregation stage that derives 'age' at query
+# time from the stored 'date_of_birth' field using the server's live UTC clock.
+# Age is NEVER stored in the database — it is always computed fresh.
+# Inject this stage into every patient aggregation pipeline after $lookup.
+# ---------------------------------------------------------------------------
+COMPUTE_AGE_STAGE = {
+    "$addFields": {
+        "age": {
+            "$dateDiff": {
+                "startDate": "$date_of_birth",
+                "endDate": "$$NOW",
+                "unit": "year"
+            }
+        }
+    }
+}
 
 # Function to hash passwords
 def hash_password(password):
@@ -119,6 +137,7 @@ def get_all_patients(skip=0, limit=0):
             "as": "patient_visits"
         }
     })
+    pipeline.append(COMPUTE_AGE_STAGE)  # Derive age from date_of_birth at query time
     
     pts = list(patients.aggregate(pipeline))
     result = []
@@ -177,6 +196,20 @@ def register_patient(patient_data):
 
     registration_time = datetime.now()
     patient_data["registration_time"] = registration_time
+    
+    # Ensure date_of_birth is a datetime object for $dateDiff aggregation
+    dob = patient_data.get("date_of_birth")
+    if isinstance(dob, str):
+        try:
+            # Handle YYYY-MM-DD
+            patient_data["date_of_birth"] = datetime.strptime(dob, "%Y-%m-%d")
+        except ValueError:
+            try:
+                # Fallback to ISO format
+                patient_data["date_of_birth"] = datetime.fromisoformat(dob.replace("Z", "+00:00"))
+            except ValueError:
+                print(f"Warning: Could not parse date_of_birth '{dob}' as date.")
+    
     # Note: patient_data from main.py might have legacy arrays. Ensure they are stripped or just ignore since we don't query them.
     for k in ["appointments", "prescriptions", "lab_tests", "remarks", "prescription_details", "lab_results"]:
         patient_data.pop(k, None)
@@ -214,6 +247,11 @@ def _map_aggregated_patient(patient):
         return None
     if "_id" in patient:
         patient["_id"] = str(patient["_id"])
+    
+    # Convert datetime objects to ISO strings for JSON safety
+    for key in ["registration_time", "date_of_birth"]:
+        if key in patient and isinstance(patient[key], (datetime, date)):
+            patient[key] = patient[key].isoformat()
     
     patient_visits = patient.pop("patient_visits", [])
     patient_visits = sorted(patient_visits, key=lambda x: x.get("booked_at", ""))
@@ -256,7 +294,8 @@ def get_patient_by_id(institute_id):
                 "foreignField": "institute_id",
                 "as": "patient_visits"
             }
-        }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
     ]
     result = list(patients.aggregate(pipeline))
     if not result:
@@ -274,7 +313,8 @@ def get_patients_by_doctor(doctor_username):
                 "foreignField": "institute_id",
                 "as": "patient_visits"
             }
-        }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
     ]
     pts = list(patients.aggregate(pipeline))
     return [_map_aggregated_patient(p) for p in pts]
@@ -404,7 +444,8 @@ def get_inactive_patients_by_doctor(doctor_username):
                 "foreignField": "institute_id",
                 "as": "patient_visits"
             }
-        }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
     ]
     pts = list(patients.aggregate(pipeline))
     return [_map_aggregated_patient(p) for p in pts]
@@ -426,7 +467,8 @@ def get_active_pending_patients():
                 "foreignField": "institute_id",
                 "as": "patient_visits"
             }
-        }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
     ]
     raw_patients = list(patients.aggregate(pipeline))
     result = []
@@ -451,7 +493,8 @@ def get_lab_patients():
                 "foreignField": "institute_id",
                 "as": "patient_visits"
             }
-        }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
     ]
     raw_patients = list(patients.aggregate(pipeline))
     result = []
@@ -461,6 +504,128 @@ def get_lab_patients():
             assembled.pop("_id", None)
             result.append(assembled)
     return result
+
+# ---- BULK REGISTRATION FUNCTIONS ----
+
+def _validate_and_parse_bulk_row(row):
+    """
+    Validate a single CSV row dict. Returns a cleaned patient_data dict.
+    Raises ValueError with a descriptive message on any validation failure.
+    """
+    required_fields = ["institute_id", "name", "email", "date_of_birth", "gender", "contact_no", "patient_type", "address"]
+    for field in required_fields:
+        val = row.get(field)
+        if val is None or str(val).strip() == "" or str(val).strip().lower() == "nan":
+            raise ValueError(f"Missing or empty field: '{field}'")
+
+    institute_id  = str(row["institute_id"]).strip()
+    name          = str(row["name"]).strip()
+    email         = str(row["email"]).strip()
+    dob_str       = str(row["date_of_birth"]).strip()
+    gender        = str(row["gender"]).strip().capitalize()
+    contact_no    = str(row["contact_no"]).strip()
+    patient_type  = str(row["patient_type"]).strip().capitalize()
+    address       = str(row["address"]).strip()
+
+    # Validate date_of_birth format (YYYY-MM-DD or DD-MM-YYYY)
+    try:
+        # pandas may parse the date already; handle both string and datetime
+        if hasattr(dob_str, 'date'):
+            dob = dob_str
+        else:
+            # Try YYYY-MM-DD first
+            try:
+                dob = datetime.strptime(dob_str, "%Y-%m-%d")
+            except ValueError:
+                # Fallback to DD-MM-YYYY (common in Excel/Sheets)
+                try:
+                    dob = datetime.strptime(dob_str, "%m-%d-%Y") # In case it's US format
+                except ValueError:
+                    try:
+                        dob = datetime.strptime(dob_str, "%d-%m-%Y")
+                    except ValueError:
+                        raise ValueError(f"Date '{dob_str}' does not match YYYY-MM-DD or DD-MM-YYYY")
+
+        if dob >= datetime.now():
+            raise ValueError("Date of birth cannot be in the future")
+    except ValueError as e:
+        raise ValueError(f"Invalid date_of_birth format: {str(e)}")
+
+    # Validate gender
+    # Map shorthand gender to full words
+    gender_map = {
+        "M": "Male", "Male": "Male",
+        "F": "Female", "Female": "Female",
+        "O": "Other", "Other": "Other"
+    }
+    gender = gender_map.get(gender.capitalize() if len(gender) == 1 else gender)
+    if not gender:
+        raise ValueError(f"Invalid gender. Use Male (M), Female (F), or Other (O).")
+
+    # Validate contact_no — strip any spaces and check 10 digits
+    contact_no_clean = contact_no.replace(" ", "")
+    if not contact_no_clean.isdigit() or len(contact_no_clean) != 10:
+        raise ValueError(f"Invalid contact_no '{contact_no}': must be exactly 10 digits")
+
+    # Validate patient_type
+    valid_types = ["Student", "Faculty", "Staff", "Dependent", "Other"]
+    if patient_type not in valid_types:
+        raise ValueError(f"Invalid patient_type '{patient_type}': must be one of {valid_types}")
+
+    # Basic email format check
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise ValueError(f"Invalid email format: '{email}'")
+
+    return {
+        "institute_id":   institute_id,
+        "name":           name,
+        "email":          email,
+        "date_of_birth":  dob,         # datetime object — stored as ISODate by MongoDB
+        "gender":         gender,
+        "contact_no":     contact_no_clean,
+        "patient_type":   patient_type,
+        "address":        address,
+        "workflow_status": "active",
+        "bill_status":    "Pending",
+        "import_source":  "bulk_csv",
+    }
+
+
+def bulk_register_patients(rows, admin_username):
+    """
+    Bulk-register patients from a list of CSV row dicts.
+    Validates each row individually. Skips (does NOT overwrite) duplicates.
+    Returns: { success: int, failed: int, errors: list[{row, institute_id, reason}] }
+    """
+    results = {"success": 0, "failed": 0, "errors": []}
+    seen_ids_in_file = set()  # Catch duplicates within the same upload file
+
+    for i, row in enumerate(rows, start=2):  # Row 2 = first data row (row 1 = header)
+        raw_id = str(row.get("institute_id", "")).strip()
+        try:
+            # Within-file duplicate check
+            if raw_id in seen_ids_in_file:
+                raise ValueError("Duplicate institute_id within the uploaded file")
+            seen_ids_in_file.add(raw_id)
+
+            patient_data = _validate_and_parse_bulk_row(row)
+            patient_data["imported_by"] = admin_username
+
+            result_id = register_patient(patient_data)
+            if result_id is None:
+                raise ValueError("Already registered in database (duplicate institute_id — skipped)")
+
+            results["success"] += 1
+
+        except ValueError as e:
+            results["failed"] += 1
+            results["errors"].append({
+                "row": i,
+                "institute_id": raw_id or "(empty)",
+                "reason": str(e)
+            })
+
+    return results
 
 def submit_lab_results(institute_id, results):
     # Depending on your workflow, you might update the visit or patient.

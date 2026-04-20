@@ -186,7 +186,13 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                 <Flex mb={1}>
                   <Text width="90px">Sex & Age</Text>
                   <Text>
-                    : {prescriptionData?.gender?.toUpperCase() || ''} / {prescriptionData?.age || ''}Yr
+                    : {prescriptionData?.gender?.toUpperCase() || ''} / {
+                      prescriptionData?.age
+                        ? prescriptionData.age
+                        : prescriptionData?.date_of_birth
+                          ? (new Date().getFullYear() - new Date(prescriptionData.date_of_birth).getFullYear())
+                          : ''
+                    }Yr
                   </Text>
                 </Flex>
                 <Flex mb={1}>
