@@ -10,3 +10,4 @@ dotenv
 gunicorn
 setuptools
 redis
+boto3
