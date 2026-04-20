@@ -913,7 +913,7 @@ def save_s3_metadata():
 @jwt_required()
 def generate_view_url():
     data = request.json
-    key = data.get("key")
+    key = data.get("s3_key")
 
     if not key:
         return jsonify({"error": "Missing key"}), 400
