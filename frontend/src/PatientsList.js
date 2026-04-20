@@ -37,18 +37,23 @@ import axios from 'axios';
 import BASE_URL from './Config';
 
 export default function PatientsList() {
-  const [patients, setPatients]   = useState([]);
-  const [search, setSearch]       = useState('');
-  const toast                     = useToast();
+  const [patients, setPatients] = useState([]);
+  const [search, setSearch] = useState('');
+  const toast = useToast();
   const { isOpen, onOpen, onClose: closeModal } = useDisclosure();
-  const fileInputRef              = useRef(null);
+  const fileInputRef = useRef(null);
 
   // --- Upload flow state ---
-  const [selectedFile, setSelectedFile]       = useState(null);
-  const [clientRowCount, setClientRowCount]   = useState(0);
-  const [uploading, setUploading]             = useState(false);
-  const [uploadResult, setUploadResult]       = useState(null); // { total, success, failed, errors[] }
-  const [fileError, setFileError]             = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [clientRowCount, setClientRowCount] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null); // { total, success, failed, errors[] }
+  const [fileError, setFileError] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+
+  // --- Pagination state ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const patientsPerPage = 25;
 
   useEffect(() => { fetchPatients(); }, []);
 
@@ -68,9 +73,19 @@ export default function PatientsList() {
   // Filter by institute_id, name, or contact_no
   const filtered = patients.filter(p =>
     (p.institute_id && p.institute_id.toString().toLowerCase().includes(search.toLowerCase())) ||
-    (p.name         && p.name.toLowerCase().includes(search.toLowerCase())) ||
-    (p.contact_no   && p.contact_no.includes(search))
+    (p.name && p.name.toLowerCase().includes(search.toLowerCase())) ||
+    (p.contact_no && p.contact_no.includes(search))
   );
+
+  // Pagination logic
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search]);
+
+  const totalPages = Math.ceil(filtered.length / patientsPerPage);
+  const indexOfLast = currentPage * patientsPerPage;
+  const indexOfFirst = indexOfLast - patientsPerPage;
+  const currentPatients = filtered.slice(indexOfFirst, indexOfLast);
 
   // ---- Template Download ----
   const handleDownloadTemplate = async () => {
@@ -81,8 +96,8 @@ export default function PatientsList() {
         responseType: 'blob',
       });
       const url = URL.createObjectURL(new Blob([res.data]));
-      const a   = document.createElement('a');
-      a.href    = url;
+      const a = document.createElement('a');
+      a.href = url;
       a.download = 'student_bulk_registration_template.xlsx';
       a.click();
       URL.revokeObjectURL(url);
@@ -113,7 +128,7 @@ export default function PatientsList() {
     }
 
     // Count data rows (client-side, ignoring comment lines)
-    const text  = await file.text();
+    const text = await file.text();
     const lines = text
       .split('\n')
       .filter(l => l.trim() !== '' && !l.trim().startsWith('#'));
@@ -122,7 +137,7 @@ export default function PatientsList() {
     // Check required headers
     const header = lines[0]?.toLowerCase() || '';
     const requiredHeaders = ['institute_id', 'name', 'email', 'date_of_birth', 'gender', 'contact_no', 'patient_type', 'address'];
-    const missingHeaders  = requiredHeaders.filter(h => !header.includes(h));
+    const missingHeaders = requiredHeaders.filter(h => !header.includes(h));
     if (missingHeaders.length > 0) {
       setFileError(`Missing required columns: ${missingHeaders.join(', ')}`);
       setSelectedFile(null);
@@ -139,7 +154,7 @@ export default function PatientsList() {
     setUploading(true);
     setUploadResult(null);
     try {
-      const token    = localStorage.getItem('token');
+      const token = localStorage.getItem('token');
       const formData = new FormData();
       formData.append('file', selectedFile);
       const { data } = await axios.post(`${BASE_URL}/admin/bulk_register`, formData, {
@@ -165,8 +180,8 @@ export default function PatientsList() {
       'Row,Institute ID,Reason',
       ...uploadResult.errors.map(e => `${e.row},${e.institute_id},"${e.reason}"`)
     ].join('\n');
-    const a   = document.createElement('a');
-    a.href    = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+    const a = document.createElement('a');
+    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
     a.download = 'upload_errors.csv';
     a.click();
   };
@@ -231,9 +246,9 @@ export default function PatientsList() {
             </Tr>
           </Thead>
           <Tbody>
-            {filtered.map((p) => (
+            {currentPatients.map((p) => (
               <Tr key={p.institute_id} _hover={{ bg: 'gray.50' }}>
-                <Td fontFamily="mono" fontSize="sm">{p.institute_id}</Td>
+                <Td>{p.institute_id}</Td>
                 <Td>{p.name}</Td>
                 <Td>{p.contact_no}</Td>
                 <Td>{p.age ?? '—'}</Td>
@@ -249,7 +264,7 @@ export default function PatientsList() {
                 </Td>
               </Tr>
             ))}
-            {filtered.length === 0 && (
+            {currentPatients.length === 0 && (
               <Tr>
                 <Td colSpan={6} textAlign="center" py="6" color="gray.400">
                   No patients found.
@@ -259,6 +274,33 @@ export default function PatientsList() {
           </Tbody>
         </Table>
       </Box>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <Flex justify="center" mt="8" align="center" gap="5">
+          <Button
+            size="sm"
+            variant="outline"
+            colorScheme="blue"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            isDisabled={currentPage === 1}
+          >
+            Previous
+          </Button>
+          <Text fontSize="sm" fontWeight="semibold" color="gray.600">
+            Page {currentPage} of {totalPages}
+          </Text>
+          <Button
+            size="sm"
+            variant="outline"
+            colorScheme="blue"
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            isDisabled={currentPage === totalPages}
+          >
+            Next
+          </Button>
+        </Flex>
+      )}
 
       {/* ===== Bulk Upload Modal ===== */}
       <Modal isOpen={isOpen} onClose={handleModalClose} isCentered size="xl">
@@ -284,9 +326,27 @@ export default function PatientsList() {
                     borderRadius="lg"
                     p={8}
                     textAlign="center"
-                    bg={selectedFile ? 'green.50' : 'blue.50'}
+                    bg={isDragging ? 'blue.100' : selectedFile ? 'green.50' : 'blue.50'}
                     cursor="pointer"
                     onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        handleFileSelect(e.dataTransfer.files[0]);
+                      }
+                    }}
                     _hover={{ bg: selectedFile ? 'green.100' : 'blue.100' }}
                     transition="all 0.2s"
                   >
@@ -313,10 +373,10 @@ export default function PatientsList() {
                           Click to browse or drag & drop your CSV
                         </Text>
                         <Text fontSize="sm" color="gray.500">
-                          Max: 5 MB · Only .csv files accepted
+                          Max: 5 MB - Only .csv files accepted
                         </Text>
-                        <Badge colorScheme="orange" variant="subtle" mt={1}>
-                          Pro-tip: Save your Excel template as .csv before uploading
+                        <Badge colorScheme="orange" variant="subtle" mt={1} textTransform="none">
+                          Save your Excel template as .csv before uploading
                         </Badge>
                       </VStack>
                     )}
@@ -401,8 +461,8 @@ export default function PatientsList() {
                             {uploadResult.errors.map((e, i) => (
                               <Tr key={i}>
                                 <Td color="gray.500">{e.row}</Td>
-                                <Td fontFamily="mono" fontSize="xs">{e.institute_id}</Td>
-                                <Td color="red.600" fontSize="sm">{e.reason}</Td>
+                                <Td>{e.institute_id}</Td>
+                                <Td color="red.600">{e.reason}</Td>
                               </Tr>
                             ))}
                           </Tbody>

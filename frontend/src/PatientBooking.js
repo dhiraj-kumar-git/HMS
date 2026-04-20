@@ -210,7 +210,7 @@ const PatientBooking = () => {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
-          warning = `Warning: Dr. ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s.`;
           altDoc = doctors.find(alt =>
             alt.username !== doc.username &&
             alt.department === doc.department &&
@@ -238,7 +238,7 @@ const PatientBooking = () => {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
-          warning = `Warning: Dr. ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s.`;
           altDoc = doctors.find(alt =>
             alt.username !== doc.username &&
             alt.department === doc.department &&
@@ -658,10 +658,10 @@ const PatientBooking = () => {
                             {alternativeDoctor && (
                               <Box mt={3} ml={7}>
                                 <Text fontSize="sm" mb={2} color="orange.800">
-                                  However, <strong>Dr. {alternativeDoctor.display_name}</strong> is available in the {alternativeDoctor.department} department today.
+                                  However, <strong>{alternativeDoctor.display_name}</strong> is available in the {alternativeDoctor.department} department today.
                                 </Text>
                                 <Button size="sm" colorScheme="orange" onClick={handleSwitchAlternative}>
-                                  Switch to Dr. {alternativeDoctor.display_name}
+                                  Switch to {alternativeDoctor.display_name}
                                 </Button>
                               </Box>
                             )}
