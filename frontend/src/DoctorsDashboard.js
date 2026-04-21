@@ -142,21 +142,37 @@ export default function DoctorsDashboard() {
       const res = await axios.get(`${BASE_URL}/doctor/patients`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const patientsWithDetails = res.data.map((patient) => ({
-        ...patient,
-        doctorAssigned: patient.doctor_assigned,
-        visitingTime: new Date(patient.registration_time).toLocaleString(
-          "en-US",
-          {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          }
-        ),
-      }));
+      const patientsWithDetails = res.data.map((patient) => {
+  const appointments = Array.isArray(patient.appointments)
+    ? patient.appointments
+    : [];
+
+  const latestVisit = appointments.length
+    ? [...appointments].sort(
+        (a, b) =>
+          new Date(b.booked_at || 0) - new Date(a.booked_at || 0)
+      )[0]
+    : null;
+
+  return {
+    ...patient,
+    doctorAssigned: patient.doctor_assigned,
+
+    visitingTime: patient.registration_time
+      ? new Date(patient.registration_time).toLocaleString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        })
+      : "N/A",
+
+    // ✅ FIXED
+    lab_reports: latestVisit?.lab_reports || [],
+  };
+});
       setPatients(patientsWithDetails);
     } catch (e) {
       toast({
@@ -253,6 +269,54 @@ export default function DoctorsDashboard() {
       toast({ title: "Error", description: e.message, status: "error" });
     }
   };
+
+  const handleViewReports = async (reports) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const s3Reports = reports.filter((r) => r && r.s3_key);
+
+    if (!s3Reports.length) {
+      toast({
+        title: "No file reports available",
+        status: "info",
+      });
+      return;
+    }
+
+    const r = s3Reports[0]; // only latest report
+    const res = await axios.post(
+        `${BASE_URL}/s3/view-url`,
+        { s3_key: r.s3_key },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.data?.url) {
+        const url = res.data.url;
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = r.file_name || "LabReport.pdf";
+
+        document.body.appendChild(link);
+        link.click();
+
+        link.remove();
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    }
+  catch (err) {
+    toast({
+      title: "Error opening report",
+      description: err.message,
+      status: "error",
+    });
+  }
+};
 
   const handleAddMedicines = async () => {
     if (!selectedPatient || !selectedMedicines.length) return;
@@ -719,6 +783,7 @@ export default function DoctorsDashboard() {
                         <Th>Gender</Th>
                         <Th>Visiting Time</Th>
                         <Th>Last Visit</Th>
+                        <Th>Lab Reports</Th>
                       </Tr>
                     </Thead>
                     <Tbody>
@@ -760,6 +825,23 @@ export default function DoctorsDashboard() {
                           <Td><Text fontSize="sm">{p.gender}</Text></Td>
                           <Td><Text fontSize="sm">{p.visitingTime}</Text></Td>
                           <Td><Text fontSize="sm">{p.lastVisit || "Nil"}</Text></Td>
+                          <Td>
+                          {Array.isArray(p.lab_reports) &&
+                          p.lab_reports.some((r) => r && r.s3_key) ? (
+                            <Button
+                              size="sm"
+                              colorScheme="blue"
+                              onClick={(e) => {
+                                e.stopPropagation(); // prevents modal open
+                                handleViewReports(p.lab_reports);
+                              }}
+                            >
+                              View
+                            </Button>
+                          ) : (
+                            <Text fontSize="sm">—</Text>
+                          )}
+                        </Td>
                         </Tr>
                       ))}
                     </Tbody>

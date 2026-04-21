@@ -195,6 +195,7 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
     )
     visit_dict = v.to_dict()
     visit_dict["doctor_name"] = doctor_name
+    visit_dict["booked_at"] = datetime.now().isoformat()
     visits.insert_one(visit_dict)
     
     # Update active status
@@ -212,38 +213,89 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
 def _map_aggregated_patient(patient):
     if not patient:
         return None
+
     if "_id" in patient:
         patient["_id"] = str(patient["_id"])
-    
+
     patient_visits = patient.pop("patient_visits", [])
-    patient_visits = sorted(patient_visits, key=lambda x: x.get("booked_at", ""))
-    
+
+    # Safer sort (handles missing booked_at)
+    patient_visits = sorted(
+        patient_visits,
+        key=lambda x: x.get("booked_at") or ""
+    )
+
+    # Flattened (global) data — keep for compatibility
     patient["appointments"] = []
     patient["prescriptions"] = []
     patient["prescription_details"] = []
     patient["lab_tests"] = []
     patient["lab_reports"] = []
     patient["remarks"] = []
-    
+
     for v in patient_visits:
+        # ✅ KEY CHANGE: attach lab_reports to EACH visit
         patient["appointments"].append({
+            "visit_id": v.get("visit_id"),  # important for frontend mapping
             "doctor_username": v.get("doctor_username"),
             "doctor_name": v.get("doctor_name", v.get("doctor_username")),
             "status": v.get("status"),
             "time": v.get("time"),
             "booked_at": v.get("booked_at"),
+
+            # 👇 THIS ENABLES YOUR S3 VIEW BUTTON
+            "lab_reports": v.get("lab_reports", []),
+
             "prescription_summary": v.get("prescription_summary", []),
             "prescription_remarks_summary": v.get("prescription_remarks_summary", []),
             "lab_test_summary": v.get("lab_test_summary", []),
             "diagnosis_note": v.get("diagnosis_note", [])
         })
+
+        # Existing flattened data (unchanged)
         patient["prescriptions"].extend(v.get("prescriptions", []))
         patient["prescription_details"].extend(v.get("prescription_details", []))
         patient["lab_tests"].extend(v.get("lab_tests", []))
         patient["lab_reports"].extend(v.get("lab_reports", []))
         patient["remarks"].extend(v.get("remarks", []))
-        
+
     return patient
+
+# def _map_aggregated_patient(patient):
+#     if not patient:
+#         return None
+#     if "_id" in patient:
+#         patient["_id"] = str(patient["_id"])
+    
+#     patient_visits = patient.pop("patient_visits", [])
+#     patient_visits = sorted(patient_visits, key=lambda x: x.get("booked_at", ""))
+    
+#     patient["appointments"] = []
+#     patient["prescriptions"] = []
+#     patient["prescription_details"] = []
+#     patient["lab_tests"] = []
+#     patient["lab_reports"] = []
+#     patient["remarks"] = []
+    
+#     for v in patient_visits:
+#         patient["appointments"].append({
+#             "doctor_username": v.get("doctor_username"),
+#             "doctor_name": v.get("doctor_name", v.get("doctor_username")),
+#             "status": v.get("status"),
+#             "time": v.get("time"),
+#             "booked_at": v.get("booked_at"),
+#             "prescription_summary": v.get("prescription_summary", []),
+#             "prescription_remarks_summary": v.get("prescription_remarks_summary", []),
+#             "lab_test_summary": v.get("lab_test_summary", []),
+#             "diagnosis_note": v.get("diagnosis_note", [])
+#         })
+#         patient["prescriptions"].extend(v.get("prescriptions", []))
+#         patient["prescription_details"].extend(v.get("prescription_details", []))
+#         patient["lab_tests"].extend(v.get("lab_tests", []))
+#         patient["lab_reports"].extend(v.get("lab_reports", []))
+#         patient["remarks"].extend(v.get("remarks", []))
+        
+#     return patient
 
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):

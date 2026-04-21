@@ -10,12 +10,13 @@ import uuid
 from database import get_patient_by_id
 import pandas as pd
 import json
-import os
+import boto3
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
@@ -810,6 +811,127 @@ def public_book_appointment():
     if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
         return jsonify({"message": "Appointment booked successfully"}), 200
     return jsonify({"error": "Failed to book appointment"}), 400
+
+
+# uploading lab reports to s3
+
+from botocore.config import Config
+
+s3 = boto3.client(
+    "s3",
+    region_name="eu-north-1",
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+    config=Config(
+        signature_version="s3v4",
+        s3={"addressing_style": "virtual"}
+    )
+)
+BUCKET = "hms-lab-reports"
+
+try:
+    print(s3.list_buckets())
+except Exception as e:
+    print("S3 ERROR:", e)
+
+@app.route("/debug/s3")
+def debug_s3():
+    try:
+        buckets = s3.list_buckets()
+        return buckets
+    except Exception as e:
+        return {"error": str(e)}
+    
+@app.route('/s3/upload-url', methods=['POST'])
+@jwt_required()
+def generate_upload_url():
+    data = request.json
+    instituteId=data.get("instituteId")
+    filename = data.get("filename")
+    content_type = data.get("content_type")
+
+
+    if not filename or not content_type:
+        return jsonify({"error": "Missing fields"}), 400
+
+    user = get_jwt_identity()
+    key = f"reports/{user}/{uuid.uuid4()}_{filename}"
+    # user="user"
+    # key= f"reports/{user}/{filename}"
+
+    try:
+        url = s3.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": "hms-lab-reports",
+                "Key": key,
+                "ContentType": content_type
+            },
+            ExpiresIn=600
+        )
+
+        return jsonify({
+            "upload_url": url,
+            "key": key
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/s3/save-metadata', methods=['POST'])
+@jwt_required()
+def save_s3_metadata():
+    data = request.json
+
+    institute_id = data.get("instituteId")
+    key = data.get("key")
+    filename = data.get("filename")
+
+    if not institute_id or not key or not filename:
+        return jsonify({"error": "Missing fields"}), 400
+
+    user = get_jwt_identity()
+
+    report_data = {
+        "file_name": filename,
+        "s3_key": key,
+        "uploaded_by": user,
+        "uploaded_at": datetime.utcnow()
+    }
+
+    try:
+        if database.add_lab_report(institute_id,report_data):
+            return jsonify({"message": "Metadata saved"}), 200
+
+        else:
+            return jsonify({"error": "Patient not found"}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/s3/view-url', methods=['POST'])
+@jwt_required()
+def generate_view_url():
+    data = request.json
+    key = data.get("s3_key")
+
+    if not key:
+        return jsonify({"error": "Missing key"}), 400
+
+    try:
+        url = s3.generate_presigned_url(
+            "get_object",
+            Params={
+                "Bucket": "hms-lab-reports",
+                "Key": key
+            },
+            ExpiresIn=300
+        )
+
+        return jsonify({"url": url})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     import os
