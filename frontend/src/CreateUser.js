@@ -23,10 +23,10 @@ import { FiPlus, FiTrash2 } from "react-icons/fi";
 import axios from "axios";
 import BASE_URL from './Config';
 
-const DEFAULT_SCHEDULE = { 
-  duty_days: [], 
-  start_hr: "09", start_min: "00", start_ampm: "AM", 
-  end_hr: "05", end_min: "00", end_ampm: "PM" 
+const DEFAULT_SCHEDULE = {
+  duty_days: [],
+  start_hr: "09", start_min: "00", start_ampm: "AM",
+  end_hr: "05", end_min: "00", end_ampm: "PM"
 };
 
 export default function CreateUser() {
@@ -128,9 +128,9 @@ export default function CreateUser() {
           if (!sharedDay) return false; // different days — no conflict
           // Second: do their time windows overlap?
           const aStart = convertToMins(a.start_hr, a.start_min, a.start_ampm);
-          const aEnd   = convertToMins(a.end_hr, a.end_min, a.end_ampm);
+          const aEnd = convertToMins(a.end_hr, a.end_min, a.end_ampm);
           const bStart = convertToMins(b.start_hr, b.start_min, b.start_ampm);
-          const bEnd   = convertToMins(b.end_hr, b.end_min, b.end_ampm);
+          const bEnd = convertToMins(b.end_hr, b.end_min, b.end_ampm);
           return aStart < bEnd && bStart < aEnd;
         })
       );
@@ -158,7 +158,7 @@ export default function CreateUser() {
 
       const finalDisplayName =
         role === "doctor"
-          ? `Dr. ${cleanName}`
+          ? `${cleanName}`
           : cleanName;
 
       await axios.post(`${BASE_URL}/create_user`, {
@@ -270,14 +270,14 @@ export default function CreateUser() {
                   setNewUser({ ...newUser, department: e.target.value })
                 }
               >
-              <option value="Ayurvedic">Ayurvedic</option>
-              <option value="Dentist">Dentist</option>
-              <option value="Dermatologist">Dermatologist</option>
-              <option value="ENT">ENT</option>
-              <option value="Gynaecology">Gynaecology</option>
-              <option value="Homeopathic">Homeopathic</option>
-              <option value="Orthopaedics">Orthopaedics</option>
-              <option value="Paediatrician">Paediatrician</option>
+                <option value="Ayurvedic">Ayurvedic</option>
+                <option value="Dentist">Dentist</option>
+                <option value="Dermatologist">Dermatologist</option>
+                <option value="ENT">ENT</option>
+                <option value="Gynaecology">Gynaecology</option>
+                <option value="Homeopathic">Homeopathic</option>
+                <option value="Orthopaedics">Orthopaedics</option>
+                <option value="Paediatrician">Paediatrician</option>
               </Select>
             </FormControl>
 
@@ -295,9 +295,9 @@ export default function CreateUser() {
                   <Text fontSize="sm" fontWeight="semibold" color="gray.600">Shift {idx + 1}</Text>
                   {newUser.schedule.length > 1 && (
                     <IconButton size="xs" colorScheme="red" icon={<FiTrash2 />} onClick={() => {
-                        const updated = [...newUser.schedule];
-                        updated.splice(idx, 1);
-                        setNewUser(prev => ({ ...prev, schedule: updated }));
+                      const updated = [...newUser.schedule];
+                      updated.splice(idx, 1);
+                      setNewUser(prev => ({ ...prev, schedule: updated }));
                     }} />
                   )}
                 </Flex>
@@ -388,7 +388,7 @@ export default function CreateUser() {
                       </Select>
                     </Flex>
                   </FormControl>
-        
+
                   <FormControl w="auto">
                     <FormLabel fontSize="sm">End Time</FormLabel>
                     <Flex gap="2">
