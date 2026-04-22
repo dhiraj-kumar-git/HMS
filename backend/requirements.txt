@@ -1,0 +1,13 @@
+Flask
+Flask-Cors
+Flask-JWT-Extended
+pymongo
+python-dotenv
+bcrypt
+pandas
+openpyxl
+dotenv
+gunicorn
+setuptools
+redis
+boto3
