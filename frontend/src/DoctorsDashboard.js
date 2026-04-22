@@ -67,7 +67,10 @@ export default function DoctorsDashboard() {
 
   // MODAL & SELECTION
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [sessionHasMeds, setSessionHasMeds] = useState(false);
+  const [sessionHasLabs, setSessionHasLabs] = useState(false);
 
   // PRESCRIPTION & REMARK
   const [prescriptionDetails, setPrescriptionDetails] = useState("");
@@ -268,6 +271,7 @@ export default function DoctorsDashboard() {
         )
       );
       toast({ title: "Medicines Added", status: "success" });
+      setSessionHasMeds(true);
       setSelectedMedicines([]);
     } catch (e) {
       toast({ title: "Error", description: e.message, status: "error" });
@@ -288,23 +292,33 @@ export default function DoctorsDashboard() {
         )
       );
       toast({ title: "Lab Tests Added", status: "success" });
+      setSessionHasLabs(true);
       setSelectedLabTests([]);
     } catch (e) {
       toast({ title: "Error", description: e.message, status: "error" });
     }
   };
 
-  const handleCompletePatient = async () => {
+  const handleSaveAndUpdate = async () => {
     if (!selectedPatient) return;
+    if (!sessionHasMeds && !sessionHasLabs) {
+      onConfirmOpen();
+      return;
+    }
+    await executeSaveAndUpdate(sessionHasLabs, sessionHasMeds);
+  };
+
+  const executeSaveAndUpdate = async (hasLabs, hasMeds) => {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/doctor/complete_patient/${selectedPatient.institute_id}`,
-        {},
+        `${BASE_URL}/doctor/save_consultation/${selectedPatient.institute_id}`,
+        { has_labs: hasLabs, has_meds: hasMeds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast({ title: "Patient Completed", status: "success" });
+      toast({ title: "Status Updated", status: "success" });
       await fetchPatients();
+      onConfirmClose();
       onClose();
       setSelectedPatient(null);
     } catch (e) {
@@ -315,6 +329,8 @@ export default function DoctorsDashboard() {
   // Open modal
   const openPatientModal = (patient) => {
     setSelectedPatient(patient);
+    setSessionHasMeds(false);
+    setSessionHasLabs(false);
     onOpen();
   };
 
@@ -921,12 +937,33 @@ export default function DoctorsDashboard() {
             </Grid>
           </ModalBody>
           <ModalFooter justifyContent="center">
-            <Button colorScheme="green" onClick={handleCompletePatient}>
-              Mark Complete
+            <Button colorScheme="green" onClick={handleSaveAndUpdate}>
+              Save & Update Status
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* CONFIRMATION MODAL */}
+      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Confirm Status Update</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text>No medicines or lab tests were assigned to this patient. Are you sure you want to proceed? This will mark the patient as completed and skip the billing/lab process.</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="gray" mr={3} onClick={onConfirmClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="blue" onClick={() => executeSaveAndUpdate(false, false)}>
+              Confirm & Complete
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
     </Flex>
   );
 }

@@ -182,10 +182,10 @@ function MedicalCounterDashboard() {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        `${BASE_URL}/submit_lab_tests`,
+        `${BASE_URL}/pay_bill`,
         {
           institute_id: selectedPatient.institute_id,
-          lab_tests: selectedPatient.lab_tests,
+          has_labs: selectedPatient.lab_tests && selectedPatient.lab_tests.length > 0,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );

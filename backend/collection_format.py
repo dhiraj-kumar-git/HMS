@@ -14,8 +14,9 @@ class Patient:
     registration_time: datetime
     doctor_assigned: Optional[str] = None
     email: Optional[str] = None
-    bill_status: Optional[str] = "Pending"
-    workflow_status: str = "active"
+    bill_status: Optional[str] = "none"
+    workflow_status: str = "inactive"
+    lab_status: str = "none"
 
     def to_dict(self) -> dict:
         patient_dict = asdict(self)

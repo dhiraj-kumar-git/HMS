@@ -296,6 +296,7 @@ export default function LabTestDashboard() {
       localStorage.setItem("refreshReports", "true");
 
       onClose();
+      fetchPatients();
     } catch (e) {
       console.error("Error saving report:", e);
       toast({

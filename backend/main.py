@@ -151,8 +151,9 @@ def register_patient():
         "doctor_assigned": doctor_assigned,
         "doctor_name": doctor_name,
         "patient_type": patient_type,
-        "workflow_status": "active",
-        "bill_status": "Pending",
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none",
         "lab_tests": [],
         "lab_results": []
     }
@@ -501,17 +502,28 @@ def add_remark_route():
         return jsonify({"message": "Remark added successfully"}), 200
     return jsonify({"error": "Failed to add remark"}), 400
 
-# Endpoint for doctor to mark a patient as complete
-@app.route('/doctor/complete_patient/<institute_id>', methods=['POST'])
+# Endpoint for doctor to confirm consultation details and update statuses
+@app.route('/doctor/save_consultation/<institute_id>', methods=['POST'])
 @jwt_required()
-def complete_patient_route(institute_id):
+def save_consultation_route(institute_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
-    if database.complete_patient(institute_id):
-        return jsonify({"message": "Patient marked as complete"}), 200
-    return jsonify({"error": "Failed to mark patient as complete"}), 400
+    data = request.json
+    has_labs = data.get("has_labs", False)
+    has_meds = data.get("has_meds", False)
+
+    if not has_labs and not has_meds:
+        # Confirming no meds/labs -> directly to complete
+        if database.complete_patient(institute_id):
+            return jsonify({"message": "Patient marked as complete (no meds/labs)"}), 200
+        return jsonify({"error": "Failed to update patient"}), 400
+    else:
+        # Consultation -> billing
+        if database.consultation_patient(institute_id, has_labs):
+            return jsonify({"message": "Patient moved to billing/consultation"}), 200
+        return jsonify({"error": "Failed to update patient"}), 400
 
 # Endpoint to fetch inactive (or completed) patients assigned to the doctor
 @app.route('/doctor/patients_inactive', methods=['GET'])
@@ -540,24 +552,24 @@ def active_registrations():
     regs = database.get_active_pending_patients()
     return jsonify(regs), 200
 
-@app.route('/submit_lab_tests', methods=['POST'])
+@app.route('/pay_bill', methods=['POST'])
 @jwt_required()
-def submit_lab_tests_route():
+def pay_bill_route():
     claims = get_jwt()
     if claims.get("role") != "medical_store":
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
     institute_id = data.get("institute_id")
-    lab_tests = data.get("lab_tests")
-    if not institute_id or not lab_tests:
-        return jsonify({"error": "Missing required fields"}), 400
+    has_labs = data.get("has_labs", False)
+    if not institute_id:
+        return jsonify({"error": "Missing institute_id"}), 400
 
-    success = database.submit_lab_tests(institute_id)
+    success = database.pay_bill(institute_id, has_labs)
     if success:
-        return jsonify({"message": "Lab tests submitted successfully"}), 200
+        return jsonify({"message": "Bill paid successfully"}), 200
     else:
-        return jsonify({"error": "Failed to submit lab tests"}), 400
+        return jsonify({"error": "Failed to pay bill"}), 400
 
 # Get patients with Paid bills and Active status
 @app.route('/lab/patients', methods=['GET'])
@@ -764,8 +776,9 @@ def public_register_patient():
         "email": email,
         "address": address,
         "patient_type": patient_type,
-        "workflow_status": "active",
-        "bill_status": "Pending",
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none",
         "lab_tests": [],
         "appointments": []
     }
