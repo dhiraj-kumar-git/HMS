@@ -47,6 +47,7 @@ import {
   FiCopy,
   FiRefreshCw,
   FiSearch,
+  FiCheckCircle,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -71,6 +72,7 @@ export default function DoctorsDashboard() {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [sessionHasMeds, setSessionHasMeds] = useState(false);
   const [sessionHasLabs, setSessionHasLabs] = useState(false);
+  const [readyToComplete, setReadyToComplete] = useState({}); // { institute_id: { hasLabs, hasMeds } }
 
   // PRESCRIPTION & REMARK
   const [prescriptionDetails, setPrescriptionDetails] = useState("");
@@ -161,6 +163,15 @@ export default function DoctorsDashboard() {
         ),
       }));
       setPatients(patientsWithDetails);
+
+      // Derive readyToComplete from workflow_status
+      const readyMap = {};
+      patientsWithDetails.forEach(p => {
+        if (p.workflow_status === "consultation") {
+          readyMap[p.institute_id] = true;
+        }
+      });
+      setReadyToComplete(readyMap);
     } catch (e) {
       toast({
         title: "Error fetching patients",
@@ -299,16 +310,8 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const handleSaveAndUpdate = async () => {
+  const markAsReady = async (hasLabs, hasMeds) => {
     if (!selectedPatient) return;
-    if (!sessionHasMeds && !sessionHasLabs) {
-      onConfirmOpen();
-      return;
-    }
-    await executeSaveAndUpdate(sessionHasLabs, sessionHasMeds);
-  };
-
-  const executeSaveAndUpdate = async (hasLabs, hasMeds) => {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
@@ -316,13 +319,48 @@ export default function DoctorsDashboard() {
         { has_labs: hasLabs, has_meds: hasMeds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast({ title: "Status Updated", status: "success" });
-      await fetchPatients();
+      toast({ 
+        title: "Consultation details saved", 
+        description: "Please click the green tick icon in the patient list to complete this consultation.",
+        status: "success",
+        duration: 5000,
+        isClosable: true
+      });
       onConfirmClose();
       onClose();
-      setSelectedPatient(null);
+      await fetchPatients();
     } catch (e) {
-      toast({ title: "Error", description: e.message, status: "error" });
+      toast({ title: "Error saving details", description: e.message, status: "error" });
+    }
+  };
+
+  const handleSaveDetails = () => {
+    if (!selectedPatient) return;
+    if (!sessionHasMeds && !sessionHasLabs) {
+      onConfirmOpen();
+      return;
+    }
+    markAsReady(sessionHasLabs, sessionHasMeds);
+  };
+
+  const executeSaveAndUpdate = async (patientId) => {
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(
+        `${BASE_URL}/doctor/complete_consultation/${patientId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast({ title: "Consultation Completed", status: "success" });
+      
+      await fetchPatients();
+      onConfirmClose();
+      if (selectedPatient?.institute_id === patientId) {
+        onClose();
+        setSelectedPatient(null);
+      }
+    } catch (e) {
+      toast({ title: "Error completing consultation", description: e.message, status: "error" });
     }
   };
 
@@ -735,6 +773,7 @@ export default function DoctorsDashboard() {
                         <Th>Gender</Th>
                         <Th>Visiting Time</Th>
                         <Th>Last Visit</Th>
+                        <Th textAlign="center">Actions</Th>
                       </Tr>
                     </Thead>
                     <Tbody>
@@ -776,6 +815,18 @@ export default function DoctorsDashboard() {
                           <Td><Text fontSize="sm">{p.gender}</Text></Td>
                           <Td><Text fontSize="sm">{p.visitingTime}</Text></Td>
                           <Td><Text fontSize="sm">{p.lastVisit || "Nil"}</Text></Td>
+                          <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                            {readyToComplete[p.institute_id] && (
+                              <IconButton
+                                aria-label="Complete consultation"
+                                icon={<FiCheckCircle />}
+                                colorScheme="green"
+                                size="sm"
+                                onClick={() => executeSaveAndUpdate(p.institute_id)}
+                                title="Complete consultation"
+                              />
+                            )}
+                          </Td>
                         </Tr>
                       ))}
                     </Tbody>
@@ -937,8 +988,8 @@ export default function DoctorsDashboard() {
             </Grid>
           </ModalBody>
           <ModalFooter justifyContent="center">
-            <Button colorScheme="green" onClick={handleSaveAndUpdate}>
-              Save & Update Status
+            <Button colorScheme="green" onClick={handleSaveDetails}>
+              Save all Details
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -951,14 +1002,14 @@ export default function DoctorsDashboard() {
           <ModalHeader>Confirm Status Update</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <Text>No medicines or lab tests were assigned to this patient. Are you sure you want to proceed? This will mark the patient as completed and skip the billing/lab process.</Text>
+            <Text>No medicines or lab tests were assigned to this patient. Proceeding will save this as ready to complete without billing or lab requirements.</Text>
           </ModalBody>
           <ModalFooter>
             <Button colorScheme="gray" mr={3} onClick={onConfirmClose}>
               Cancel
             </Button>
-            <Button colorScheme="blue" onClick={() => executeSaveAndUpdate(false, false)}>
-              Confirm & Complete
+            <Button colorScheme="blue" onClick={() => markAsReady(false, false)}>
+              Confirm & Save
             </Button>
           </ModalFooter>
         </ModalContent>

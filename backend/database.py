@@ -307,7 +307,7 @@ def get_patient_by_id(institute_id):
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
     pipeline = [
-        {"$match": {"doctor_assigned": doctor_username, "workflow_status": "active"}},
+        {"$match": {"doctor_assigned": doctor_username, "workflow_status": {"$in": ["active", "consultation"]}}},
         {
             "$lookup": {
                 "from": "visits",
@@ -329,7 +329,7 @@ def _get_active_visit_id(institute_id):
         return visit["visit_id"]
     return None
 
-def _finalize_visit(institute_id):
+def _finalize_visit(institute_id, mark_as_completed=True):
     visit_id = _get_active_visit_id(institute_id)
     if visit_id:
         visit = visits.find_one({"visit_id": visit_id})
@@ -339,15 +339,18 @@ def _finalize_visit(institute_id):
             remarks = [r.get("remark") for r in visit.get("remarks", [])]
             prescription_details = [pd.get("prescription_details") for pd in visit.get("prescription_details", [])]
             
+            update_data = {
+                "prescription_summary": prescriptions,
+                "prescription_remarks_summary": prescription_details,
+                "lab_test_summary": lab_tests,
+                "diagnosis_note": remarks
+            }
+            if mark_as_completed:
+                update_data["status"] = "completed"
+            
             visits.update_one(
                 {"visit_id": visit_id},
-                {"$set": {
-                    "status": "completed",
-                    "prescription_summary": prescriptions,
-                    "prescription_remarks_summary": prescription_details,
-                    "lab_test_summary": lab_tests,
-                    "diagnosis_note": remarks
-                }}
+                {"$set": update_data}
             )
 
 # Add a prescription to a patient (recording the doctor's note)
@@ -435,11 +438,12 @@ def add_remark(institute_id, remark, doctor_username):
     return result.modified_count > 0
 
 # Mark a patient as complete (workflow_status "completed") when no meds/labs are given
+# (This is now largely replaced by the two-step consultation flow)
 def complete_patient(institute_id):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
-    _finalize_visit(institute_id)
+    _finalize_visit(institute_id, mark_as_completed=True)
 
     result = patients.update_one(
         {"institute_id": institute_id},
@@ -451,20 +455,48 @@ def complete_patient(institute_id):
     )
     return result.modified_count > 0
 
-# Mark a patient for consultation when meds/labs are given
-def consultation_patient(institute_id, has_labs):
+# Set patient status to 'consultation'
+def consultation_patient(institute_id, has_labs, has_meds):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
     lab_status = "active" if has_labs else "none"
+    bill_status = "pending" if (has_labs or has_meds) else "none"
+    
+    # Update visit summary so patient can see it in history immediately
+    _finalize_visit(institute_id, mark_as_completed=False)
     
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
             "workflow_status": "consultation",
-            "bill_status": "pending",
+            "bill_status": bill_status,
             "lab_status": lab_status
         }}
+    )
+    return result.modified_count > 0
+
+# Move patient to 'consultation completed' or 'completed'
+def complete_consultation(institute_id):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+    
+    # Finalize the visit status to "completed" in the visits collection
+    _finalize_visit(institute_id, mark_as_completed=True)
+    
+    # Check if we can move straight to "completed" in the patients collection
+    # If bill is already paid (or none) and labs are already completed (or none)
+    bill_status = patient.get("bill_status", "none")
+    lab_status = patient.get("lab_status", "none")
+    
+    if bill_status in ["paid", "none"] and lab_status in ["completed", "none"]:
+        new_status = "completed"
+    else:
+        new_status = "consultation completed"
+
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"workflow_status": new_status}}
     )
     return result.modified_count > 0
 
@@ -664,18 +696,26 @@ def bulk_register_patients(rows, admin_username):
     return results
 
 def submit_lab_results(institute_id, results):
-    # Depending on your workflow, you might update the visit or patient.
-    # We will mark patient as completed and attach results to the active visit.
+    # Mark patient as completed if doctor has already finished consultation
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+
     visit_id = _get_active_visit_id(institute_id)
     if visit_id:
         visits.update_one(
             {"visit_id": visit_id},
             {"$set": {"lab_results": results}}
         )
-    _finalize_visit(institute_id)
+    _finalize_visit(institute_id, mark_as_completed=True)
+
+    new_workflow_status = "completed"
+    # If doctor hasn't clicked "Complete consultation" yet, stay in "consultation"
+    if patient.get("workflow_status") == "consultation":
+        new_workflow_status = "consultation"
+
     return patients.update_one(
         {"institute_id": institute_id},
-        {"$set": {"workflow_status": "completed", "lab_status": "completed"}}
+        {"$set": {"workflow_status": new_workflow_status, "lab_status": "completed"}}
     ).modified_count > 0
 
 def get_doctors_name():
@@ -707,18 +747,30 @@ def add_dummy_users():
 
 def pay_bill(institute_id, has_labs):
     # Update the patient document with the bill payment and workflow updates
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+
+    # Logic: if doctor is already done (consultation completed), move to labs or complete
+    # If doctor is still working (consultation), stay in consultation but mark bill as paid
     
-    workflow_status = "lab test pending" if has_labs else "completed"
-    lab_status = "pending" if has_labs else "none"
+    current_workflow = patient.get("workflow_status", "active")
     
-    if not has_labs:
-        _finalize_visit(institute_id)
+    if current_workflow == "consultation":
+        # Doctor still hasn't clicked "Complete", stay in consultation
+        new_workflow = "consultation"
+    else:
+        # Doctor is done, or it was active. Move to next logical step.
+        new_workflow = "lab test pending" if has_labs else "completed"
+    
+    lab_status = "pending" if has_labs else patient.get("lab_status", "none")
+    
+    # (Visit already finalized by doctor in complete_consultation or will be soon)
     
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
             "bill_status": "paid",
-            "workflow_status": workflow_status,
+            "workflow_status": new_workflow,
             "lab_status": lab_status
         }}
     )

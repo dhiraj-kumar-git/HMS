@@ -471,20 +471,34 @@ const PatientBooking = () => {
                 </Flex>
 
                 {/* Visit History Section */}
-                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a => a.status === 'completed').length > 0 && (
+                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a => 
+                  a.status === 'completed' || 
+                  (a.prescription_summary && a.prescription_summary.length > 0) ||
+                  (a.lab_test_summary && a.lab_test_summary.length > 0) ||
+                  (a.diagnosis_note && a.diagnosis_note.length > 0) ||
+                  (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                ).length > 0 && (
                   <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
                     <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
                       <Icon as={FiCalendar} mr={3} /> My Visit History
                     </Heading>
                     <Accordion allowMultiple>
-                      {verifiedPatient.appointments.filter(a => a.status === 'completed').slice().reverse().map((app, idx) => (
+                      {verifiedPatient.appointments.filter(a => 
+                        a.status === 'completed' || 
+                        (a.prescription_summary && a.prescription_summary.length > 0) ||
+                        (a.lab_test_summary && a.lab_test_summary.length > 0) ||
+                        (a.diagnosis_note && a.diagnosis_note.length > 0) ||
+                        (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                      ).slice().reverse().map((app, idx) => (
                         <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
                           <h2>
                             <AccordionButton _expanded={{ bg: "gray.50" }}>
                               <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
                                 {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
                               </Box>
-                              <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
+                              <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
+                                {app.status === 'completed' ? "Completed" : "In Progress"}
+                              </Badge>
                               <AccordionIcon />
                             </AccordionButton>
                           </h2>

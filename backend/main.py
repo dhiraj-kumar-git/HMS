@@ -514,16 +514,21 @@ def save_consultation_route(institute_id):
     has_labs = data.get("has_labs", False)
     has_meds = data.get("has_meds", False)
 
-    if not has_labs and not has_meds:
-        # Confirming no meds/labs -> directly to complete
-        if database.complete_patient(institute_id):
-            return jsonify({"message": "Patient marked as complete (no meds/labs)"}), 200
-        return jsonify({"error": "Failed to update patient"}), 400
-    else:
-        # Consultation -> billing
-        if database.consultation_patient(institute_id, has_labs):
-            return jsonify({"message": "Patient moved to billing/consultation"}), 200
-        return jsonify({"error": "Failed to update patient"}), 400
+    # Move to 'consultation' status (patient stays in doctor list)
+    if database.consultation_patient(institute_id, has_labs, has_meds):
+        return jsonify({"message": "Consultation details saved"}), 200
+    return jsonify({"error": "Failed to save consultation"}), 400
+
+@app.route('/doctor/complete_consultation/<institute_id>', methods=['POST'])
+@jwt_required()
+def complete_consultation_route(institute_id):
+    claims = get_jwt()
+    if claims.get("role") != "doctor":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    if database.complete_consultation(institute_id):
+        return jsonify({"message": "Consultation marked as completed"}), 200
+    return jsonify({"error": "Failed to complete consultation"}), 400
 
 # Endpoint to fetch inactive (or completed) patients assigned to the doctor
 @app.route('/doctor/patients_inactive', methods=['GET'])
