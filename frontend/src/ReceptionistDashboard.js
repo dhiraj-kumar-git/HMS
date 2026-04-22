@@ -24,6 +24,7 @@ import {
 import { FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import BASE_URL from './Config';
 import PrescriptionModal from "./PrescriptionModal";
 
 const headerHeight = 64; // same header height as AdminDashboard
@@ -35,11 +36,11 @@ export default function ReceptionistDashboard() {
 
   const [patient, setPatient] = useState({
     name: "",
-    age: "",
+    date_of_birth: "",
     gender: "",
     contact_no: "",
     address: "",
-    psrn_id: "",
+    institute_id: "",
     doctor_assigned: "",
     patient_type: "",
     email: "",
@@ -54,7 +55,7 @@ export default function ReceptionistDashboard() {
     (async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/doctors", {
+        const res = await axios.get(`${BASE_URL}/doctors`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDoctors(res.data);
@@ -67,7 +68,7 @@ export default function ReceptionistDashboard() {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    if (name === "email") {
+    if (name === "email" && patient.patient_type !== "Other") {
       // strip domain if pasted with @pilani.bits-pilani.ac.in
       const cleanedValue = value
         .toLowerCase()
@@ -87,14 +88,14 @@ export default function ReceptionistDashboard() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.post(
-        "http://localhost:5000/register_patient",
+        `${BASE_URL}/register_patient`,
         patientData,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      setOpdNumber(res.data.psr_no);
+      setOpdNumber(res.data.institute_id);
       toast({
         title: "Patient Registered",
-        description: `PSR No: ${res.data.psr_no}`,
+        description: `Institute ID: ${res.data.institute_id}`,
         status: "success",
         duration: 3000,
         isClosable: true,
@@ -119,7 +120,7 @@ export default function ReceptionistDashboard() {
       const session_id = localStorage.getItem("session_id");
       if (token && session_id) {
         await axios.post(
-          "http://localhost:5000/logout",
+          `${BASE_URL}/logout`,
           { session_id },
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -150,7 +151,7 @@ export default function ReceptionistDashboard() {
           h={`${headerHeight}px`}
         >
           <Text fontSize="2xl" fontWeight="bold" color="blue.800">
-            Bitsmed
+            BITS MED-C
           </Text>
 
           <HStack spacing={{ base: "3", md: "4" }}>
@@ -222,11 +223,12 @@ export default function ReceptionistDashboard() {
               </FormControl>
               <HStack spacing="4">
                 <FormControl isRequired>
-                  <FormLabel>Age</FormLabel>
+                  <FormLabel>Date of Birth</FormLabel>
                   <Input
-                    type="number"
-                    name="age"
-                    value={patient.age}
+                    type="date"
+                    name="date_of_birth"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={patient.date_of_birth}
                     onChange={handleChange}
                   />
                 </FormControl>
@@ -283,10 +285,10 @@ export default function ReceptionistDashboard() {
                 </FormControl>
                 {patient.patient_type !== "Other" && (
                   <FormControl>
-                    <FormLabel>PSRN/ID No</FormLabel>
+                    <FormLabel>Institute ID</FormLabel>
                     <Input
-                      name="psrn_id"
-                      value={patient.psrn_id}
+                      name="institute_id"
+                      value={patient.institute_id}
                       onChange={handleChange}
                     />
                   </FormControl>
@@ -372,12 +374,25 @@ export default function ReceptionistDashboard() {
           onClose={() => {
             setIsPrescriptionOpen(false);
             onClose();
+            // Clear the form for the next user
+            setPatient({
+              name: "",
+              date_of_birth: "",
+              gender: "",
+              contact_no: "",
+              address: "",
+              institute_id: "",
+              doctor_assigned: "",
+              patient_type: "",
+              email: "",
+            });
+            setOpdNumber("");
           }}
           prescriptionData={{
             ...patient,
             opdNumber,
-            psrn_id:
-              patient.patient_type === "Other" ? undefined : patient.psrn_id,
+            institute_id:
+              patient.patient_type === "Other" ? undefined : patient.institute_id,
             email:
               patient.patient_type === "Student" && patient.email
                 ? `${patient.email.toLowerCase()}@pilani.bits-pilani.ac.in`

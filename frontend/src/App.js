@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChakraProvider, extendTheme, Box, Flex } from '@chakra-ui/react';
+import { ChakraProvider, extendTheme, Box, Flex, Text, Spinner, VStack } from '@chakra-ui/react';
 import {
   BrowserRouter as Router,
   Routes,
@@ -8,6 +8,7 @@ import {
   useLocation
 } from 'react-router-dom';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 import SidebarComponent from './Sidebar';
 import Login from './Login';
@@ -23,6 +24,10 @@ import LabTest from './LabTest';
 import AllPatients from './AllPatients';
 import PatientLabReports from "./PatientLabReports";
 import UploadLabReports from "./UploadLabReports";
+
+import PatientPortal from './PatientPortal';
+import PatientRegistration from './PatientRegistration';
+import PatientBooking from './PatientBooking';
 
 const theme = extendTheme({
   fonts: {
@@ -48,8 +53,9 @@ const theme = extendTheme({
 // This component is rendered within the Router so that useLocation works.
 function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
   const location = useLocation();
-  // Hide the sidebar if the user is not logged in or if the current route is "/login"
-  const hideSidebar = !isLoggedIn || location.pathname === '/login';
+  // Hide the sidebar if the user is not logged in, if the route is login, or if navigating the public portal
+  const isPortalRoute = location.pathname.startsWith('/portal');
+  const hideSidebar = !isLoggedIn || location.pathname === '/login' || isPortalRoute;
 
   return (
     <Flex minH="100vh" w="100%" bg="gray.50">
@@ -91,7 +97,6 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
-          <Route path="/" element={<ReceptionistDashboard />} />
           <Route path="/schedule" element={<DoctorSchedulePage />} />
           <Route
             path="/doctor"
@@ -184,11 +189,15 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
-          {/* Catch-all route */}
-          <Route
-            path="*"
-            element={<Navigate to={isLoggedIn ? '/dashboard' : '/login'} />}
-          />
+          {/* Public Portal Routes */}
+          <Route path="/portal" element={<PatientPortal />} />
+          <Route path="/portal/register" element={<PatientRegistration />} />
+          <Route path="/portal/book-appointment" element={<PatientBooking />} />
+
+          {/* Base and Catch-all routes */}
+          <Route path="/" element={<Navigate to={isLoggedIn ? '/dashboard' : '/portal'} />} />
+          <Route path="*" element={<Navigate to={isLoggedIn ? '/dashboard' : '/portal'} />} />
+
         </Routes>
       </Box>
     </Flex>
@@ -201,8 +210,25 @@ function App() {
   const [role, setRole] = useState('');
   const [sessionId, setSessionId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
+    // Set up an Axios interceptor to catch 401 Unauthorized responses globally
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response && error.response.status === 401) {
+          // If token is invalid or expired, clear local storage and state
+          localStorage.clear();
+          setIsLoggedIn(false);
+          setUsername('');
+          setRole('');
+          setSessionId('');
+        }
+        return Promise.reject(error);
+      }
+    );
+
     const token = localStorage.getItem('token');
     const user = localStorage.getItem('username');
     const userRole = localStorage.getItem('role');
@@ -215,6 +241,11 @@ function App() {
       setSessionId(session);
     }
     setLoading(false);
+
+    // Clean up interceptor on unmount
+    return () => {
+      axios.interceptors.response.eject(interceptor);
+    };
   }, []);
 
   // Called from Login.js when login is successful.
@@ -226,13 +257,14 @@ function App() {
   };
 
   const handleLogout = async () => {
+    setIsLoggingOut(true);
     try {
       const token = localStorage.getItem('token');
       const session_id = localStorage.getItem('session_id');
       if (!token || !session_id) return;
 
       await axios.post(
-        'http://localhost:5000/logout',
+        `${BASE_URL}/logout`,
         { session_id },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -244,11 +276,24 @@ function App() {
       setSessionId('');
     } catch (err) {
       console.error('Logout failed:', err);
+    } finally {
+      setIsLoggingOut(false);
     }
   };
 
-  if (loading) {
-    return <div>Loading...</div>;
+  if (loading || isLoggingOut) {
+    return (
+      <ChakraProvider theme={theme}>
+        <Flex minH="100vh" align="center" justify="center" bg="gray.50">
+          <VStack textAlign="center" spacing={4}>
+             <Spinner size="xl" color="brand.500" thickness="4px" speed="0.65s" />
+             <Text fontSize="xl" fontWeight="medium" color="gray.600">
+               {isLoggingOut ? "Logging out safely..." : "Loading system..."}
+             </Text>
+          </VStack>
+        </Flex>
+      </ChakraProvider>
+    );
   }
 
   return (

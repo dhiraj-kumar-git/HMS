@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import BASE_URL from './Config';
 import {
   Box,
   Flex,
@@ -156,7 +157,7 @@ export default function AllPatients({ onLogout }) {
     const fetchAllPatients = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/doctor/all_patients', {
+        const response = await axios.get(`${BASE_URL}/doctor/all_patients`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setPatients(response.data);
@@ -174,12 +175,12 @@ export default function AllPatients({ onLogout }) {
   useEffect(() => {
     let tempList = [...patients];
 
-    // Search by name or PSRN
+    // Search by name or Institute ID
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       tempList = tempList.filter((p) =>
         (p.name && p.name.toLowerCase().includes(q)) ||
-        (p.psr_no && p.psr_no.toLowerCase().includes(q))
+        (p.institute_id && p.institute_id.toLowerCase().includes(q))
       );
     }
 
@@ -382,7 +383,7 @@ export default function AllPatients({ onLogout }) {
               <Table variant="simple">
                 <Thead bg="gray.100">
                   <Tr>
-                    <Th>PSRN No</Th>
+                    <Th>Institute ID</Th>
                     <Th>Name</Th>
                     <Th>Submitted By</Th>
                     <Th>Status</Th>
@@ -394,11 +395,11 @@ export default function AllPatients({ onLogout }) {
                     const { bg, color } = getStatusStyles(patient.workflow_status);
                     return (
                       <Tr
-                        key={patient.psr_no}
+                        key={patient.institute_id}
                         _hover={{ bg: 'gray.50', cursor: 'pointer' }}
                         onClick={() => handleRowClick(patient)}
                       >
-                        <Td>{patient.psr_no}</Td>
+                        <Td>{patient.institute_id}</Td>
                         <Td>{patient.name}</Td>
                         <Td>{patient.submitted_by || 'N/A'}</Td>
                         <Td>
@@ -444,7 +445,7 @@ export default function AllPatients({ onLogout }) {
             {selectedPatient ? (
               <Box>
                 <Heading as="h4" size="md" mb={2}>
-                  {selectedPatient.name} (PSRN: {selectedPatient.psr_no})
+                  {selectedPatient.name} (ID: {selectedPatient.institute_id})
                 </Heading>
                 <Text><strong>Age:</strong> {selectedPatient.age}</Text>
                 <Text><strong>Gender:</strong> {selectedPatient.gender}</Text>

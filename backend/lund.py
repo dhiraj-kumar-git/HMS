@@ -9,7 +9,7 @@ import json
 import os
 
 app = Flask(__name__)
-app.config["JWT_SECRET_KEY"] = "your_secret_key"  # Change this to a strong secret
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
 jwt = JWTManager(app)
 CORS(app)
 

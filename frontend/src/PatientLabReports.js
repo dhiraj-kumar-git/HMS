@@ -27,6 +27,7 @@ import {
 } from "@chakra-ui/react";
 import { FiMail, FiCopy, FiRefreshCw, FiEye } from "react-icons/fi";
 import axios from "axios";
+import BASE_URL from './Config';
 
 export default function PatientLabReports() {
   const toast = useToast();
@@ -45,7 +46,7 @@ export default function PatientLabReports() {
     setRefreshing(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get("http://localhost:5000/lab/reports", {
+      const res = await axios.get(`${BASE_URL}/lab/reports`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setReports(res.data);
@@ -110,7 +111,7 @@ export default function PatientLabReports() {
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.text(`Name: ${patient.name}`, 14, 40);
-      doc.text(`PSR No.: ${patient.psr_no}`, 14, 46);
+      doc.text(`Institute ID: ${patient.institute_id}`, 14, 46);
       doc.text(`Age / Gender: ${patient.age} / ${patient.gender}`, 14, 52);
       doc.text(
         `Date: ${new Date(latest.timestamp).toLocaleString("en-IN", {
@@ -162,17 +163,7 @@ export default function PatientLabReports() {
 
       const token = localStorage.getItem("token");
 
-      await axios.post(
-        "http://localhost:5000/lab/send_email",
-        {
-          recipient_email: patient.email,
-          subject: `Lab Report for ${patient.name} - ${latest.test_name}`,
-          body: `Dear ${patient.name},\n\nPlease find attached your latest lab test report.\n\nRegards,\nBITS Pilani Medical Centre`,
-          pdf_base64: pdfBase64,
-          filename: `${patient.name}_LabReport.pdf`,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await axios.post(`${BASE_URL}/lab/send_email`, { recipient_email: patient.email, subject: `Lab Report for ${patient.name} - ${latest.test_name}`, body: `Dear ${patient.name},\n\nPlease find attached your latest lab test report.\n\nRegards,\nBITS Pilani Medical Centre`, pdf_base64: pdfBase64, filename: `${patient.name}_LabReport.pdf` }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast({
         title: "Email sent successfully!",
@@ -242,7 +233,7 @@ export default function PatientLabReports() {
           minW="720px"
         >
           <Box flex="1.5">Name</Box>
-          <Box flex="1.3">PSR No.</Box>
+          <Box flex="1.3">Institute ID</Box>
           <Box flex="0.7" textAlign="center">
             Age
           </Box>
@@ -292,17 +283,17 @@ export default function PatientLabReports() {
                 </Box>
 
                 <Box flex="1.3" display="flex" alignItems="center">
-                  <Text>{patient.psr_no}</Text>
+                  <Text>{patient.institute_id}</Text>
                   <IconButton
-                    aria-label="Copy PSR"
+                    aria-label="Copy ID"
                     icon={<FiCopy size={12} />}
                     size="xs"
                     ml="1"
                     variant="ghost"
                     onClick={() => {
-                      navigator.clipboard.writeText(patient.psr_no);
+                      navigator.clipboard.writeText(patient.institute_id);
                       toast({
-                        title: "Copied PSR No.",
+                        title: "Copied Institute ID",
                         status: "success",
                         duration: 1000,
                       });
@@ -373,7 +364,7 @@ export default function PatientLabReports() {
         <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
         <ModalContent borderRadius="2xl" overflow="hidden">
           <ModalHeader bg="blue.600" color="white">
-            {selectedPatient?.name} (PSR: {selectedPatient?.psr_no})
+            {selectedPatient?.name} (ID: {selectedPatient?.institute_id})
           </ModalHeader>
           <ModalCloseButton color="white" />
           <ModalBody bg="gray.50" p={6}>

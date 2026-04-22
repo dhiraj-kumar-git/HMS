@@ -14,6 +14,7 @@ import {
   HStack,
 } from '@chakra-ui/react';
 import axios from 'axios';
+import BASE_URL from './Config';
 import PrescriptionModal from './PrescriptionModal';
 
 function ReceptionistDashboard() {
@@ -23,7 +24,7 @@ function ReceptionistDashboard() {
     gender: '',
     contact_no: '',
     address: '',
-    psrn_id: '',
+    institute_id: '',
     doctor_assigned: '',
     patient_type: '',
   });
@@ -37,7 +38,7 @@ function ReceptionistDashboard() {
     const fetchDoctors = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await axios.get('http://localhost:5000/doctors', {
+        const response = await axios.get(`${BASE_URL}/doctors`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDoctors(response.data);
@@ -67,7 +68,7 @@ function ReceptionistDashboard() {
         setPatient((prev) => ({ ...prev, [name]: value }));
       }
     } else if (name === 'patient_type' && value === 'Other') {
-      setPatient((prev) => ({ ...prev, [name]: value, psrn_id: '' }));
+      setPatient((prev) => ({ ...prev, [name]: value, institute_id: '' }));
     } else {
       setPatient((prev) => ({ ...prev, [name]: value }));
     }
@@ -117,18 +118,14 @@ function ReceptionistDashboard() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(
-        'http://localhost:5000/register_patient',
-        patient,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const response = await axios.post(`${BASE_URL}/register_patient`, patient, { headers: { Authorization: `Bearer ${token}` } });
 
       if (response.status === 201) {
-        setOpdNumber(response.data.psr_no);
+        setOpdNumber(response.data.institute_id);
         setIsPrescriptionOpen(true);
         toast({
           title: 'Patient Registered',
-          description: `PSR No: ${response.data.psr_no}`,
+          description: `Institute ID: ${response.data.institute_id}`,
           status: 'success',
           duration: 3000,
           isClosable: true,
@@ -201,8 +198,8 @@ function ReceptionistDashboard() {
 
             {patient.patient_type !== 'Other' && (
               <FormControl>
-                <FormLabel>PSRN/ID No</FormLabel>
-                <Input name="psrn_id" value={patient.psrn_id} onChange={handleChange} />
+                <FormLabel>Institute ID</FormLabel>
+                <Input name="institute_id" value={patient.institute_id} onChange={handleChange} />
               </FormControl>
             )}
 
@@ -239,7 +236,7 @@ function ReceptionistDashboard() {
           prescriptionData={{
             ...patient,
             opdNumber,
-            psrn_id: patient.patient_type === 'Other' ? undefined : patient.psrn_id,
+            institute_id: patient.patient_type === 'Other' ? undefined : patient.institute_id,
           }}
 
         />

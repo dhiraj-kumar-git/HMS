@@ -36,9 +36,11 @@ import {
   MenuItem,
   IconButton,
   SimpleGrid,
+  Badge,
 } from '@chakra-ui/react';
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
+import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
+import BASE_URL from './Config';
 
 // Utility to convert numbers to words (up to 9999)
 const numberToWords = (num) => {
@@ -93,7 +95,7 @@ function MedicalCounterDashboard() {
       const filtered = registrations.filter(
         (patient) =>
           (patient.name && patient.name.toLowerCase().includes(q)) ||
-          (patient.psr_no && patient.psr_no.toLowerCase().includes(q)) ||
+          (patient.institute_id && patient.institute_id.toLowerCase().includes(q)) ||
           (patient.age && String(patient.age).toLowerCase().includes(q))
       );
       setFilteredRegistrations(filtered);
@@ -105,7 +107,7 @@ function MedicalCounterDashboard() {
   const fetchRegistrations = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:5000/active_registrations', {
+      const response = await axios.get(`${BASE_URL}/active_registrations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setRegistrations(response.data);
@@ -129,7 +131,7 @@ function MedicalCounterDashboard() {
       const fetchLabTestsConfig = async () => {
         try {
           const token = localStorage.getItem('token');
-          const response = await axios.get('http://localhost:5000/dropdown/labtests', {
+          const response = await axios.get(`${BASE_URL}/dropdown/labtests`, {
             headers: { Authorization: `Bearer ${token}` },
           });
           setLabTestsConfig(response.data);
@@ -181,10 +183,10 @@ function MedicalCounterDashboard() {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        'http://localhost:5000/submit_lab_tests',
+        `${BASE_URL}/pay_bill`,
         {
-          psr_no: selectedPatient.psr_no,
-          lab_tests: selectedPatient.lab_tests,
+          institute_id: selectedPatient.institute_id,
+          has_labs: selectedPatient.lab_tests && selectedPatient.lab_tests.length > 0,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -229,8 +231,8 @@ function MedicalCounterDashboard() {
               <tr>
                 <td>Invoice No.:</td>
                 <td>${selectedPatient.invoice_no || ''}</td>
-                <td>PSRN/ID No:</td>
-                <td>${selectedPatient.psr_no}</td>
+                <td>Institute ID:</td>
+                <td>${selectedPatient.institute_id}</td>
               </tr>
               <tr>
                 <td>UMR:</td>
@@ -339,7 +341,7 @@ function MedicalCounterDashboard() {
           <Divider borderColor="black" borderWidth="1px" my={2} />
           <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm" mb={2}>
             <Text>Invoice No.: {selectedPatient.invoice_no}</Text>
-            <Text>PSRN/ID No: {selectedPatient.psr_no}</Text>
+            <Text>Institute ID: {selectedPatient.institute_id}</Text>
             <Text>UMR: {selectedPatient.umrn}</Text>
             <Text>Age/Gender: {selectedPatient.age}/{selectedPatient.gender}</Text>
             <Text>Patient: {selectedPatient.name}</Text>
@@ -458,9 +460,18 @@ function MedicalCounterDashboard() {
           borderRadius="lg"
           p={{ base: 4, md: 6 }}
         >
-          <Heading fontSize="xl" mb={4} color="blue.800">
-            Active Patients
-          </Heading>
+          <Flex align="center" mb={4}>
+            <Heading fontSize="xl" color="blue.800" mr={2}>
+              Active Patients
+            </Heading>
+            <IconButton
+              aria-label="Refresh patients"
+              icon={<FiRefreshCw />}
+              variant="ghost"
+              size="sm"
+              onClick={fetchRegistrations}
+            />
+          </Flex>
 
           {/* Search Bar */}
           <InputGroup mb={4} maxW="300px">
@@ -468,37 +479,78 @@ function MedicalCounterDashboard() {
               <FiSearch color="gray" />
             </InputLeftElement>
             <Input
-              placeholder="Search by name, PSRN or age"
+              placeholder="Search by name, Institute ID or age"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </InputGroup>
 
-          {/* Table list of patients with Age column */}
+          {/* Table list of patients with Full Status details */}
           <Box overflowX="auto">
-            <Table variant="simple">
+            <Table variant="simple" size="sm" fontSize="sm">
               <Thead bg={tableHeaderBg}>
                 <Tr>
-                  <Th>PSRN No</Th>
+                  <Th>Institute ID</Th>
                   <Th>Name</Th>
                   <Th>Age</Th>
+                  <Th>Type</Th>
+                  <Th>Status</Th>
+                  <Th>Bill</Th>
+                  <Th>Lab</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {filteredRegistrations.map((patient) => (
                   <Tr
-                    key={patient.psr_no}
+                    key={patient.institute_id}
                     _hover={{ bg: 'gray.50', cursor: 'pointer' }}
                     onClick={() => handleSelectPatient(patient)}
                   >
-                    <Td>{patient.psr_no}</Td>
+                    <Td>{patient.institute_id}</Td>
                     <Td>{patient.name}</Td>
-                    <Td>{patient.age || 'N/A'}</Td>
+                    <Td>{patient.age || '-'}</Td>
+                    <Td>
+                      <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
+                        {patient.patient_type}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge 
+                        variant="subtle"
+                        fontSize="10px"
+                        colorScheme={
+                          patient.workflow_status === 'active' ? 'green' : 
+                          patient.workflow_status === 'consultation' ? 'orange' : 
+                          patient.workflow_status === 'consultation completed' ? 'blue' : 
+                          patient.workflow_status === 'lab test pending' ? 'purple' : 'gray'
+                        }
+                      >
+                        {patient.workflow_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge 
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={patient.bill_status === 'paid' ? 'green' : patient.bill_status === 'pending' ? 'red' : 'gray'}
+                      >
+                        {patient.bill_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge 
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={patient.lab_status === 'completed' ? 'green' : patient.lab_status === 'pending' ? 'blue' : patient.lab_status === 'active' ? 'orange' : 'gray'}
+                      >
+                        {patient.lab_status}
+                      </Badge>
+                    </Td>
                   </Tr>
                 ))}
                 {filteredRegistrations.length === 0 && (
                   <Tr>
-                    <Td colSpan={3} textAlign="center">
+                    <Td colSpan={7} textAlign="center">
                       No active patients found.
                     </Td>
                   </Tr>
@@ -525,7 +577,7 @@ function MedicalCounterDashboard() {
               {selectedPatient && (
                 <Flex direction="column" align="center">
                   <Heading size="md">
-                    {selectedPatient.name} (PSRN: {selectedPatient.psr_no})
+                    {selectedPatient.name} (ID: {selectedPatient.institute_id})
                   </Heading>
                   <Text fontSize="sm">Age: {selectedPatient.age || 'N/A'}</Text>
                 </Flex>
