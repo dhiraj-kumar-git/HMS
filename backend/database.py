@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import datetime, date
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
+import uuid
 import bcrypt
-from collection_format import Patient, User, Medicine
+import redis
+from collection_format import Patient, Visit, User, Medicine
 
 load_dotenv()
 
@@ -13,12 +15,57 @@ if not MONGO_URI:
     raise ValueError("MONGO_URI is not set")
 client = MongoClient(MONGO_URI)
 
+# Redis connection setup with Graceful Fallback
+redis_client = None
+try:
+    # Look for docker container named 'redis' 
+    redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+    redis_client.ping()
+    print("Successfully connected to Redis cache.")
+except (redis.ConnectionError, redis.TimeoutError):
+    print("Warning: Redis container not found or offline. Caching disabled.")
+    redis_client = None
+
 # Database and collections
 db = client.hospital_db
 patients = db.patients
 users = db.users
 sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
+visits = db.visits # Collection for storing individual patient visits
+
+# Ensure Indexes Configuration
+try:
+    patients.create_index("institute_id", unique=True)
+    patients.create_index("doctor_assigned")
+    patients.create_index([("workflow_status", 1), ("bill_status", 1), ("lab_status", 1)])
+    users.create_index("username", unique=True)
+    inventory.create_index("medicine_id", unique=True)
+    sessions.create_index("session_id", unique=True)
+    sessions.create_index("login_time", expireAfterSeconds=86400) # TTL index 24 hours
+    visits.create_index("visit_id", unique=True)
+    visits.create_index("institute_id")
+    visits.create_index("doctor_username")
+except Exception as e:
+    print(f"Error creating indexes: {e}")
+
+# ---------------------------------------------------------------------------
+# COMPUTE_AGE_STAGE — MongoDB aggregation stage that derives 'age' at query
+# time from the stored 'date_of_birth' field using the server's live UTC clock.
+# Age is NEVER stored in the database — it is always computed fresh.
+# Inject this stage into every patient aggregation pipeline after $lookup.
+# ---------------------------------------------------------------------------
+COMPUTE_AGE_STAGE = {
+    "$addFields": {
+        "age": {
+            "$dateDiff": {
+                "startDate": "$date_of_birth",
+                "endDate": "$$NOW",
+                "unit": "year"
+            }
+        }
+    }
+}
 
 # Function to hash passwords
 def hash_password(password):
@@ -75,8 +122,31 @@ def update_doctor_schedule(username, schedule_list):
     return result.matched_count > 0
 
 # Get all patients (Admin only)
-def get_all_patients():
-    return list(patients.find({}, {"_id": 0}))
+def get_all_patients(skip=0, limit=0):
+    pipeline = []
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    if limit > 0:
+        pipeline.append({"$limit": limit})
+        
+    pipeline.append({
+        "$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
+        }
+    })
+    pipeline.append(COMPUTE_AGE_STAGE)  # Derive age from date_of_birth at query time
+    
+    pts = list(patients.aggregate(pipeline))
+    result = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
 
 # Authenticate user and return role if valid
 def authenticate_user(username, password):
@@ -96,11 +166,21 @@ def start_session(username, session_id):
     sessions.insert_one(session_data)
 
 # End a session for a specific user
-def end_session(username, session_id):
+def end_session(username, session_id, jti=None, exp=None):
     result = sessions.update_one(
         {"username": username, "session_id": session_id, "active": True},
         {"$set": {"active": False, "logout_time": datetime.now().isoformat()}}
     )
+    
+    # Blocklist the JWT using redis
+    if redis_client and jti and exp:
+        # Calculate time remaining on the token
+        now = datetime.timestamp(datetime.now())
+        expires_in = int(exp - now)
+        if expires_in > 0:
+            # We save the JTI with an expiration matching the token's remaining lifespan.
+            redis_client.setex(f"blocklist_{jti}", expires_in, "true")
+            
     return result.modified_count > 0  # Return True if session was updated
 
 
@@ -116,122 +196,541 @@ def register_patient(patient_data):
 
     registration_time = datetime.now()
     patient_data["registration_time"] = registration_time
+    
+    # Ensure date_of_birth is a datetime object for $dateDiff aggregation
+    dob = patient_data.get("date_of_birth")
+    if isinstance(dob, str):
+        try:
+            # Handle YYYY-MM-DD
+            patient_data["date_of_birth"] = datetime.strptime(dob, "%Y-%m-%d")
+        except ValueError:
+            try:
+                # Fallback to ISO format
+                patient_data["date_of_birth"] = datetime.fromisoformat(dob.replace("Z", "+00:00"))
+            except ValueError:
+                print(f"Warning: Could not parse date_of_birth '{dob}' as date.")
+    
+    # Note: patient_data from main.py might have legacy arrays. Ensure they are stripped or just ignore since we don't query them.
+    for k in ["appointments", "prescriptions", "lab_tests", "remarks", "prescription_details", "lab_results"]:
+        patient_data.pop(k, None)
+    
     patients.insert_one(patient_data)
     return institute_id  # Return the Institute ID
 
+def book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
+    # Create the Visit
+    v = Visit(
+        visit_id=str(uuid.uuid4()),
+        institute_id=institute_id,
+        doctor_username=doctor_username,
+        status="upcoming",
+        time=appointment_time
+    )
+    visit_dict = v.to_dict()
+    visit_dict["doctor_name"] = doctor_name
+    visits.insert_one(visit_dict)
+    
+    # Update active status
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {
+            "$set": {
+                "doctor_assigned": doctor_username,
+                "workflow_status": "active",
+                "bill_status": "none",
+                "lab_status": "none"
+            }
+        }
+    )
+    return result.modified_count > 0
+
+def _map_aggregated_patient(patient):
+    if not patient:
+        return None
+    if "_id" in patient:
+        patient["_id"] = str(patient["_id"])
+    
+    # Convert datetime objects to ISO strings for JSON safety
+    for key in ["registration_time", "date_of_birth"]:
+        if key in patient and isinstance(patient[key], (datetime, date)):
+            patient[key] = patient[key].isoformat()
+    
+    patient_visits = patient.pop("patient_visits", [])
+    patient_visits = sorted(patient_visits, key=lambda x: x.get("booked_at", ""))
+    
+    patient["appointments"] = []
+    patient["prescriptions"] = []
+    patient["prescription_details"] = []
+    patient["lab_tests"] = []
+    patient["lab_reports"] = []
+    patient["remarks"] = []
+    
+    for v in patient_visits:
+        patient["appointments"].append({
+            "doctor_username": v.get("doctor_username"),
+            "doctor_name": v.get("doctor_name", v.get("doctor_username")),
+            "status": v.get("status"),
+            "time": v.get("time"),
+            "booked_at": v.get("booked_at"),
+            "prescription_summary": v.get("prescription_summary", []),
+            "prescription_remarks_summary": v.get("prescription_remarks_summary", []),
+            "lab_test_summary": v.get("lab_test_summary", []),
+            "diagnosis_note": v.get("diagnosis_note", [])
+        })
+        patient["prescriptions"].extend(v.get("prescriptions", []))
+        patient["prescription_details"].extend(v.get("prescription_details", []))
+        patient["lab_tests"].extend(v.get("lab_tests", []))
+        patient["lab_reports"].extend(v.get("lab_reports", []))
+        patient["remarks"].extend(v.get("remarks", []))
+        
+    return patient
+
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):
-    patient = patients.find_one({"institute_id": institute_id})
-    if patient:
-        patient["_id"] = str(patient["_id"])  # Convert ObjectId to string for JSON response
-        return patient
-    return None
+    pipeline = [
+        {"$match": {"institute_id": institute_id}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    result = list(patients.aggregate(pipeline))
+    if not result:
+        return None
+    return _map_aggregated_patient(result[0])
 
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
-    return list(patients.find({"doctor_assigned": doctor_username, "workflow_status": "active"}, {"_id": 0}))
+    pipeline = [
+        {"$match": {
+            "doctor_assigned": doctor_username, 
+            "workflow_status": {"$in": ["active", "consultation", "lab test pending"]},
+            "doctor_finalized": {"$ne": True}
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    pts = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in pts]
+
+# Helper to get the active visit ID for a patient
+def _get_active_visit_id(institute_id):
+    # Find the most recent active visit
+    visit = visits.find_one({"institute_id": institute_id, "status": "upcoming"}, sort=[("booked_at", -1)])
+    if visit:
+        return visit["visit_id"]
+    return None
+
+def _finalize_visit(institute_id, mark_as_completed=True):
+    visit_id = _get_active_visit_id(institute_id)
+    if visit_id:
+        visit = visits.find_one({"visit_id": visit_id})
+        if visit:
+            prescriptions = [p.get("note") for p in visit.get("prescriptions", [])]
+            lab_tests = [l.get("lab_test") for l in visit.get("lab_tests", [])]
+            remarks = [r.get("remark") for r in visit.get("remarks", [])]
+            prescription_details = [pd.get("prescription_details") for pd in visit.get("prescription_details", [])]
+            
+            update_data = {
+                "prescription_summary": prescriptions,
+                "prescription_remarks_summary": prescription_details,
+                "lab_test_summary": lab_tests,
+                "diagnosis_note": remarks
+            }
+            if mark_as_completed:
+                update_data["status"] = "completed"
+            
+            visits.update_one(
+                {"visit_id": visit_id},
+                {"$set": update_data}
+            )
 
 # Add a prescription to a patient (recording the doctor's note)
 def add_prescription(institute_id, prescription, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"prescriptions": {"doctor": doctor_username, "note": prescription, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a prescription to a patient by setting a new 'prescription_details' field
 def add_prescription_details(institute_id, prescription_details, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"prescription_details": {"doctor": doctor_username, "prescription_details": prescription_details, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a lab test to a patient (recording only the lab test details)
 def add_lab_test(institute_id, lab_test, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"lab_tests": {"doctor": doctor_username, "lab_test": lab_test, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
 # Add a lab report to a patient
 def add_lab_report(institute_id, report_details):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    # Find the most recent visit, active or not, to attach the report
+    visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+    if not visit: return False
+    result = visits.update_one(
+        {"visit_id": visit["visit_id"]},
         {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
     )
+    
+    _finalize_visit(institute_id)
+    patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"workflow_status": "completed", "lab_status": "completed"}}
+    )
+    
     return result.modified_count > 0
 
 # Retrieve all patients with lab reports
 def get_lab_reports():
-    reports = list(
-        patients.find(
-            {"lab_reports": {"$exists": True, "$ne": []}},
-            {"_id": 0, "name": 1, "institute_id": 1, "age": 1, "gender": 1, "lab_reports": 1, "email": 1}
-        )
-    )
+    pipeline = [
+        {"$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
+        }},
+        {"$match": {
+            "patient_visits": {
+                "$elemMatch": {
+                    "lab_reports.0": {"$exists": True}
+                }
+            }
+        }}
+    ]
+    pts = list(patients.aggregate(pipeline))
+    reports = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            reports.append(assembled)
     return reports
 
 # Add a remark to a patient (recording the remark separately)
 def add_remark(institute_id, remark, doctor_username):
-    result = patients.update_one(
-        {"institute_id": institute_id},
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    result = visits.update_one(
+        {"visit_id": visit_id},
         {"$push": {"remarks": {"doctor": doctor_username, "remark": remark, "timestamp": datetime.now().isoformat()}}}
     )
     return result.modified_count > 0
 
-# Mark a patient as complete (workflow_status "completed") and update visit history
+# Mark a patient as complete (workflow_status "completed") when no meds/labs are given
+# (This is now largely replaced by the two-step consultation flow)
 def complete_patient(institute_id):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
-    # Extract historical notes for the current visit
-    prescriptions = [p.get("note") for p in patient.get("prescriptions", [])]
-    lab_tests = [l.get("lab_test") for l in patient.get("lab_tests", [])]
-    remarks = [r.get("remark") for r in patient.get("remarks", [])]
-    prescription_details = [pd.get("prescription_details") for pd in patient.get("prescription_details", [])]
-    
-    appointments = patient.get("appointments", [])
-    
-    # Update the latest 'upcoming' appointment to 'completed' and attach history
-    for app in reversed(appointments):
-        if app.get("status") == "upcoming":
-            app["status"] = "completed"
-            app["prescription_summary"] = prescriptions # Only medicines
-            app["prescription_remarks_summary"] = prescription_details # Only prescription remarks
-            app["lab_test_summary"] = lab_tests
-            app["diagnosis_note"] = remarks
-            break
+    _finalize_visit(institute_id, mark_as_completed=True)
 
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
             "workflow_status": "completed",
-            "appointments": appointments
+            "bill_status": "none",
+            "lab_status": "none"
+        }}
+    )
+    return result.modified_count > 0
+
+# Set patient status to 'consultation'
+def consultation_patient(institute_id, has_labs, has_meds):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+    
+    lab_status = "active" if has_labs else "none"
+    bill_status = "pending" if (has_labs or has_meds) else "none"
+    
+    # Update visit summary so patient can see it in history immediately
+    _finalize_visit(institute_id, mark_as_completed=False)
+
+    # If labs are assigned, move to 'lab test pending' so they show up for billing/labs
+    # Otherwise, move to 'consultation'
+    new_workflow = "lab test pending" if has_labs else "consultation"
+
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {
+            "workflow_status": new_workflow,
+            "bill_status": bill_status,
+            "lab_status": lab_status,
+            "doctor_finalized": False
+        }}
+    )
+    return result.modified_count > 0
+
+# Move patient to 'consultation completed' or 'completed'
+def complete_consultation(institute_id):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+    
+    # Finalize the visit status to "completed" in the visits collection
+    _finalize_visit(institute_id, mark_as_completed=True)
+    
+    # Check if we can move straight to "completed" in the patients collection
+    # If bill is already paid (or none) and labs are already completed (or none)
+    bill_status = patient.get("bill_status", "none")
+    lab_status = patient.get("lab_status", "none")
+    
+    if bill_status in ["paid", "none"] and lab_status in ["completed", "none"]:
+        new_status = "completed"
+    elif bill_status == "paid" and lab_status == "pending":
+        new_status = "lab test pending"
+    else:
+        new_status = "consultation completed"
+
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {
+            "workflow_status": new_status,
+            "doctor_finalized": True
         }}
     )
     return result.modified_count > 0
 
 # Get inactive patients assigned to a specific doctor (i.e. workflow_status not "active")
 def get_inactive_patients_by_doctor(doctor_username):
-    return list(patients.find({"doctor_assigned": doctor_username, "workflow_status": {"$ne": "active"}}, {"_id": 0}))
+    pipeline = [
+        {"$match": {"doctor_assigned": doctor_username, "workflow_status": {"$ne": "active"}}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    pts = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in pts]
 
 def get_active_pending_patients():
     """
     Returns patients who are active/completed, have a pending bill, and have been prescribed
     either medicines or lab tests.
     """
-    query = {
-        "workflow_status": {"$in": ["active", "completed"]},
-        "bill_status": "Pending",
-        "$or": [
-            {"prescriptions": {"$exists": True, "$ne": []}},
-            {"lab_tests": {"$exists": True, "$ne": []}},
-            {"prescription_details": {"$exists": True, "$ne": []}}
-        ]
+    pipeline = [
+        {"$match": {
+            "bill_status": "pending"
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    raw_patients = list(patients.aggregate(pipeline))
+    result = []
+    for p in raw_patients:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            if assembled.get("prescriptions") or assembled.get("lab_tests") or assembled.get("prescription_details"):
+                assembled.pop("_id", None)
+                result.append(assembled)
+    return result
+
+def get_lab_patients():
+    pipeline = [
+        {"$match": {
+            "workflow_status": "lab test pending",
+            "bill_status": "paid",
+            "lab_status": "pending"
+        }},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    raw_patients = list(patients.aggregate(pipeline))
+    result = []
+    for p in raw_patients:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
+
+# ---- BULK REGISTRATION FUNCTIONS ----
+
+def _validate_and_parse_bulk_row(row):
+    """
+    Validate a single CSV row dict. Returns a cleaned patient_data dict.
+    Raises ValueError with a descriptive message on any validation failure.
+    """
+    required_fields = ["institute_id", "name", "email", "date_of_birth", "gender", "contact_no", "patient_type", "address"]
+    for field in required_fields:
+        val = row.get(field)
+        if val is None or str(val).strip() == "" or str(val).strip().lower() == "nan":
+            raise ValueError(f"Missing or empty field: '{field}'")
+
+    institute_id  = str(row["institute_id"]).strip()
+    name          = str(row["name"]).strip()
+    email         = str(row["email"]).strip()
+    dob_str       = str(row["date_of_birth"]).strip()
+    gender        = str(row["gender"]).strip().capitalize()
+    contact_no    = str(row["contact_no"]).strip()
+    patient_type  = str(row["patient_type"]).strip().capitalize()
+    address       = str(row["address"]).strip()
+
+    # Validate date_of_birth format (YYYY-MM-DD or DD-MM-YYYY)
+    try:
+        # pandas may parse the date already; handle both string and datetime
+        if hasattr(dob_str, 'date'):
+            dob = dob_str
+        else:
+            # Try YYYY-MM-DD first
+            try:
+                dob = datetime.strptime(dob_str, "%Y-%m-%d")
+            except ValueError:
+                # Fallback to DD-MM-YYYY (common in Excel/Sheets)
+                try:
+                    dob = datetime.strptime(dob_str, "%m-%d-%Y") # In case it's US format
+                except ValueError:
+                    try:
+                        dob = datetime.strptime(dob_str, "%d-%m-%Y")
+                    except ValueError:
+                        raise ValueError(f"Date '{dob_str}' does not match YYYY-MM-DD or DD-MM-YYYY")
+
+        if dob >= datetime.now():
+            raise ValueError("Date of birth cannot be in the future")
+    except ValueError as e:
+        raise ValueError(f"Invalid date_of_birth format: {str(e)}")
+
+    # Validate gender
+    # Map shorthand gender to full words
+    gender_map = {
+        "M": "Male", "Male": "Male",
+        "F": "Female", "Female": "Female",
+        "O": "Other", "Other": "Other"
     }
-    return list(patients.find(query, {"_id": 0}))
+    gender = gender_map.get(gender.capitalize() if len(gender) == 1 else gender)
+    if not gender:
+        raise ValueError(f"Invalid gender. Use Male (M), Female (F), or Other (O).")
+
+    # Validate contact_no — strip any spaces and check 10 digits
+    contact_no_clean = contact_no.replace(" ", "")
+    if not contact_no_clean.isdigit() or len(contact_no_clean) != 10:
+        raise ValueError(f"Invalid contact_no '{contact_no}': must be exactly 10 digits")
+
+    # Validate patient_type
+    valid_types = ["Student", "Faculty", "Staff", "Dependent", "Other"]
+    if patient_type not in valid_types:
+        raise ValueError(f"Invalid patient_type '{patient_type}': must be one of {valid_types}")
+
+    # Basic email format check
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise ValueError(f"Invalid email format: '{email}'")
+
+    return {
+        "institute_id":   institute_id,
+        "name":           name,
+        "email":          email,
+        "date_of_birth":  dob,         # datetime object — stored as ISODate by MongoDB
+        "gender":         gender,
+        "contact_no":     contact_no_clean,
+        "patient_type":   patient_type,
+        "address":        address,
+        "workflow_status": "inactive",
+        "bill_status":    "none",
+        "lab_status":     "none",
+        "import_source":  "bulk_csv",
+    }
+
+
+def bulk_register_patients(rows, admin_username):
+    """
+    Bulk-register patients from a list of CSV row dicts.
+    Validates each row individually. Skips (does NOT overwrite) duplicates.
+    Returns: { success: int, failed: int, errors: list[{row, institute_id, reason}] }
+    """
+    results = {"success": 0, "failed": 0, "errors": []}
+    seen_ids_in_file = set()  # Catch duplicates within the same upload file
+
+    for i, row in enumerate(rows, start=2):  # Row 2 = first data row (row 1 = header)
+        raw_id = str(row.get("institute_id", "")).strip()
+        try:
+            # Within-file duplicate check
+            if raw_id in seen_ids_in_file:
+                raise ValueError("Duplicate institute_id within the uploaded file")
+            seen_ids_in_file.add(raw_id)
+
+            patient_data = _validate_and_parse_bulk_row(row)
+            patient_data["imported_by"] = admin_username
+
+            result_id = register_patient(patient_data)
+            if result_id is None:
+                raise ValueError("Already registered in database (duplicate institute_id — skipped)")
+
+            results["success"] += 1
+
+        except ValueError as e:
+            results["failed"] += 1
+            results["errors"].append({
+                "row": i,
+                "institute_id": raw_id or "(empty)",
+                "reason": str(e)
+            })
+
+    return results
+
+def submit_lab_results(institute_id, results):
+    # Mark patient as completed if doctor has already finished consultation
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+
+    visit_id = _get_active_visit_id(institute_id)
+    if visit_id:
+        visits.update_one(
+            {"visit_id": visit_id},
+            {"$set": {"lab_results": results}}
+        )
+    _finalize_visit(institute_id, mark_as_completed=True)
+
+    new_workflow_status = "completed"
+    # If doctor hasn't clicked "Complete consultation" yet, stay in "consultation"
+    if patient.get("workflow_status") == "consultation":
+        new_workflow_status = "consultation"
+
+    return patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"workflow_status": new_workflow_status, "lab_status": "completed"}}
+    ).modified_count > 0
 
 def get_doctors_name():
 
@@ -260,11 +759,34 @@ def add_dummy_users():
         else:
             print(f"User {user['username']} created successfully.")
 
-def submit_lab_tests(institute_id):
-    # Update the patient document with the lab tests, order time, and mark bill_status as "Paid"
+def pay_bill(institute_id, has_labs):
+    # Update the patient document with the bill payment and workflow updates
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient: return False
+
+    # Logic: if doctor is already done (consultation completed), move to labs or complete
+    # If doctor is still working (consultation), stay in consultation but mark bill as paid
+    
+    current_workflow = patient.get("workflow_status", "active")
+    
+    if current_workflow == "consultation":
+        # Doctor still hasn't clicked "Complete", stay in consultation
+        new_workflow = "consultation"
+    else:
+        # Doctor is done, or it was active. Move to next logical step.
+        new_workflow = "lab test pending" if has_labs else "completed"
+    
+    lab_status = "pending" if has_labs else patient.get("lab_status", "none")
+    
+    # (Visit already finalized by doctor in complete_consultation or will be soon)
+    
     result = patients.update_one(
         {"institute_id": institute_id},
-        {"$set": {"lab_order_time": datetime.now(), "bill_status": "Paid"}}
+        {"$set": {
+            "bill_status": "paid",
+            "workflow_status": new_workflow,
+            "lab_status": lab_status
+        }}
     )
     return result.modified_count > 0
 

@@ -210,7 +210,7 @@ const PatientBooking = () => {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
-          warning = `Warning: Dr. ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s.`;
           altDoc = doctors.find(alt =>
             alt.username !== doc.username &&
             alt.department === doc.department &&
@@ -238,7 +238,7 @@ const PatientBooking = () => {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
-          warning = `Warning: Dr. ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s.`;
           altDoc = doctors.find(alt =>
             alt.username !== doc.username &&
             alt.department === doc.department &&
@@ -471,20 +471,34 @@ const PatientBooking = () => {
                 </Flex>
 
                 {/* Visit History Section */}
-                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a => a.status === 'completed').length > 0 && (
+                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a => 
+                  a.status === 'completed' || 
+                  (a.prescription_summary && a.prescription_summary.length > 0) ||
+                  (a.lab_test_summary && a.lab_test_summary.length > 0) ||
+                  (a.diagnosis_note && a.diagnosis_note.length > 0) ||
+                  (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                ).length > 0 && (
                   <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
                     <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
                       <Icon as={FiCalendar} mr={3} /> My Visit History
                     </Heading>
                     <Accordion allowMultiple>
-                      {verifiedPatient.appointments.filter(a => a.status === 'completed').slice().reverse().map((app, idx) => (
+                      {verifiedPatient.appointments.filter(a => 
+                        a.status === 'completed' || 
+                        (a.prescription_summary && a.prescription_summary.length > 0) ||
+                        (a.lab_test_summary && a.lab_test_summary.length > 0) ||
+                        (a.diagnosis_note && a.diagnosis_note.length > 0) ||
+                        (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                      ).slice().reverse().map((app, idx) => (
                         <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
                           <h2>
                             <AccordionButton _expanded={{ bg: "gray.50" }}>
                               <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
                                 {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
                               </Box>
-                              <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
+                              <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
+                                {app.status === 'completed' ? "Completed" : "In Progress"}
+                              </Badge>
                               <AccordionIcon />
                             </AccordionButton>
                           </h2>
@@ -658,10 +672,10 @@ const PatientBooking = () => {
                             {alternativeDoctor && (
                               <Box mt={3} ml={7}>
                                 <Text fontSize="sm" mb={2} color="orange.800">
-                                  However, <strong>Dr. {alternativeDoctor.display_name}</strong> is available in the {alternativeDoctor.department} department today.
+                                  However, <strong>{alternativeDoctor.display_name}</strong> is available in the {alternativeDoctor.department} department today.
                                 </Text>
                                 <Button size="sm" colorScheme="orange" onClick={handleSwitchAlternative}>
-                                  Switch to Dr. {alternativeDoctor.display_name}
+                                  Switch to {alternativeDoctor.display_name}
                                 </Button>
                               </Box>
                             )}
