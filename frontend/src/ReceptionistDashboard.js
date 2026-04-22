@@ -36,7 +36,7 @@ export default function ReceptionistDashboard() {
 
   const [patient, setPatient] = useState({
     name: "",
-    age: "",
+    date_of_birth: "",
     gender: "",
     contact_no: "",
     address: "",
@@ -223,11 +223,12 @@ export default function ReceptionistDashboard() {
               </FormControl>
               <HStack spacing="4">
                 <FormControl isRequired>
-                  <FormLabel>Age</FormLabel>
+                  <FormLabel>Date of Birth</FormLabel>
                   <Input
-                    type="number"
-                    name="age"
-                    value={patient.age}
+                    type="date"
+                    name="date_of_birth"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={patient.date_of_birth}
                     onChange={handleChange}
                   />
                 </FormControl>
@@ -376,7 +377,7 @@ export default function ReceptionistDashboard() {
             // Clear the form for the next user
             setPatient({
               name: "",
-              age: "",
+              date_of_birth: "",
               gender: "",
               contact_no: "",
               address: "",

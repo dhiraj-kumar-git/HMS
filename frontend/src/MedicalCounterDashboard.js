@@ -36,8 +36,9 @@ import {
   MenuItem,
   IconButton,
   SimpleGrid,
+  Badge,
 } from '@chakra-ui/react';
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
+import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
 
@@ -182,10 +183,10 @@ function MedicalCounterDashboard() {
     try {
       const token = localStorage.getItem('token');
       await axios.post(
-        `${BASE_URL}/submit_lab_tests`,
+        `${BASE_URL}/pay_bill`,
         {
           institute_id: selectedPatient.institute_id,
-          lab_tests: selectedPatient.lab_tests,
+          has_labs: selectedPatient.lab_tests && selectedPatient.lab_tests.length > 0,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -459,9 +460,18 @@ function MedicalCounterDashboard() {
           borderRadius="lg"
           p={{ base: 4, md: 6 }}
         >
-          <Heading fontSize="xl" mb={4} color="blue.800">
-            Active Patients
-          </Heading>
+          <Flex align="center" mb={4}>
+            <Heading fontSize="xl" color="blue.800" mr={2}>
+              Active Patients
+            </Heading>
+            <IconButton
+              aria-label="Refresh patients"
+              icon={<FiRefreshCw />}
+              variant="ghost"
+              size="sm"
+              onClick={fetchRegistrations}
+            />
+          </Flex>
 
           {/* Search Bar */}
           <InputGroup mb={4} maxW="300px">
@@ -475,14 +485,18 @@ function MedicalCounterDashboard() {
             />
           </InputGroup>
 
-          {/* Table list of patients with Age column */}
+          {/* Table list of patients with Full Status details */}
           <Box overflowX="auto">
-            <Table variant="simple">
+            <Table variant="simple" size="sm" fontSize="sm">
               <Thead bg={tableHeaderBg}>
                 <Tr>
                   <Th>Institute ID</Th>
                   <Th>Name</Th>
                   <Th>Age</Th>
+                  <Th>Type</Th>
+                  <Th>Status</Th>
+                  <Th>Bill</Th>
+                  <Th>Lab</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -494,12 +508,49 @@ function MedicalCounterDashboard() {
                   >
                     <Td>{patient.institute_id}</Td>
                     <Td>{patient.name}</Td>
-                    <Td>{patient.age || 'N/A'}</Td>
+                    <Td>{patient.age || '-'}</Td>
+                    <Td>
+                      <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
+                        {patient.patient_type}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge 
+                        variant="subtle"
+                        fontSize="10px"
+                        colorScheme={
+                          patient.workflow_status === 'active' ? 'green' : 
+                          patient.workflow_status === 'consultation' ? 'orange' : 
+                          patient.workflow_status === 'consultation completed' ? 'blue' : 
+                          patient.workflow_status === 'lab test pending' ? 'purple' : 'gray'
+                        }
+                      >
+                        {patient.workflow_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge 
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={patient.bill_status === 'paid' ? 'green' : patient.bill_status === 'pending' ? 'red' : 'gray'}
+                      >
+                        {patient.bill_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge 
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={patient.lab_status === 'completed' ? 'green' : patient.lab_status === 'pending' ? 'blue' : patient.lab_status === 'active' ? 'orange' : 'gray'}
+                      >
+                        {patient.lab_status}
+                      </Badge>
+                    </Td>
                   </Tr>
                 ))}
                 {filteredRegistrations.length === 0 && (
                   <Tr>
-                    <Td colSpan={3} textAlign="center">
+                    <Td colSpan={7} textAlign="center">
                       No active patients found.
                     </Td>
                   </Tr>
