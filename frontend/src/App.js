@@ -18,6 +18,7 @@ import DoctorSchedulePage from "./DoctorSchedulePage";
 import AdminDashboard from './AdminDashboard';
 import MedicalCounterDashboard from './MedicalCounterDashboard';
 import DoctorsDashboard from './DoctorsDashboard';
+import DoctorAccessSession from './DoctorAccessSession';
 import AddMedicine from './AddMedicine';
 import InventoryList from './InventoryList';
 import LabTest from './LabTest';
@@ -103,6 +104,16 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             element={
               isLoggedIn && role === 'doctor' ? (
                 <DoctorsDashboard />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/doctor/access"
+            element={
+              isLoggedIn && role === 'doctor' ? (
+                <DoctorAccessSession />
               ) : (
                 <Navigate to="/login" />
               )

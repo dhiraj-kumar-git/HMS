@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import BASE_URL from './Config';
+import { getDoctorAccessHeaders } from './accessSession';
 import {
   Box,
   Flex,
@@ -158,7 +159,7 @@ export default function AllPatients({ onLogout }) {
       try {
         const token = localStorage.getItem('token');
         const response = await axios.get(`${BASE_URL}/doctor/all_patients`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: getDoctorAccessHeaders(token),
         });
         setPatients(response.data);
         setFilteredPatients(response.data);
