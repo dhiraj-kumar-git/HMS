@@ -37,6 +37,19 @@ import {
   Select,
   InputGroup,
   InputLeftElement,
+  Badge,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  VStack,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from "@chakra-ui/react";
 import {
   FiCalendar,
@@ -48,6 +61,13 @@ import {
   FiRefreshCw,
   FiSearch,
   FiCheckCircle,
+  FiPlusCircle,
+  FiActivity,
+  FiSave,
+  FiPlus,
+  FiX,
+  FiAlertTriangle,
+  FiFileText,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -69,6 +89,8 @@ export default function DoctorsDashboard() {
   // MODAL & SELECTION
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
+  const { isOpen: isUnsavedOpen, onOpen: onUnsavedOpen, onClose: onUnsavedClose } = useDisclosure();
+  const cancelRef = React.useRef();
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [sessionHasMeds, setSessionHasMeds] = useState(false);
   const [sessionHasLabs, setSessionHasLabs] = useState(false);
@@ -85,6 +107,12 @@ export default function DoctorsDashboard() {
   const [selectedLabTests, setSelectedLabTests] = useState([]);
   const [medicineSearch, setMedicineSearch] = useState("");
   const [labTestSearch, setLabTestSearch] = useState("");
+
+  // SAVED IN CURRENT SESSION
+  const [sessionSavedPrescriptions, setSessionSavedPrescriptions] = useState([]);
+  const [sessionSavedRemarks, setSessionSavedRemarks] = useState([]);
+  const [sessionSavedMedicines, setSessionSavedMedicines] = useState([]);
+  const [sessionSavedLabTests, setSessionSavedLabTests] = useState([]);
 
   // SEARCH PATIENT BOX
   const [searchInstituteId, setSearchInstituteId] = useState("");
@@ -233,81 +261,84 @@ export default function DoctorsDashboard() {
   const handleLabTestSelect = (list) => setSelectedLabTests(list);
   const handleLabTestRemove = (list) => setSelectedLabTests(list);
 
-  // BACKEND ACTIONS
-  const handleAddPrescription = async () => {
+  // LOCAL ACTIONS (Batched)
+  const handleAddPrescription = () => {
+    if (!prescriptionDetails.trim()) return;
+    setSessionSavedPrescriptions((prev) => [...prev, prescriptionDetails.trim()]);
+    setPrescriptionDetails("");
+  };
+
+  const handleAddRemark = () => {
+    if (!remark.trim()) return;
+    setSessionSavedRemarks((prev) => [...prev, remark.trim()]);
+    setRemark("");
+  };
+
+  const handleAddMedicines = () => {
+    if (!selectedMedicines.length) return;
+    setSessionSavedMedicines((prev) => [
+      ...prev,
+      ...selectedMedicines.map((m) => m.item_name),
+    ]);
+    setSelectedMedicines([]);
+  };
+
+  const handleAddLabTests = () => {
+    if (!selectedLabTests.length) return;
+    setSessionSavedLabTests((prev) => [
+      ...prev,
+      ...selectedLabTests.map((t) => t.test_name),
+    ]);
+    setSelectedLabTests([]);
+  };
+
+  const handleRemovePrescription = (idx) => {
+    setSessionSavedPrescriptions((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const handleRemoveRemark = (idx) => {
+    setSessionSavedRemarks((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const handleRemoveMedicine = (idx) => {
+    setSessionSavedMedicines((prev) => prev.filter((_, i) => i !== idx));
+  };
+  const handleRemoveLabTest = (idx) => {
+    setSessionSavedLabTests((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSaveDetails = async () => {
     if (!selectedPatient) return;
+    
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
-        `${BASE_URL}/doctor/add_prescription_details`,
-        {
-          institute_id: selectedPatient.institute_id,
-          prescription_details: prescriptionDetails,
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast({ title: "Prescription Saved", status: "success" });
-      setPrescriptionDetails("");
-    } catch (e) {
-      toast({ title: "Error", description: e.message, status: "error" });
-    }
-  };
+      
+      const promises = [];
+      
+      sessionSavedPrescriptions.forEach(p => {
+        promises.push(axios.post(`${BASE_URL}/doctor/add_prescription_details`, { institute_id: selectedPatient.institute_id, prescription_details: p }, { headers: { Authorization: `Bearer ${token}` } }));
+      });
+      sessionSavedRemarks.forEach(r => {
+        promises.push(axios.post(`${BASE_URL}/doctor/add_remark`, { institute_id: selectedPatient.institute_id, remark: r }, { headers: { Authorization: `Bearer ${token}` } }));
+      });
+      sessionSavedMedicines.forEach(m => {
+        promises.push(axios.post(`${BASE_URL}/doctor/add_prescription`, { institute_id: selectedPatient.institute_id, prescription: m }, { headers: { Authorization: `Bearer ${token}` } }));
+      });
+      sessionSavedLabTests.forEach(t => {
+        promises.push(axios.post(`${BASE_URL}/doctor/add_lab_test`, { institute_id: selectedPatient.institute_id, lab_test: t }, { headers: { Authorization: `Bearer ${token}` } }));
+      });
 
-  const handleAddRemark = async () => {
-    if (!selectedPatient) return;
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `${BASE_URL}/doctor/add_remark`,
-        { institute_id: selectedPatient.institute_id, remark },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast({ title: "Remark Saved", status: "success" });
-      setRemark("");
+      await Promise.all(promises);
+      
+      const hasLabs = sessionSavedLabTests.length > 0;
+      const hasMeds = sessionSavedMedicines.length > 0;
+      
+      if (!hasLabs && !hasMeds) {
+        onConfirmOpen();
+        return;
+      }
+      
+      await markAsReady(hasLabs, hasMeds);
     } catch (e) {
-      toast({ title: "Error", description: e.message, status: "error" });
-    }
-  };
-
-  const handleAddMedicines = async () => {
-    if (!selectedPatient || !selectedMedicines.length) return;
-    try {
-      const token = localStorage.getItem("token");
-      await Promise.all(
-        selectedMedicines.map((med) =>
-          axios.post(
-            `${BASE_URL}/doctor/add_prescription`,
-            { institute_id: selectedPatient.institute_id, prescription: med.item_name },
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-        )
-      );
-      toast({ title: "Medicines Added", status: "success" });
-      setSessionHasMeds(true);
-      setSelectedMedicines([]);
-    } catch (e) {
-      toast({ title: "Error", description: e.message, status: "error" });
-    }
-  };
-
-  const handleAddLabTests = async () => {
-    if (!selectedPatient || !selectedLabTests.length) return;
-    try {
-      const token = localStorage.getItem("token");
-      await Promise.all(
-        selectedLabTests.map((test) =>
-          axios.post(
-            `${BASE_URL}/doctor/add_lab_test`,
-            { institute_id: selectedPatient.institute_id, lab_test: test.test_name },
-            { headers: { Authorization: `Bearer ${token}` } }
-          )
-        )
-      );
-      toast({ title: "Lab Tests Added", status: "success" });
-      setSessionHasLabs(true);
-      setSelectedLabTests([]);
-    } catch (e) {
-      toast({ title: "Error", description: e.message, status: "error" });
+      toast({ title: "Error saving details", description: e.message, status: "error" });
     }
   };
 
@@ -328,20 +359,20 @@ export default function DoctorsDashboard() {
         isClosable: true
       });
       onConfirmClose();
+      
+      // Clear locally so warning doesn't trigger on close
+      setSessionSavedPrescriptions([]);
+      setSessionSavedRemarks([]);
+      setSessionSavedMedicines([]);
+      setSessionSavedLabTests([]);
+      setPrescriptionDetails("");
+      setRemark("");
+      
       onClose();
       await fetchPatients();
     } catch (e) {
       toast({ title: "Error saving details", description: e.message, status: "error" });
     }
-  };
-
-  const handleSaveDetails = () => {
-    if (!selectedPatient) return;
-    if (!sessionHasMeds && !sessionHasLabs) {
-      onConfirmOpen();
-      return;
-    }
-    markAsReady(sessionHasLabs, sessionHasMeds);
   };
 
   const executeSaveAndUpdate = async (patientId) => {
@@ -365,11 +396,36 @@ export default function DoctorsDashboard() {
     }
   };
 
+  const handleAttemptClose = () => {
+    const hasUnsavedItems = 
+      sessionSavedPrescriptions.length > 0 ||
+      sessionSavedRemarks.length > 0 ||
+      sessionSavedMedicines.length > 0 ||
+      sessionSavedLabTests.length > 0 ||
+      prescriptionDetails.trim() !== "" ||
+      remark.trim() !== "";
+
+    if (hasUnsavedItems) {
+      onUnsavedOpen();
+    } else {
+      onClose();
+    }
+  };
+
+  const confirmCloseWithoutSaving = () => {
+    onUnsavedClose();
+    onClose();
+  };
+
   // Open modal
   const openPatientModal = (patient) => {
     setSelectedPatient(patient);
-    setSessionHasMeds(false);
-    setSessionHasLabs(false);
+    setSessionSavedPrescriptions([]);
+    setSessionSavedRemarks([]);
+    setSessionSavedMedicines([]);
+    setSessionSavedLabTests([]);
+    setPrescriptionDetails("");
+    setRemark("");
     onOpen();
   };
 
@@ -865,132 +921,225 @@ export default function DoctorsDashboard() {
       {/* CENTERED MODAL POPUP */}
       <Modal
         isOpen={isOpen}
-        onClose={onClose}
-        size="4xl"
+        onClose={handleAttemptClose}
+        size="5xl"
         isCentered
         motionPreset="scale"
       >
         <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
-        <ModalContent borderRadius="2xl">
-          <ModalHeader>
+        <ModalContent borderRadius="2xl" overflow="hidden">
+          <ModalHeader borderBottom="1px solid" borderColor="gray.100" bg="gray.50">
             {selectedPatient
               ? `${selectedPatient.name} (ID: ${selectedPatient.institute_id})`
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
-            <Grid templateColumns="repeat(3,1fr)" gap={6}>
-              {/* Prescription & Remarks */}
-              <Box flex="1" bg="gray.50" p={6} borderRadius="lg" boxShadow="sm">
-                <Heading as="h4" size="md" mb={4}>
-                  Prescription & Remarks
-                </Heading>
-                <FormControl mb={4}>
-                  <FormLabel>Prescription</FormLabel>
-                  <Textarea
-                    placeholder="Enter prescription..."
-                    value={prescriptionDetails}
-                    onChange={(e) => setPrescriptionDetails(e.target.value)}
-                    minH="120px"
-                  />
-                </FormControl>
-                <Button w="full" mb={6} onClick={handleAddPrescription}>
-                  Save Prescription
-                </Button>
-                <FormControl mb={4}>
-                  <FormLabel>Remark</FormLabel>
-                  <Textarea
-                    placeholder="Enter remark..."
-                    value={remark}
-                    onChange={(e) => setRemark(e.target.value)}
-                    minH="120px"
-                  />
-                </FormControl>
-                <Button w="full" onClick={handleAddRemark}>
-                  Save Remark
-                </Button>
-              </Box>
+          <ModalBody p={0} display="flex" h="500px">
+            
+            {/* Left Pane - Inputs (Tabs) */}
+            <Box flex="2" bg="white" borderRight="1px solid" borderColor="gray.100" overflowY="auto">
+              <Tabs colorScheme="blue" variant="enclosed" m={4}>
+                <TabList mb="1em">
+                  <Tab fontWeight="medium"><FiFileText style={{marginRight: "8px"}} /> Prescription & Remarks</Tab>
+                  <Tab fontWeight="medium"><FiPlusCircle style={{marginRight: "8px"}} /> Medicines</Tab>
+                  <Tab fontWeight="medium"><FiActivity style={{marginRight: "8px"}} /> Lab Tests</Tab>
+                </TabList>
+                <TabPanels>
+                  {/* Tab 1: Prescription & Remarks */}
+                  <TabPanel>
+                    <FormControl mb={6}>
+                      <FormLabel fontSize="sm" color="gray.600">Add Prescription Point</FormLabel>
+                      <Flex gap={2}>
+                        <Input
+                          placeholder="Type a prescription detail and press Enter..."
+                          value={prescriptionDetails}
+                          onChange={(e) => setPrescriptionDetails(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddPrescription();
+                            }
+                          }}
+                          bg="gray.50"
+                          focusBorderColor="blue.500"
+                        />
+                        <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleAddPrescription}>
+                          Add
+                        </Button>
+                      </Flex>
+                    </FormControl>
+                    
+                    <FormControl>
+                      <FormLabel fontSize="sm" color="gray.600">Add Remark</FormLabel>
+                      <Flex gap={2}>
+                        <Input
+                          placeholder="Type a remark and press Enter..."
+                          value={remark}
+                          onChange={(e) => setRemark(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddRemark();
+                            }
+                          }}
+                          bg="gray.50"
+                          focusBorderColor="blue.500"
+                        />
+                        <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleAddRemark}>
+                          Add
+                        </Button>
+                      </Flex>
+                    </FormControl>
+                  </TabPanel>
+                  
+                  {/* Tab 2: Medicines */}
+                  <TabPanel>
+                    <FormControl>
+                      <FormLabel fontSize="sm" color="gray.600">Prescribe Medicines</FormLabel>
+                      <Multiselect
+                        options={filteredMedicineOptions}
+                        selectedValues={selectedMedicines}
+                        onSelect={handleMedicineSelect}
+                        onRemove={handleMedicineRemove}
+                        displayValue="item_name"
+                        placeholder="Search and select medicines"
+                        style={{
+                          chips: { background: "#38A169", color: "white", borderRadius: "8px" },
+                          multiselectContainer: { color: "black" },
+                          searchBox: { background: "#F7FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "12px" },
+                          optionContainer: { zIndex: 1500 },
+                        }}
+                      />
+                      <Button
+                        mt={4}
+                        w="full"
+                        leftIcon={<FiPlus />}
+                        colorScheme="green"
+                        onClick={handleAddMedicines}
+                        isDisabled={!selectedMedicines.length}
+                      >
+                        Add to List
+                      </Button>
+                    </FormControl>
+                  </TabPanel>
+                  
+                  {/* Tab 3: Lab Tests */}
+                  <TabPanel>
+                    <FormControl>
+                      <FormLabel fontSize="sm" color="gray.600">Prescribe Lab Tests</FormLabel>
+                      <Multiselect
+                        options={filteredLabTestOptions}
+                        selectedValues={selectedLabTests}
+                        onSelect={handleLabTestSelect}
+                        onRemove={handleLabTestRemove}
+                        displayValue="test_name"
+                        placeholder="Search and select lab tests"
+                        style={{
+                          chips: { background: "#805AD5", color: "white", borderRadius: "8px" },
+                          multiselectContainer: { color: "black" },
+                          searchBox: { background: "#F7FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "12px" },
+                          optionContainer: { zIndex: 1500 },
+                        }}
+                      />
+                      <Button
+                        mt={4}
+                        w="full"
+                        leftIcon={<FiPlus />}
+                        colorScheme="purple"
+                        onClick={handleAddLabTests}
+                        isDisabled={!selectedLabTests.length}
+                      >
+                        Add to List
+                      </Button>
+                    </FormControl>
+                  </TabPanel>
+                </TabPanels>
+              </Tabs>
+            </Box>
 
-              {/* Medicines */}
-              <Box
-                flex="1"
-                bg="gray.50"
-                p={6}
-                borderRadius="lg"
-                boxShadow="sm"
-                maxH="450px"
-                overflowY="auto"
-                sx={{ overflow: "visible" }}
-              >
-                <Heading as="h4" size="md" mb={4}>
-                  Prescribe Medicines
-                </Heading>
+            {/* Right Pane - Summary */}
+            <Box flex="1" bg="gray.50" p={6} overflowY="auto">
+              <Heading as="h4" size="md" mb={6} color="gray.700">
+                Current Session Summary
+              </Heading>
 
-                <Multiselect
-                  options={filteredMedicineOptions}
-                  selectedValues={selectedMedicines}
-                  onSelect={handleMedicineSelect}
-                  onRemove={handleMedicineRemove}
-                  displayValue="item_name"
-                  placeholder="Select medicines"
-                  style={{
-                    chips: { background: "#4299E1", color: "white" },
-                    multiselectContainer: { color: "black" },
-                    optionContainer: { zIndex: 1500 },
-                  }}
-                />
-                <Button
-                  mt={3}
-                  w="full"
-                  onClick={handleAddMedicines}
-                  isDisabled={!selectedMedicines.length}
-                >
-                  Add Medicines
-                </Button>
-              </Box>
+              <VStack align="stretch" spacing={6}>
+                {/* Prescriptions Summary */}
+                <Box>
+                  <Text fontSize="sm" fontWeight="bold" color="blue.800" mb={2}>Prescriptions ({sessionSavedPrescriptions.length})</Text>
+                  {sessionSavedPrescriptions.length === 0 ? (
+                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
+                  ) : (
+                    <VStack align="stretch" spacing={2}>
+                      {sessionSavedPrescriptions.map((p, idx) => (
+                        <Flex key={idx} justify="space-between" align="flex-start" bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid" borderColor="blue.100">
+                          <Text fontSize="sm" color="gray.700">• {p}</Text>
+                          <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemovePrescription(idx)} aria-label="Remove" />
+                        </Flex>
+                      ))}
+                    </VStack>
+                  )}
+                </Box>
 
-              {/* Lab Tests */}
-              <Box
-                flex="1"
-                bg="gray.50"
-                p={6}
-                borderRadius="lg"
-                boxShadow="sm"
-                maxH="450px"
-                overflowY="auto"
-                sx={{ overflow: "visible" }}
-              >
-                <Heading as="h4" size="md" mb={4}>
-                  Prescribe Lab Tests
-                </Heading>
+                {/* Remarks Summary */}
+                <Box>
+                  <Text fontSize="sm" fontWeight="bold" color="blue.800" mb={2}>Remarks ({sessionSavedRemarks.length})</Text>
+                  {sessionSavedRemarks.length === 0 ? (
+                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
+                  ) : (
+                    <VStack align="stretch" spacing={2}>
+                      {sessionSavedRemarks.map((r, idx) => (
+                        <Flex key={idx} justify="space-between" align="flex-start" bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid" borderColor="blue.100">
+                          <Text fontSize="sm" color="gray.700">• {r}</Text>
+                          <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemoveRemark(idx)} aria-label="Remove" />
+                        </Flex>
+                      ))}
+                    </VStack>
+                  )}
+                </Box>
 
-                <Multiselect
-                  options={filteredLabTestOptions}
-                  selectedValues={selectedLabTests}
-                  onSelect={handleLabTestSelect}
-                  onRemove={handleLabTestRemove}
-                  displayValue="test_name"
-                  placeholder="Select lab tests"
-                  style={{
-                    chips: { background: "#4299E1", color: "white" },
-                    multiselectContainer: { color: "black" },
-                    optionContainer: { zIndex: 1500 },
-                  }}
-                />
-                <Button
-                  mt={3}
-                  w="full"
-                  onClick={handleAddLabTests}
-                  isDisabled={!selectedLabTests.length}
-                >
-                  Add Lab Tests
-                </Button>
-              </Box>
-            </Grid>
+                {/* Medicines Summary */}
+                <Box>
+                  <Text fontSize="sm" fontWeight="bold" color="green.800" mb={2}>Medicines ({sessionSavedMedicines.length})</Text>
+                  {sessionSavedMedicines.length === 0 ? (
+                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
+                  ) : (
+                    <Flex wrap="wrap" gap={2}>
+                      {sessionSavedMedicines.map((m, idx) => (
+                        <Badge key={idx} colorScheme="green" variant="subtle" borderRadius="md" px={2} py={1} display="flex" alignItems="center">
+                          {m}
+                          <Box as={FiX} ml={2} cursor="pointer" onClick={() => handleRemoveMedicine(idx)} />
+                        </Badge>
+                      ))}
+                    </Flex>
+                  )}
+                </Box>
+
+                {/* Lab Tests Summary */}
+                <Box>
+                  <Text fontSize="sm" fontWeight="bold" color="purple.800" mb={2}>Lab Tests ({sessionSavedLabTests.length})</Text>
+                  {sessionSavedLabTests.length === 0 ? (
+                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
+                  ) : (
+                    <Flex wrap="wrap" gap={2}>
+                      {sessionSavedLabTests.map((t, idx) => (
+                        <Badge key={idx} colorScheme="purple" variant="subtle" borderRadius="md" px={2} py={1} display="flex" alignItems="center">
+                          {t}
+                          <Box as={FiX} ml={2} cursor="pointer" onClick={() => handleRemoveLabTest(idx)} />
+                        </Badge>
+                      ))}
+                    </Flex>
+                  )}
+                </Box>
+              </VStack>
+            </Box>
           </ModalBody>
-          <ModalFooter justifyContent="center">
-            <Button colorScheme="green" onClick={handleSaveDetails}>
-              Save all Details
+          <ModalFooter borderTop="1px solid" borderColor="gray.100" bg="white" justifyContent="flex-end">
+            <Button variant="ghost" mr={3} onClick={handleAttemptClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="green" size="lg" onClick={handleSaveDetails}>
+              Save all Details & Complete
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -1015,6 +1164,34 @@ export default function DoctorsDashboard() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {/* UNSAVED CHANGES MODAL */}
+      <AlertDialog
+        isOpen={isUnsavedOpen}
+        leastDestructiveRef={cancelRef}
+        onClose={onUnsavedClose}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold" display="flex" alignItems="center">
+              <FiAlertTriangle style={{marginRight: "8px", color: "#DD6B20"}} />
+              Unsaved Changes
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              You have unsaved details in the current session. Are you sure you want to discard them and close?
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={onUnsavedClose}>
+                Cancel
+              </Button>
+              <Button colorScheme="red" onClick={confirmCloseWithoutSaving} ml={3}>
+                Discard and Close
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
 
     </Flex>
   );
