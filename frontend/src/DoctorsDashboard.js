@@ -47,11 +47,11 @@ import {
   FiCopy,
   FiRefreshCw,
   FiSearch,
-  FiCheckCircle,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
+import { getDoctorAccessHeaders } from "./accessSession";
 import Multiselect from "multiselect-react-dropdown";
 
 export default function DoctorsDashboard() {
@@ -68,11 +68,7 @@ export default function DoctorsDashboard() {
 
   // MODAL & SELECTION
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [sessionHasMeds, setSessionHasMeds] = useState(false);
-  const [sessionHasLabs, setSessionHasLabs] = useState(false);
-  const [readyToComplete, setReadyToComplete] = useState({}); // { institute_id: { hasLabs, hasMeds } }
 
   // PRESCRIPTION & REMARK
   const [prescriptionDetails, setPrescriptionDetails] = useState("");
@@ -145,34 +141,40 @@ export default function DoctorsDashboard() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(`${BASE_URL}/doctor/patients`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: getDoctorAccessHeaders(token),
       });
-      const patientsWithDetails = res.data.map((patient) => ({
-        ...patient,
-        doctorAssigned: patient.doctor_assigned,
-        visitingTime: new Date(patient.registration_time).toLocaleString(
-          "en-US",
-          {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          }
-        ),
-      }));
-      setPatients(patientsWithDetails);
+      const patientsWithDetails = res.data.map((patient) => {
+  const appointments = Array.isArray(patient.appointments)
+    ? patient.appointments
+    : [];
 
-      // Derive readyToComplete from workflow_status
-      const readyMap = {};
-      patientsWithDetails.forEach(p => {
-        // Patients in 'consultation' or 'lab test pending' are ready for the doctor to finalize
-        if (p.workflow_status === "consultation" || p.workflow_status === "lab test pending") {
-          readyMap[p.institute_id] = true;
-        }
-      });
-      setReadyToComplete(readyMap);
+  const latestVisit = appointments.length
+    ? [...appointments].sort(
+        (a, b) =>
+          new Date(b.booked_at || 0) - new Date(a.booked_at || 0)
+      )[0]
+    : null;
+
+  return {
+    ...patient,
+    doctorAssigned: patient.doctor_assigned,
+
+    visitingTime: patient.registration_time
+      ? new Date(patient.registration_time).toLocaleString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+          day: "2-digit",
+          month: "long",
+          year: "numeric",
+        })
+      : "N/A",
+
+    // ✅ FIXED
+    lab_reports: latestVisit?.lab_reports || [],
+  };
+});
+      setPatients(patientsWithDetails);
     } catch (e) {
       toast({
         title: "Error fetching patients",
@@ -244,7 +246,7 @@ export default function DoctorsDashboard() {
           institute_id: selectedPatient.institute_id,
           prescription_details: prescriptionDetails,
         },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: getDoctorAccessHeaders(token) }
       );
       toast({ title: "Prescription Saved", status: "success" });
       setPrescriptionDetails("");
@@ -260,7 +262,7 @@ export default function DoctorsDashboard() {
       await axios.post(
         `${BASE_URL}/doctor/add_remark`,
         { institute_id: selectedPatient.institute_id, remark },
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: getDoctorAccessHeaders(token) }
       );
       toast({ title: "Remark Saved", status: "success" });
       setRemark("");
@@ -268,6 +270,54 @@ export default function DoctorsDashboard() {
       toast({ title: "Error", description: e.message, status: "error" });
     }
   };
+
+  const handleViewReports = async (reports) => {
+  try {
+    const token = localStorage.getItem("token");
+
+    const s3Reports = reports.filter((r) => r && r.s3_key);
+
+    if (!s3Reports.length) {
+      toast({
+        title: "No file reports available",
+        status: "info",
+      });
+      return;
+    }
+
+    const r = s3Reports[0]; // only latest report
+    const res = await axios.post(
+        `${BASE_URL}/s3/view-url`,
+        { s3_key: r.s3_key },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.data?.url) {
+        const url = res.data.url;
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = r.file_name || "LabReport.pdf";
+
+        document.body.appendChild(link);
+        link.click();
+
+        link.remove();
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    }
+  catch (err) {
+    toast({
+      title: "Error opening report",
+      description: err.message,
+      status: "error",
+    });
+  }
+};
 
   const handleAddMedicines = async () => {
     if (!selectedPatient || !selectedMedicines.length) return;
@@ -278,12 +328,11 @@ export default function DoctorsDashboard() {
           axios.post(
             `${BASE_URL}/doctor/add_prescription`,
             { institute_id: selectedPatient.institute_id, prescription: med.item_name },
-            { headers: { Authorization: `Bearer ${token}` } }
+            { headers: getDoctorAccessHeaders(token) }
           )
         )
       );
       toast({ title: "Medicines Added", status: "success" });
-      setSessionHasMeds(true);
       setSelectedMedicines([]);
     } catch (e) {
       toast({ title: "Error", description: e.message, status: "error" });
@@ -299,77 +348,38 @@ export default function DoctorsDashboard() {
           axios.post(
             `${BASE_URL}/doctor/add_lab_test`,
             { institute_id: selectedPatient.institute_id, lab_test: test.test_name },
-            { headers: { Authorization: `Bearer ${token}` } }
+            { headers: getDoctorAccessHeaders(token) }
           )
         )
       );
       toast({ title: "Lab Tests Added", status: "success" });
-      setSessionHasLabs(true);
       setSelectedLabTests([]);
     } catch (e) {
       toast({ title: "Error", description: e.message, status: "error" });
     }
   };
 
-  const markAsReady = async (hasLabs, hasMeds) => {
+  const handleCompletePatient = async () => {
     if (!selectedPatient) return;
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/doctor/save_consultation/${selectedPatient.institute_id}`,
-        { has_labs: hasLabs, has_meds: hasMeds },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast({ 
-        title: "Consultation details saved", 
-        description: "Please click the green tick icon in the patient list to complete this consultation.",
-        status: "success",
-        duration: 5000,
-        isClosable: true
-      });
-      onConfirmClose();
-      onClose();
-      await fetchPatients();
-    } catch (e) {
-      toast({ title: "Error saving details", description: e.message, status: "error" });
-    }
-  };
-
-  const handleSaveDetails = () => {
-    if (!selectedPatient) return;
-    if (!sessionHasMeds && !sessionHasLabs) {
-      onConfirmOpen();
-      return;
-    }
-    markAsReady(sessionHasLabs, sessionHasMeds);
-  };
-
-  const executeSaveAndUpdate = async (patientId) => {
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `${BASE_URL}/doctor/complete_consultation/${patientId}`,
+        `${BASE_URL}/doctor/complete_patient/${selectedPatient.institute_id}`,
         {},
-        { headers: { Authorization: `Bearer ${token}` } }
+        { headers: getDoctorAccessHeaders(token) }
       );
-      toast({ title: "Consultation Completed", status: "success" });
-      
+      toast({ title: "Patient Completed", status: "success" });
       await fetchPatients();
-      onConfirmClose();
-      if (selectedPatient?.institute_id === patientId) {
-        onClose();
-        setSelectedPatient(null);
-      }
+      onClose();
+      setSelectedPatient(null);
     } catch (e) {
-      toast({ title: "Error completing consultation", description: e.message, status: "error" });
+      toast({ title: "Error", description: e.message, status: "error" });
     }
   };
 
   // Open modal
   const openPatientModal = (patient) => {
     setSelectedPatient(patient);
-    setSessionHasMeds(false);
-    setSessionHasLabs(false);
     onOpen();
   };
 
@@ -518,6 +528,9 @@ export default function DoctorsDashboard() {
               </Text>
             </MenuButton>
             <MenuList>
+              <MenuItem onClick={() => navigate('/doctor/access')}>
+                Patient OTP Access
+              </MenuItem>
               <MenuItem
                 icon={<FiUser />}
                 onClick={() => alert("Profile clicked!")}
@@ -774,13 +787,13 @@ export default function DoctorsDashboard() {
                         <Th>Gender</Th>
                         <Th>Visiting Time</Th>
                         <Th>Last Visit</Th>
-                        <Th textAlign="center">Actions</Th>
+                        <Th>Lab Reports</Th>
                       </Tr>
                     </Thead>
                     <Tbody>
-                      {currentPatients.map((p) => (
+                      {currentPatients.map((p, i) => (
                         <Tr
-                          key={p.institute_id}
+                          key={i}
                           _hover={{ bg: 'gray.50', cursor: 'pointer' }}
                           onClick={() => openPatientModal(p)}
                         >
@@ -816,18 +829,23 @@ export default function DoctorsDashboard() {
                           <Td><Text fontSize="sm">{p.gender}</Text></Td>
                           <Td><Text fontSize="sm">{p.visitingTime}</Text></Td>
                           <Td><Text fontSize="sm">{p.lastVisit || "Nil"}</Text></Td>
-                          <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                            {readyToComplete[p.institute_id] && (
-                              <IconButton
-                                aria-label="Complete consultation"
-                                icon={<FiCheckCircle />}
-                                colorScheme="green"
-                                size="sm"
-                                onClick={() => executeSaveAndUpdate(p.institute_id)}
-                                title="Complete consultation"
-                              />
-                            )}
-                          </Td>
+                          <Td>
+                          {Array.isArray(p.lab_reports) &&
+                          p.lab_reports.some((r) => r && r.s3_key) ? (
+                            <Button
+                              size="sm"
+                              colorScheme="blue"
+                              onClick={(e) => {
+                                e.stopPropagation(); // prevents modal open
+                                handleViewReports(p.lab_reports);
+                              }}
+                            >
+                              View
+                            </Button>
+                          ) : (
+                            <Text fontSize="sm">—</Text>
+                          )}
+                        </Td>
                         </Tr>
                       ))}
                     </Tbody>
@@ -989,33 +1007,12 @@ export default function DoctorsDashboard() {
             </Grid>
           </ModalBody>
           <ModalFooter justifyContent="center">
-            <Button colorScheme="green" onClick={handleSaveDetails}>
-              Save all Details
+            <Button colorScheme="green" onClick={handleCompletePatient}>
+              Mark Complete
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
-
-      {/* CONFIRMATION MODAL */}
-      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} isCentered>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Confirm Status Update</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Text>No medicines or lab tests were assigned to this patient. Proceeding will save this as ready to complete without billing or lab requirements.</Text>
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="gray" mr={3} onClick={onConfirmClose}>
-              Cancel
-            </Button>
-            <Button colorScheme="blue" onClick={() => markAsReady(false, false)}>
-              Confirm & Save
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
     </Flex>
   );
 }

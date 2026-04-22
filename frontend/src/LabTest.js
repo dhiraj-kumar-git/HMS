@@ -50,6 +50,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
+import { getDoctorAccessHeaders } from './accessSession';
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");
@@ -103,7 +104,7 @@ export default function LabTestDashboard() {
   const fetchConfigTests = async () => {
     try {
       const token = localStorage.getItem("token");
-      const labRes = await axios.get(`${BASE_URL}/dropdown/labtests`, { headers: { Authorization: `Bearer ${token}` } });
+      const labRes = await axios.get(`${BASE_URL}/dropdown/labtests`, { headers: getDoctorAccessHeaders(token) });
       setConfigTests(labRes.data);
     } catch (e) {
       console.error("Error fetching config tests:", e);
@@ -115,7 +116,7 @@ export default function LabTestDashboard() {
     setListLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`${BASE_URL}/lab/patients`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${BASE_URL}/lab/patients`, { headers: getDoctorAccessHeaders(token) });
       setPatients(res.data);
     } catch (e) {
       toast({
@@ -134,8 +135,8 @@ export default function LabTestDashboard() {
     const loadAll = async () => {
       try {
         const [labRes, patRes] = await Promise.all([
-          axios.get(`${BASE_URL}/dropdown/labtests`, { headers: { Authorization: `Bearer ${token}` } }),
-          axios.get(`${BASE_URL}/lab/patients`, { headers: { Authorization: `Bearer ${token}` } }),
+          axios.get(`${BASE_URL}/dropdown/labtests`, { headers: getDoctorAccessHeaders(token) }),
+          axios.get(`${BASE_URL}/lab/patients`, { headers: getDoctorAccessHeaders(token) }),
         ]);
         setConfigTests(labRes.data);
         setPatients(patRes.data);
@@ -168,7 +169,7 @@ export default function LabTestDashboard() {
 
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/get_patient/${instituteId}`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await axios.get(`${BASE_URL}/get_patient/${instituteId}`, { headers: getDoctorAccessHeaders(token) });
       const patient = response.data;
       setSelectedPatient(patient);
 
@@ -266,7 +267,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/lab/submit_results`,
+        `${BASE_URL}/lab/save_report`,
         {
           institute_id: selectedPatient.institute_id,
           test_name: tests[0].lab_test,
@@ -296,7 +297,6 @@ export default function LabTestDashboard() {
       localStorage.setItem("refreshReports", "true");
 
       onClose();
-      fetchPatients();
     } catch (e) {
       console.error("Error saving report:", e);
       toast({
@@ -323,7 +323,7 @@ export default function LabTestDashboard() {
     setEmailLoading(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.get(`${BASE_URL}/get_patient/${selectedPatient.institute_id}`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await axios.get(`${BASE_URL}/get_patient/${selectedPatient.institute_id}`, { headers: getDoctorAccessHeaders(token) });
 
       const patientData = res.data;
       const recipientEmail = patientData.email;
