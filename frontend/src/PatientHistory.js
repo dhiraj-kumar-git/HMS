@@ -37,6 +37,13 @@ import {
   MenuItem,
   Avatar,
   VStack,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  Badge,
+  Grid
 } from '@chakra-ui/react';
 
 import {
@@ -109,6 +116,10 @@ export default function PatientHistory() {
 
   const cardBg = useColorModeValue("white", "gray.700");
   const timelineColor = useColorModeValue("blue.500", "blue.300");
+  const expandedBg = useColorModeValue("gray.50", "gray.600");
+  const panelBg = useColorModeValue("gray.50", "gray.700");
+  const textColor = useColorModeValue("gray.700", "white");
+  const subTextColor = useColorModeValue("gray.600", "gray.300");
 
   useEffect(() => {
     const fetchPatientHistory = async () => {
@@ -124,15 +135,7 @@ export default function PatientHistory() {
           }
         );
 
-        // 🔥 SORT: latest first
-        const sortedVisits = res.data.patient_visits?.sort(
-          (a, b) => new Date(b.date) - new Date(a.date)
-        );
-
-        setPatient({
-          ...res.data,
-          patient_visits: sortedVisits
-        });
+        setPatient(res.data);
       } catch (error) {
         console.error("Error fetching patient history:", error);
       } finally {
@@ -190,73 +193,60 @@ export default function PatientHistory() {
         <Text mt={2}>ID: {patient.institute_id}</Text>
       </Box>
 
-      {/* 🔷 Timeline */}
-      <Box position="relative" pl={6}>
-        {/* Vertical Line */}
-        <Box
-          position="absolute"
-          left="10px"
-          top="0"
-          bottom="0"
-          width="2px"
-          bg={timelineColor}
-        />
-
-        {patient.patient_visits?.length > 0 ? (
-          <VStack spacing={6} align="stretch">
-            {patient.patient_visits.map((visit, index) => (
-              <Box key={index} position="relative">
-                
-                {/* Dot */}
-                <Box
-                  position="absolute"
-                  left="-2px"
-                  top="8px"
-                  width="12px"
-                  height="12px"
-                  bg={timelineColor}
-                  borderRadius="full"
-                />
-
-                {/* Card */}
-                <Box
-                  ml={6}
-                  p={5}
-                  bg={cardBg}
-                  borderRadius="lg"
-                  boxShadow="sm"
-                >
-                  <Text fontWeight="bold" mb={2}>
-                    {visit.date || "No Date"}
-                  </Text>
-
-                  <Text>
-                    <strong>Prescription:</strong>{" "}
-                    {visit.prescription || "N/A"}
-                  </Text>
-
-                  <Text>
-                    <strong>Remarks:</strong>{" "}
-                    {visit.remarks || "N/A"}
-                  </Text>
-
-                  <Text mt={2}>
-                    <strong>Medicines:</strong>{" "}
-                    {visit.medicines?.length > 0
-                      ? visit.medicines.join(", ")
-                      : "None"}
-                  </Text>
-
-                  <Text>
-                    <strong>Lab Tests:</strong>{" "}
-                    {visit.tests?.length > 0
-                      ? visit.tests.join(", ")
-                      : "None"}
-                  </Text>
-                </Box>
-              </Box>
+      {/* 🔷 Accordion History */}
+      <Box>
+        {patient.appointments && patient.appointments.filter(a => a.status === 'completed').length > 0 ? (
+          <Accordion allowMultiple>
+            {patient.appointments.filter(a => a.status === 'completed').slice().reverse().map((app, idx) => (
+              <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3} bg={cardBg}>
+                <h2>
+                  <AccordionButton _expanded={{ bg: expandedBg }}>
+                    <Box flex="1" textAlign="left" fontWeight="bold" color={textColor}>
+                      {app.time ? new Date(app.time.split('T')[0]).toLocaleDateString() : 'Unknown Date'} {app.time && app.time.includes('T') ? `at ${app.time.split('T')[1]}` : ''} - {app.doctor_name || 'Doctor'}
+                    </Box>
+                    <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
+                    <AccordionIcon />
+                  </AccordionButton>
+                </h2>
+                <AccordionPanel pb={4} bg={panelBg}>
+                  <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
+                    <Box>
+                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Medicines Prescribed</Text>
+                      {app.prescription_summary && app.prescription_summary.length > 0 ? (
+                        <VStack align="start" spacing={1}>
+                          {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
+                        </VStack>
+                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                    </Box>
+                    <Box>
+                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Prescription Remarks</Text>
+                      {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
+                        <VStack align="start" spacing={1}>
+                          {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
+                        </VStack>
+                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                    </Box>
+                    <Box gridColumn={{ md: "span 2" }}>
+                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Diagnosis Notes</Text>
+                      {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
+                        <VStack align="start" spacing={1}>
+                          {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
+                        </VStack>
+                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                    </Box>
+                    <Box gridColumn={{ md: "span 2" }}>
+                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Lab Tests Overview</Text>
+                      {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
+                        <VStack align="start" spacing={1}>
+                          {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
+                        </VStack>
+                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                    </Box>
+                  </Grid>
+                </AccordionPanel>
+              </AccordionItem>
             ))}
-          </VStack>
+          </Accordion>
         ) : (
           <Text>No history available</Text>
         )}

@@ -204,11 +204,12 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
         {
             "$set": {
                 "doctor_assigned": doctor_username,
-                "workflow_status": "active"
+                "workflow_status": "active",
+                "bill_status": "Pending"
             }
         }
     )
-    return result.modified_count > 0
+    return result.matched_count > 0
 
 def _map_aggregated_patient(patient):
     if not patient:

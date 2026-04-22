@@ -1009,7 +1009,7 @@ export default function DoctorsDashboard() {
             <Button colorScheme="blue"
              onClick={() => {
                  onClose(); // close modal
-                navigate(`/patient-history/${selectedPatient.institute_id}`); // navigate to patient history page
+                navigate(`/doctor/patient-history/${selectedPatient.institute_id}`); // navigate to patient history page
               }}  
              >
                History
