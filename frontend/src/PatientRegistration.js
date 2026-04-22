@@ -32,7 +32,7 @@ const PatientRegistration = () => {
     institute_id: '',
     name: '',
     email: '',
-    age: '',
+    date_of_birth: '',
     gender: '',
     contact_no: '',
     patient_type: '',
@@ -162,12 +162,12 @@ const PatientRegistration = () => {
 
             <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6} w="100%">
               <FormControl isRequired>
-                <FormLabel color="gray.700">Age</FormLabel>
+                <FormLabel color="gray.700">Date of Birth</FormLabel>
                 <Input
-                  name="age"
-                  type="number"
-                  placeholder="e.g. 22"
-                  value={formData.age}
+                  name="date_of_birth"
+                  type="date"
+                  max={new Date().toISOString().split('T')[0]}
+                  value={formData.date_of_birth}
                   onChange={handleChange}
                   focusBorderColor="blue.500"
                 />

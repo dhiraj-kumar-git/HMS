@@ -266,7 +266,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/lab/save_report`,
+        `${BASE_URL}/lab/submit_results`,
         {
           institute_id: selectedPatient.institute_id,
           test_name: tests[0].lab_test,
@@ -296,6 +296,7 @@ export default function LabTestDashboard() {
       localStorage.setItem("refreshReports", "true");
 
       onClose();
+      fetchPatients();
     } catch (e) {
       console.error("Error saving report:", e);
       toast({

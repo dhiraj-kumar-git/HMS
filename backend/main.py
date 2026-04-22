@@ -1,4 +1,5 @@
 import base64
+import io
 import os
 from tempfile import NamedTemporaryFile
 from flask import Flask, request, jsonify
@@ -127,7 +128,7 @@ def register_patient():
     print("Doctors Map:", doctors_map)
 
     name = data.get("name")
-    age = data.get("age")
+    date_of_birth = data.get("date_of_birth")
     gender = data.get("gender")
     contact_no = data.get("contact_no")
     email = data.get("email")
@@ -136,13 +137,13 @@ def register_patient():
     patient_type = data.get("patient_type")
     institute_id = data.get("institute_id")
 
-    if not all([name, age, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type, institute_id]):
+    if not all([name, date_of_birth, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type, institute_id]):
         return jsonify({"error": "Missing required fields"}), 400
 
     patient_data = {
         "institute_id": institute_id,
         "name": name,
-        "age": age,
+        "date_of_birth": date_of_birth,
         "gender": gender,
         "contact_no": contact_no,
         "email": email,
@@ -150,8 +151,9 @@ def register_patient():
         "doctor_assigned": doctor_assigned,
         "doctor_name": doctor_name,
         "patient_type": patient_type,
-        "workflow_status": "active",
-        "bill_status": "Pending",
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none",
         "lab_tests": [],
         "lab_results": []
     }
@@ -500,17 +502,33 @@ def add_remark_route():
         return jsonify({"message": "Remark added successfully"}), 200
     return jsonify({"error": "Failed to add remark"}), 400
 
-# Endpoint for doctor to mark a patient as complete
-@app.route('/doctor/complete_patient/<institute_id>', methods=['POST'])
+# Endpoint for doctor to confirm consultation details and update statuses
+@app.route('/doctor/save_consultation/<institute_id>', methods=['POST'])
 @jwt_required()
-def complete_patient_route(institute_id):
+def save_consultation_route(institute_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
-    if database.complete_patient(institute_id):
-        return jsonify({"message": "Patient marked as complete"}), 200
-    return jsonify({"error": "Failed to mark patient as complete"}), 400
+    data = request.json
+    has_labs = data.get("has_labs", False)
+    has_meds = data.get("has_meds", False)
+
+    # Move to 'consultation' status (patient stays in doctor list)
+    if database.consultation_patient(institute_id, has_labs, has_meds):
+        return jsonify({"message": "Consultation details saved"}), 200
+    return jsonify({"error": "Failed to save consultation"}), 400
+
+@app.route('/doctor/complete_consultation/<institute_id>', methods=['POST'])
+@jwt_required()
+def complete_consultation_route(institute_id):
+    claims = get_jwt()
+    if claims.get("role") != "doctor":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    if database.complete_consultation(institute_id):
+        return jsonify({"message": "Consultation marked as completed"}), 200
+    return jsonify({"error": "Failed to complete consultation"}), 400
 
 # Endpoint to fetch inactive (or completed) patients assigned to the doctor
 @app.route('/doctor/patients_inactive', methods=['GET'])
@@ -539,24 +557,24 @@ def active_registrations():
     regs = database.get_active_pending_patients()
     return jsonify(regs), 200
 
-@app.route('/submit_lab_tests', methods=['POST'])
+@app.route('/pay_bill', methods=['POST'])
 @jwt_required()
-def submit_lab_tests_route():
+def pay_bill_route():
     claims = get_jwt()
     if claims.get("role") != "medical_store":
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
     institute_id = data.get("institute_id")
-    lab_tests = data.get("lab_tests")
-    if not institute_id or not lab_tests:
-        return jsonify({"error": "Missing required fields"}), 400
+    has_labs = data.get("has_labs", False)
+    if not institute_id:
+        return jsonify({"error": "Missing institute_id"}), 400
 
-    success = database.submit_lab_tests(institute_id)
+    success = database.pay_bill(institute_id, has_labs)
     if success:
-        return jsonify({"message": "Lab tests submitted successfully"}), 200
+        return jsonify({"message": "Bill paid successfully"}), 200
     else:
-        return jsonify({"error": "Failed to submit lab tests"}), 400
+        return jsonify({"error": "Failed to pay bill"}), 400
 
 # Get patients with Paid bills and Active status
 @app.route('/lab/patients', methods=['GET'])
@@ -740,7 +758,7 @@ def public_get_doctors():
 def public_register_patient():
     data = request.json
     name = data.get("name")
-    age = data.get("age")
+    date_of_birth = data.get("date_of_birth")
     gender = data.get("gender")
     contact_no = data.get("contact_no")
     institute_id = data.get("institute_id")
@@ -751,20 +769,21 @@ def public_register_patient():
     if not institute_id:
         return jsonify({"error": "Institute ID is required"}), 400
         
-    if not all([name, age, gender, contact_no, address, email, patient_type]):
+    if not all([name, date_of_birth, gender, contact_no, address, email, patient_type]):
         return jsonify({"error": "Missing required fields"}), 400
 
     patient_data = {
         "name": name,
-        "age": age,
+        "date_of_birth": date_of_birth,
         "gender": gender,
         "contact_no": contact_no,
         "institute_id": institute_id,
         "email": email,
         "address": address,
         "patient_type": patient_type,
-        "workflow_status": "active",
-        "bill_status": "Pending",
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none",
         "lab_tests": [],
         "appointments": []
     }
@@ -774,6 +793,71 @@ def public_register_patient():
         return jsonify({"error": "Patient with this Institute ID already exists"}), 409
         
     return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
+
+
+# ---- ADMIN BULK REGISTRATION ENDPOINTS ----
+
+@app.route('/admin/bulk_register/template', methods=['GET'])
+@jwt_required()
+def download_bulk_template():
+    """Serve the CSV template file for bulk student registration."""
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+    from flask import send_from_directory
+    return send_from_directory(
+        directory=os.path.dirname(os.path.abspath(__file__)),
+        path="student_bulk_registration_template.xlsx",
+        as_attachment=True,
+        download_name="student_bulk_registration_template.xlsx"
+    )
+
+
+@app.route('/admin/bulk_register', methods=['POST'])
+@jwt_required()
+def bulk_register_patients_route():
+    """
+    Bulk-register students from a CSV file upload.
+    Admin role only. Skips duplicates and reports row-level errors.
+    """
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded. Form field must be named 'file'"}), 400
+
+    file = request.files['file']
+    if not file.filename.lower().endswith('.csv'):
+        return jsonify({"error": "Only .csv files are accepted"}), 400
+
+    # Enforce 5 MB cap
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    if file_size > 5 * 1024 * 1024:
+        return jsonify({"error": "File size exceeds the 5 MB limit"}), 400
+
+    try:
+        stream = io.StringIO(file.stream.read().decode("utf-8"))
+        import pandas as pd
+        df = pd.read_csv(stream, comment='#')  # Skip comment rows starting with #
+        df.columns = df.columns.str.strip().str.lower()
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse CSV: {str(e)}"}), 400
+
+    # Verify all required columns are present before touching the DB
+    required_cols = {"institute_id", "name", "email", "date_of_birth", "gender", "contact_no", "patient_type", "address"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        return jsonify({"error": f"Missing required columns: {', '.join(sorted(missing_cols))}"}), 400
+
+    rows = df.to_dict(orient="records")
+    admin_username = get_jwt_identity()
+    results = database.bulk_register_patients(rows, admin_username)
+    results["total"] = len(rows)
+
+    return jsonify(results), 200
 
 @app.route('/api/public/verify', methods=['POST'])
 def public_verify_patient():
