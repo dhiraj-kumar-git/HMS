@@ -31,8 +31,9 @@ import {
   Icon,
   VStack,
   Divider,
+  IconButton,
 } from '@chakra-ui/react';
-import { FiUploadCloud, FiDownload, FiCheckCircle, FiAlertCircle, FiFile } from 'react-icons/fi';
+import { FiUploadCloud, FiDownload, FiAlertCircle, FiFile, FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
 
@@ -53,7 +54,7 @@ export default function PatientsList() {
 
   // --- Pagination state ---
   const [currentPage, setCurrentPage] = useState(1);
-  const patientsPerPage = 25;
+  const patientsPerPage = 10;
 
   useEffect(() => { fetchPatients(); }, []);
 
@@ -200,7 +201,16 @@ export default function PatientsList() {
     <Box bg="white" p="8" borderRadius="lg" boxShadow="md" maxW="1000px" w="full" mx="auto">
       {/* Header Row */}
       <Flex mb="6" align="center" justify="space-between" flexWrap="wrap" gap={3}>
-        <Heading size="lg" color="blue.800">Patients List</Heading>
+        <Flex align="center">
+          <Heading size="lg" color="blue.800" mr="2">Patients List</Heading>
+          <IconButton
+            aria-label="Refresh list"
+            icon={<FiRefreshCw />}
+            size="sm"
+            variant="ghost"
+            onClick={fetchPatients}
+          />
+        </Flex>
         <HStack spacing={3}>
           <Button
             leftIcon={<FiDownload />}
@@ -234,7 +244,7 @@ export default function PatientsList() {
 
       {/* Patients Table */}
       <Box overflowX="auto">
-        <Table variant="simple" size="md">
+        <Table variant="simple" size="sm" fontSize="sm">
           <Thead bg="gray.100">
             <Tr>
               <Th>Institute ID</Th>
@@ -243,6 +253,8 @@ export default function PatientsList() {
               <Th>Age</Th>
               <Th>Patient Type</Th>
               <Th>Status</Th>
+              <Th>Bill</Th>
+              <Th>Lab</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -251,22 +263,49 @@ export default function PatientsList() {
                 <Td>{p.institute_id}</Td>
                 <Td>{p.name}</Td>
                 <Td>{p.contact_no}</Td>
-                <Td>{p.age ?? '—'}</Td>
+                <Td>{p.age ?? '-'}</Td>
                 <Td>
-                  <Badge colorScheme={p.patient_type === 'Student' ? 'blue' : p.patient_type === 'Faculty' ? 'purple' : 'gray'}>
+                  <Badge fontSize="10px" colorScheme={p.patient_type === 'Student' ? 'blue' : p.patient_type === 'Faculty' ? 'purple' : 'gray'}>
                     {p.patient_type}
                   </Badge>
                 </Td>
                 <Td>
-                  <Badge colorScheme={p.workflow_status === 'active' ? 'green' : 'red'}>
+                  <Badge
+                    variant="subtle"
+                    fontSize="10px"
+                    colorScheme={
+                      p.workflow_status === 'active' ? 'green' :
+                        p.workflow_status === 'consultation' ? 'orange' :
+                          p.workflow_status === 'consultation completed' ? 'blue' :
+                            p.workflow_status === 'lab test pending' ? 'purple' : 'gray'
+                    }
+                  >
                     {p.workflow_status}
+                  </Badge>
+                </Td>
+                <Td>
+                  <Badge
+                    variant="outline"
+                    fontSize="10px"
+                    colorScheme={p.bill_status === 'paid' ? 'green' : p.bill_status === 'pending' ? 'red' : 'gray'}
+                  >
+                    {p.bill_status}
+                  </Badge>
+                </Td>
+                <Td>
+                  <Badge
+                    variant="outline"
+                    fontSize="10px"
+                    colorScheme={p.lab_status === 'completed' ? 'green' : p.lab_status === 'pending' ? 'blue' : p.lab_status === 'active' ? 'orange' : 'gray'}
+                  >
+                    {p.lab_status}
                   </Badge>
                 </Td>
               </Tr>
             ))}
             {currentPatients.length === 0 && (
               <Tr>
-                <Td colSpan={6} textAlign="center" py="6" color="gray.400">
+                <Td colSpan={8} textAlign="center" py="6" color="gray.400">
                   No patients found.
                 </Td>
               </Tr>

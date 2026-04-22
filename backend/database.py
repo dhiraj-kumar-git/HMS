@@ -307,7 +307,11 @@ def get_patient_by_id(institute_id):
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
     pipeline = [
-        {"$match": {"doctor_assigned": doctor_username, "workflow_status": {"$in": ["active", "consultation"]}}},
+        {"$match": {
+            "doctor_assigned": doctor_username, 
+            "workflow_status": {"$in": ["active", "consultation", "lab test pending"]},
+            "doctor_finalized": {"$ne": True}
+        }},
         {
             "$lookup": {
                 "from": "visits",
@@ -465,13 +469,18 @@ def consultation_patient(institute_id, has_labs, has_meds):
     
     # Update visit summary so patient can see it in history immediately
     _finalize_visit(institute_id, mark_as_completed=False)
-    
+
+    # If labs are assigned, move to 'lab test pending' so they show up for billing/labs
+    # Otherwise, move to 'consultation'
+    new_workflow = "lab test pending" if has_labs else "consultation"
+
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
-            "workflow_status": "consultation",
+            "workflow_status": new_workflow,
             "bill_status": bill_status,
-            "lab_status": lab_status
+            "lab_status": lab_status,
+            "doctor_finalized": False
         }}
     )
     return result.modified_count > 0
@@ -491,12 +500,17 @@ def complete_consultation(institute_id):
     
     if bill_status in ["paid", "none"] and lab_status in ["completed", "none"]:
         new_status = "completed"
+    elif bill_status == "paid" and lab_status == "pending":
+        new_status = "lab test pending"
     else:
         new_status = "consultation completed"
 
     result = patients.update_one(
         {"institute_id": institute_id},
-        {"$set": {"workflow_status": new_status}}
+        {"$set": {
+            "workflow_status": new_status,
+            "doctor_finalized": True
+        }}
     )
     return result.modified_count > 0
 

@@ -167,7 +167,8 @@ export default function DoctorsDashboard() {
       // Derive readyToComplete from workflow_status
       const readyMap = {};
       patientsWithDetails.forEach(p => {
-        if (p.workflow_status === "consultation") {
+        // Patients in 'consultation' or 'lab test pending' are ready for the doctor to finalize
+        if (p.workflow_status === "consultation" || p.workflow_status === "lab test pending") {
           readyMap[p.institute_id] = true;
         }
       });
@@ -777,9 +778,9 @@ export default function DoctorsDashboard() {
                       </Tr>
                     </Thead>
                     <Tbody>
-                      {currentPatients.map((p, i) => (
+                      {currentPatients.map((p) => (
                         <Tr
-                          key={i}
+                          key={p.institute_id}
                           _hover={{ bg: 'gray.50', cursor: 'pointer' }}
                           onClick={() => openPatientModal(p)}
                         >
