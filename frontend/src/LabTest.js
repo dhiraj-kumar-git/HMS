@@ -235,21 +235,31 @@ export default function LabTestDashboard() {
 
   // CHANGE HANDLERS
   const handleIndividualResultChange = (i, val) => {
-    const arr = [...tests];
-    arr[i].result = val;
-    setTests(arr);
+    setTests(prev => {
+      const arr = [...prev];
+      arr[i] = { ...arr[i], result: val };
+      return arr;
+    });
   };
 
   const handleSubResultChange = (gi, si, val) => {
-    const arr = [...tests];
-    arr[gi].subResults[si] = val;
-    setTests(arr);
+    setTests(prev => {
+      const arr = [...prev];
+      const newSubResults = [...arr[gi].subResults];
+      newSubResults[si] = val;
+      arr[gi] = { ...arr[gi], subResults: newSubResults };
+      return arr;
+    });
   };
 
   const handleMultiResultChange = (i, si, val) => {
-    const arr = [...tests];
-    arr[i].multiResults[si] = val;
-    setTests(arr);
+    setTests(prev => {
+      const arr = [...prev];
+      const newMultiResults = [...arr[i].multiResults];
+      newMultiResults[si] = val;
+      arr[i] = { ...arr[i], multiResults: newMultiResults };
+      return arr;
+    });
   };
 
   // SUBMIT & PRINT
@@ -271,15 +281,31 @@ export default function LabTestDashboard() {
           institute_id: selectedPatient.institute_id,
           test_name: tests[0].lab_test,
           results: tests.reduce((acc, t) => {
-            if (t.type === "individual") acc[t.lab_test] = t.result;
-            else if (t.type === "group")
-              t.subTestNames.forEach(
-                (n, idx) => (acc[n] = t.subResults[idx] || "")
-              );
-            else if (t.type === "multi")
-              t.reference_ranges.forEach(
-                (r, idx) => (acc[r.split(":")[0]] = t.multiResults[idx] || "")
-              );
+            if (t.type === "individual") {
+              acc[t.lab_test] = {
+                value: t.result || "",
+                reference_range: t.reference_range || "N/A",
+                units: t.units || "N/A"
+              };
+            } else if (t.type === "group") {
+              t.subTestNames.forEach((n, idx) => {
+                const det = t.subTestDetails[idx] || {};
+                acc[n] = {
+                  value: t.subResults[idx] || "",
+                  reference_range: det.reference_range || "N/A",
+                  units: det.units || "N/A"
+                };
+              });
+            } else if (t.type === "multi") {
+              t.reference_ranges.forEach((r, idx) => {
+                const label = r.split(":")[0];
+                acc[label] = {
+                  value: t.multiResults[idx] || "",
+                  reference_range: r,
+                  units: t.unitsArray[idx] || "N/A"
+                };
+              });
+            }
             return acc;
           }, {}),
           remarks: "",
@@ -401,7 +427,7 @@ BITS Pilani
       minute: "2-digit",
       hour12: true,
     });
-    
+
     let rows = "";
     tests.forEach((test) => {
       if (test.type === "individual") {
@@ -487,26 +513,20 @@ BITS Pilani
           <div class="patient-info">
             <div class="patient-row">
               <div class="patient-left">
-                <div><span>Name</span><span>: ${
-                  selectedPatient?.name?.toUpperCase() || ""
-                }</span></div>
-                <div><span>Sex & Age</span><span>: ${
-                  selectedPatient?.gender?.toUpperCase() || ""
-                } / ${selectedPatient?.age || ""}Yr</span></div>
-                <div><span>Ph/Mob No</span><span>: ${
-                  selectedPatient?.contact_no || "/"
-                }</span></div>
-                <div><span>Email ID</span><span>: ${
-                  selectedPatient?.email || "/"
-                }</span></div>
-                <div><span>Address</span><span>: ${
-                  selectedPatient?.address || ""
-                }</span></div>
+                <div><span>Name</span><span>: ${selectedPatient?.name?.toUpperCase() || ""
+      }</span></div>
+                <div><span>Sex & Age</span><span>: ${selectedPatient?.gender?.toUpperCase() || ""
+      } / ${selectedPatient?.age || ""}Yr</span></div>
+                <div><span>Ph/Mob No</span><span>: ${selectedPatient?.contact_no || "/"
+      }</span></div>
+                <div><span>Email ID</span><span>: ${selectedPatient?.email || "/"
+      }</span></div>
+                <div><span>Address</span><span>: ${selectedPatient?.address || ""
+      }</span></div>
               </div>
               <div class="patient-right">
-                <div><span>Institute ID</span><span>: ${
-                  selectedPatient?.institute_id || ""
-                }</span></div>
+                <div><span>Institute ID</span><span>: ${selectedPatient?.institute_id || ""
+      }</span></div>
                 <div><span>Date & Time</span><span>: ${currentDateTime}</span></div>
               </div>
             </div>
@@ -912,9 +932,6 @@ BITS Pilani
                 <Box w="22%" minW="140px">
                   Visiting Time
                 </Box>
-                <Box w="20%" minW="120px">
-                  Last Visit
-                </Box>
               </Flex>
 
               {displayedPatients.length === 0 ? (
@@ -989,11 +1006,6 @@ BITS Pilani
                     <Box w="22%" minW="140px">
                       <Text fontSize="sm" color="gray.600">
                         {p.visitingTime || "TBD"}
-                      </Text>
-                    </Box>
-                    <Box w="20%" minW="120px">
-                      <Text fontSize="sm" color="gray.600">
-                        {p.lastVisit || "Nil"}
                       </Text>
                     </Box>
                   </Flex>

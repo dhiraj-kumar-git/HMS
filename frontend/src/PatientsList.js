@@ -64,7 +64,15 @@ export default function PatientsList() {
       const { data } = await axios.get(`${BASE_URL}/patients`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setPatients(data);
+      
+      // Sort patients by institute_id alphabetically
+      const sortedData = data.sort((a, b) => {
+        const idA = (a.institute_id || "").toString().toLowerCase();
+        const idB = (b.institute_id || "").toString().toLowerCase();
+        return idA.localeCompare(idB);
+      });
+      
+      setPatients(sortedData);
     } catch (err) {
       console.error(err);
       toast({ title: 'Error loading patients', status: 'error', duration: 3000, isClosable: true });

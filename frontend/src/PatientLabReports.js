@@ -132,22 +132,23 @@ export default function PatientLabReports() {
       doc.setFont("helvetica", "bold");
       doc.text("Parameter", 14, y);
       doc.text("Result", 90, y);
-      doc.text("Reference Range", 150, y);
+      doc.text("Ref Range", 130, y);
+      doc.text("Units", 180, y);
       doc.line(14, y + 2, 200, y + 2);
 
       // Table data
       y += 8;
       doc.setFont("helvetica", "normal");
       Object.entries(latest.results || {}).forEach(([param, val]) => {
-        const resultValue = typeof val === "object" ? val.value || val : val;
-        const refRange =
-          typeof val === "object" && val.reference_range
-            ? val.reference_range
-            : "N/A";
+        // Handle both old string format and new object format
+        const resultValue = typeof val === "object" ? (val.value ?? "") : val;
+        const refRange = typeof val === "object" ? (val.reference_range ?? "N/A") : "N/A";
+        const units = typeof val === "object" ? (val.units ?? "N/A") : "N/A";
 
         doc.text(param, 14, y);
         doc.text(String(resultValue), 90, y);
-        doc.text(refRange, 150, y);
+        doc.text(String(refRange), 130, y);
+        doc.text(String(units), 180, y);
         y += 7;
 
         if (y > 270) {
@@ -238,9 +239,6 @@ export default function PatientLabReports() {
         >
           <Box flex="1.5">Name</Box>
           <Box flex="1.3">Institute ID</Box>
-          <Box flex="0.7" textAlign="center">
-            Age
-          </Box>
           <Box flex="0.9" textAlign="center">
             Gender
           </Box>
@@ -319,12 +317,12 @@ export default function PatientLabReports() {
                 <Box flex="1.5">
                   {last?.timestamp
                     ? new Date(last.timestamp).toLocaleString("en-IN", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
                     : "N/A"}
                 </Box>
 
@@ -377,7 +375,7 @@ export default function PatientLabReports() {
               (() => {
                 const latestReport =
                   selectedPatient.lab_reports[
-                    selectedPatient.lab_reports.length - 1
+                  selectedPatient.lab_reports.length - 1
                   ];
 
                 if (!latestReport) {
@@ -399,16 +397,27 @@ export default function PatientLabReports() {
                         <Tr>
                           <Th>Parameter</Th>
                           <Th>Result</Th>
+                          <Th>Ref Range</Th>
+                          <Th>Units</Th>
                         </Tr>
                       </Thead>
                       <Tbody>
                         {Object.entries(latestReport.results || {}).map(
-                          ([key, value]) => (
-                            <Tr key={key}>
-                              <Td>{key}</Td>
-                              <Td>{value || "—"}</Td>
-                            </Tr>
-                          )
+                          ([key, val]) => {
+                            const resultValue = typeof val === "object" ? (val.value ?? "") : val;
+                            return (
+                              <Tr key={key}>
+                                <Td>{key}</Td>
+                                <Td fontWeight="bold">{resultValue || "—"}</Td>
+                                <Td fontSize="xs" color="gray.500">
+                                  {typeof val === "object" ? val.reference_range : "N/A"}
+                                </Td>
+                                <Td fontSize="xs" color="gray.500">
+                                  {typeof val === "object" ? val.units : "N/A"}
+                                </Td>
+                              </Tr>
+                            );
+                          }
                         )}
                       </Tbody>
                     </Table>
