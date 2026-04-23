@@ -265,9 +265,17 @@ function DashboardHome() {
         const response = await axios.get(`${BASE_URL}/patients`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-        // Optionally, filter for active patients (assuming new patients are those with workflow_status === "active")
+        // Optionally, filter for active patients (assuming new patients are those with workflow_status === "inactive")
         const activePatients = response.data.filter(patient => patient.workflow_status === "inactive");
-        setNewPatients(activePatients);
+        
+        // Sort patients by institute_id alphabetically
+        const sortedPatients = activePatients.sort((a, b) => {
+          const idA = (a.institute_id || "").toString().toLowerCase();
+          const idB = (b.institute_id || "").toString().toLowerCase();
+          return idA.localeCompare(idB);
+        });
+        
+        setNewPatients(sortedPatients);
       } catch (error) {
         console.error("Error fetching new patients:", error);
       }
@@ -299,7 +307,7 @@ function DashboardHome() {
         />
         <StatCard
           title="Hospital Earning"
-          value="₹​ 1024"
+          value="₹​ 8375"
           icon={FiCreditCard}
           bgGradient="linear(to-r, gray.600, gray.700)"
         />

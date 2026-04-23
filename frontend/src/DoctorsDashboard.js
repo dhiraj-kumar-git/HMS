@@ -875,8 +875,7 @@ export default function DoctorsDashboard() {
                         <Th>Name</Th>
                         <Th>Age</Th>
                         <Th>Gender</Th>
-                        <Th>Visiting Time</Th>
-                        <Th>Last Visit</Th>
+                        <Th>Booking Time</Th>
                         <Th>Lab Reports</Th>
                         <Th textAlign="center">Actions</Th>
                       </Tr>
@@ -919,7 +918,6 @@ export default function DoctorsDashboard() {
                           <Td><Text fontSize="sm">{p.age}</Text></Td>
                           <Td><Text fontSize="sm">{p.gender}</Text></Td>
                           <Td><Text fontSize="sm">{p.visitingTime}</Text></Td>
-                          <Td><Text fontSize="sm">{p.lastVisit || "Nil"}</Text></Td>
                           <Td>
                             {Array.isArray(p.lab_reports) && p.lab_reports.some((r) => r && r.s3_key) ? (
                               <Button
