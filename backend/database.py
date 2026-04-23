@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
@@ -238,7 +238,8 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
                 "doctor_assigned": doctor_username,
                 "workflow_status": "active",
                 "bill_status": "none",
-                "lab_status": "none"
+                "lab_status": "none",
+                "doctor_finalized": False
             }
         }
     )
@@ -284,6 +285,32 @@ def _map_aggregated_patient(patient):
         patient["remarks"].extend(v.get("remarks", []))
         
     return patient
+
+def store_patient_otp(institute_id, otp):
+    expires_at = datetime.utcnow() + timedelta(minutes=5)
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"otp": otp, "otp_expires": expires_at}}
+    )
+    return result.modified_count > 0
+
+def verify_patient_otp(institute_id, otp):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient or "otp" not in patient:
+        return False, "OTP not generated or patient not found."
+    
+    if patient.get("otp_expires") and datetime.utcnow() > patient["otp_expires"]:
+        return False, "OTP has expired."
+        
+    if str(patient.get("otp")) == str(otp):
+        # Clear the OTP
+        patients.update_one(
+            {"institute_id": institute_id},
+            {"$unset": {"otp": "", "otp_expires": ""}}
+        )
+        return True, "Success"
+        
+    return False, "Invalid OTP."
 
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):
@@ -397,11 +424,18 @@ def add_lab_report(institute_id, report_details):
         {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
     )
     
-    _finalize_visit(institute_id)
-    patients.update_one(
-        {"institute_id": institute_id},
-        {"$set": {"workflow_status": "completed", "lab_status": "completed"}}
-    )
+    patient = patients.find_one({"institute_id": institute_id})
+    if patient:
+        new_workflow_status = patient.get("workflow_status", "completed")
+        if new_workflow_status == "lab test pending":
+            # Optional: change back to consultation or keep as lab test pending.
+            # Keeping it as consultation makes it clearer it's back to the doctor.
+            new_workflow_status = "consultation"
+            
+        patients.update_one(
+            {"institute_id": institute_id},
+            {"$set": {"workflow_status": new_workflow_status, "lab_status": "completed"}}
+        )
     
     return result.modified_count > 0
 
@@ -710,7 +744,7 @@ def bulk_register_patients(rows, admin_username):
     return results
 
 def submit_lab_results(institute_id, results):
-    # Mark patient as completed if doctor has already finished consultation
+    # Depending on your workflow, you might update the visit or patient.
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
 
@@ -720,11 +754,10 @@ def submit_lab_results(institute_id, results):
             {"visit_id": visit_id},
             {"$set": {"lab_results": results}}
         )
-    _finalize_visit(institute_id, mark_as_completed=True)
 
-    new_workflow_status = "completed"
-    # If doctor hasn't clicked "Complete consultation" yet, stay in "consultation"
-    if patient.get("workflow_status") == "consultation":
+    new_workflow_status = patient.get("workflow_status", "completed")
+    if new_workflow_status == "lab test pending":
+        # Keep visible for the doctor
         new_workflow_status = "consultation"
 
     return patients.update_one(

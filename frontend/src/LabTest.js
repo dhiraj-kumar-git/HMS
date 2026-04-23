@@ -266,7 +266,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/lab/submit_results`,
+        `${BASE_URL}/lab/save_report`,
         {
           institute_id: selectedPatient.institute_id,
           test_name: tests[0].lab_test,

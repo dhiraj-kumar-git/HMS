@@ -35,6 +35,7 @@ export default function PatientLabReports() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [emailingPatientId, setEmailingPatientId] = useState(null);
 
   const {
     isOpen: isViewOpen,
@@ -96,6 +97,7 @@ export default function PatientLabReports() {
       return;
     }
 
+    setEmailingPatientId(patient.institute_id);
     try {
       const { jsPDF } = await import("jspdf");
       const doc = new jsPDF();
@@ -179,6 +181,8 @@ export default function PatientLabReports() {
         status: "error",
         duration: 3000,
       });
+    } finally {
+      setEmailingPatientId(null);
     }
   };
 
@@ -349,6 +353,7 @@ export default function PatientLabReports() {
                     borderRadius="full"
                     px={3}
                     onClick={() => handleEmail(patient)}
+                    isLoading={emailingPatientId === patient.institute_id}
                   >
                     Email
                   </Button>

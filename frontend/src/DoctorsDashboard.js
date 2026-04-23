@@ -139,25 +139,25 @@ export default function DoctorsDashboard() {
   }, [dateFilter, sortBy, filterInstituteId]);
 
   useEffect(() => {
-  const fetchDisplayName = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const username = localStorage.getItem("username");
+    const fetchDisplayName = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const username = localStorage.getItem("username");
 
-      const cachedName = localStorage.getItem("display_name");
-      if (cachedName) {
-        setDisplayName(cachedName);
-        return;
-      }
+        const cachedName = localStorage.getItem("display_name");
+        if (cachedName) {
+          setDisplayName(cachedName);
+          return;
+        }
 
-      const res = await axios.get(`${BASE_URL}/users/${username}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+        const res = await axios.get(`${BASE_URL}/users/${username}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
 
-      const fetchedName = res.data.display_name || username;
-      setDisplayName(fetchedName);
+        const fetchedName = res.data.display_name || username;
+        setDisplayName(fetchedName);
 
-      localStorage.setItem("display_name", fetchedName);
+        localStorage.setItem("display_name", fetchedName);
       } catch (error) {
         console.error("Error fetching display name:", error);
         setDisplayName(localStorage.getItem("username"));
@@ -262,6 +262,53 @@ export default function DoctorsDashboard() {
   const handleLabTestRemove = (list) => setSelectedLabTests(list);
 
   // LOCAL ACTIONS (Batched)
+  const handleViewReports = async (reports) => {
+    try {
+      const token = localStorage.getItem("token");
+
+      const s3Reports = reports.filter((r) => r && r.s3_key);
+
+      if (!s3Reports.length) {
+        toast({
+          title: "No file reports available",
+          status: "info",
+        });
+        return;
+      }
+
+      const r = s3Reports[0]; // only latest report
+      const res = await axios.post(
+        `${BASE_URL}/s3/view-url`,
+        { s3_key: r.s3_key },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      if (res.data?.url) {
+        const url = res.data.url;
+        const response = await fetch(url);
+        const blob = await response.blob();
+
+        const blobUrl = window.URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = blobUrl;
+        link.download = r.file_name || "LabReport.pdf";
+
+        document.body.appendChild(link);
+        link.click();
+
+        link.remove();
+        window.URL.revokeObjectURL(blobUrl);
+      }
+    } catch (err) {
+      toast({
+        title: "Error opening report",
+        description: err.message,
+        status: "error",
+      });
+    }
+  };
+
   const handleAddPrescription = () => {
     if (!prescriptionDetails.trim()) return;
     setSessionSavedPrescriptions((prev) => [...prev, prescriptionDetails.trim()]);
@@ -307,12 +354,12 @@ export default function DoctorsDashboard() {
 
   const handleSaveDetails = async () => {
     if (!selectedPatient) return;
-    
+
     try {
       const token = localStorage.getItem("token");
-      
+
       const promises = [];
-      
+
       sessionSavedPrescriptions.forEach(p => {
         promises.push(axios.post(`${BASE_URL}/doctor/add_prescription_details`, { institute_id: selectedPatient.institute_id, prescription_details: p }, { headers: { Authorization: `Bearer ${token}` } }));
       });
@@ -327,15 +374,15 @@ export default function DoctorsDashboard() {
       });
 
       await Promise.all(promises);
-      
+
       const hasLabs = sessionSavedLabTests.length > 0;
       const hasMeds = sessionSavedMedicines.length > 0;
-      
+
       if (!hasLabs && !hasMeds) {
         onConfirmOpen();
         return;
       }
-      
+
       await markAsReady(hasLabs, hasMeds);
     } catch (e) {
       toast({ title: "Error saving details", description: e.message, status: "error" });
@@ -351,15 +398,15 @@ export default function DoctorsDashboard() {
         { has_labs: hasLabs, has_meds: hasMeds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast({ 
-        title: "Consultation details saved", 
+      toast({
+        title: "Consultation details saved",
         description: "Please click the green tick icon in the patient list to complete this consultation.",
         status: "success",
         duration: 5000,
         isClosable: true
       });
       onConfirmClose();
-      
+
       // Clear locally so warning doesn't trigger on close
       setSessionSavedPrescriptions([]);
       setSessionSavedRemarks([]);
@@ -367,7 +414,7 @@ export default function DoctorsDashboard() {
       setSessionSavedLabTests([]);
       setPrescriptionDetails("");
       setRemark("");
-      
+
       onClose();
       await fetchPatients();
     } catch (e) {
@@ -384,7 +431,7 @@ export default function DoctorsDashboard() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       toast({ title: "Consultation Completed", status: "success" });
-      
+
       await fetchPatients();
       onConfirmClose();
       if (selectedPatient?.institute_id === patientId) {
@@ -397,7 +444,7 @@ export default function DoctorsDashboard() {
   };
 
   const handleAttemptClose = () => {
-    const hasUnsavedItems = 
+    const hasUnsavedItems =
       sessionSavedPrescriptions.length > 0 ||
       sessionSavedRemarks.length > 0 ||
       sessionSavedMedicines.length > 0 ||
@@ -435,11 +482,11 @@ export default function DoctorsDashboard() {
       const token = localStorage.getItem("token");
       if (username && token) {
         await axios.post(
-        `${BASE_URL}/logout`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        }
-      );
+          `${BASE_URL}/logout`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
       }
     } catch (err) {
       console.error("Logout failed", err);
@@ -830,6 +877,7 @@ export default function DoctorsDashboard() {
                         <Th>Gender</Th>
                         <Th>Visiting Time</Th>
                         <Th>Last Visit</Th>
+                        <Th>Lab Reports</Th>
                         <Th textAlign="center">Actions</Th>
                       </Tr>
                     </Thead>
@@ -863,15 +911,31 @@ export default function DoctorsDashboard() {
                             </Flex>
                           </Td>
                           <Td>
-                             <Flex align="center">
-                               <Avatar size="sm" name={p.name} mr="2" />
-                               <Text fontSize="sm" color="gray.800">{p.name}</Text>
-                             </Flex>
+                            <Flex align="center">
+                              <Avatar size="sm" name={p.name} mr="2" />
+                              <Text fontSize="sm" color="gray.800">{p.name}</Text>
+                            </Flex>
                           </Td>
                           <Td><Text fontSize="sm">{p.age}</Text></Td>
                           <Td><Text fontSize="sm">{p.gender}</Text></Td>
                           <Td><Text fontSize="sm">{p.visitingTime}</Text></Td>
                           <Td><Text fontSize="sm">{p.lastVisit || "Nil"}</Text></Td>
+                          <Td>
+                            {Array.isArray(p.lab_reports) && p.lab_reports.some((r) => r && r.s3_key) ? (
+                              <Button
+                                size="sm"
+                                colorScheme="blue"
+                                onClick={(e) => {
+                                  e.stopPropagation(); // prevents modal open
+                                  handleViewReports(p.lab_reports);
+                                }}
+                              >
+                                View
+                              </Button>
+                            ) : (
+                              <Text fontSize="sm">—</Text>
+                            )}
+                          </Td>
                           <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                             {readyToComplete[p.institute_id] && (
                               <IconButton
@@ -935,14 +999,14 @@ export default function DoctorsDashboard() {
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody p={0} display="flex" h="500px">
-            
+
             {/* Left Pane - Inputs (Tabs) */}
             <Box flex="2" bg="white" borderRight="1px solid" borderColor="gray.100" overflowY="auto">
               <Tabs colorScheme="blue" variant="enclosed" m={4}>
                 <TabList mb="1em">
-                  <Tab fontWeight="medium"><FiFileText style={{marginRight: "8px"}} /> Prescription & Remarks</Tab>
-                  <Tab fontWeight="medium"><FiPlusCircle style={{marginRight: "8px"}} /> Medicines</Tab>
-                  <Tab fontWeight="medium"><FiActivity style={{marginRight: "8px"}} /> Lab Tests</Tab>
+                  <Tab fontWeight="medium"><FiFileText style={{ marginRight: "8px" }} /> Prescription & Remarks</Tab>
+                  <Tab fontWeight="medium"><FiPlusCircle style={{ marginRight: "8px" }} /> Medicines</Tab>
+                  <Tab fontWeight="medium"><FiActivity style={{ marginRight: "8px" }} /> Lab Tests</Tab>
                 </TabList>
                 <TabPanels>
                   {/* Tab 1: Prescription & Remarks */}
@@ -968,7 +1032,7 @@ export default function DoctorsDashboard() {
                         </Button>
                       </Flex>
                     </FormControl>
-                    
+
                     <FormControl>
                       <FormLabel fontSize="sm" color="gray.600">Add Remark</FormLabel>
                       <Flex gap={2}>
@@ -991,7 +1055,7 @@ export default function DoctorsDashboard() {
                       </Flex>
                     </FormControl>
                   </TabPanel>
-                  
+
                   {/* Tab 2: Medicines */}
                   <TabPanel>
                     <FormControl>
@@ -1022,7 +1086,7 @@ export default function DoctorsDashboard() {
                       </Button>
                     </FormControl>
                   </TabPanel>
-                  
+
                   {/* Tab 3: Lab Tests */}
                   <TabPanel>
                     <FormControl>
@@ -1141,6 +1205,12 @@ export default function DoctorsDashboard() {
             <Button colorScheme="green" size="lg" onClick={handleSaveDetails}>
               Save all Details & Complete
             </Button>
+            <Button colorScheme="blue" variant="outline" size="lg" ml={3} mr={3} onClick={() => {
+              onClose();
+              navigate(`/doctor/patient-history/${selectedPatient.institute_id}`);
+            }}>
+              History
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
@@ -1175,7 +1245,7 @@ export default function DoctorsDashboard() {
         <AlertDialogOverlay>
           <AlertDialogContent>
             <AlertDialogHeader fontSize="lg" fontWeight="bold" display="flex" alignItems="center">
-              <FiAlertTriangle style={{marginRight: "8px", color: "#DD6B20"}} />
+              <FiAlertTriangle style={{ marginRight: "8px", color: "#DD6B20" }} />
               Unsaved Changes
             </AlertDialogHeader>
             <AlertDialogBody>
