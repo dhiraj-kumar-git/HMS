@@ -1,4 +1,4 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
@@ -285,6 +285,32 @@ def _map_aggregated_patient(patient):
         patient["remarks"].extend(v.get("remarks", []))
         
     return patient
+
+def store_patient_otp(institute_id, otp):
+    expires_at = datetime.utcnow() + timedelta(minutes=5)
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"otp": otp, "otp_expires": expires_at}}
+    )
+    return result.modified_count > 0
+
+def verify_patient_otp(institute_id, otp):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient or "otp" not in patient:
+        return False, "OTP not generated or patient not found."
+    
+    if patient.get("otp_expires") and datetime.utcnow() > patient["otp_expires"]:
+        return False, "OTP has expired."
+        
+    if str(patient.get("otp")) == str(otp):
+        # Clear the OTP
+        patients.update_one(
+            {"institute_id": institute_id},
+            {"$unset": {"otp": "", "otp_expires": ""}}
+        )
+        return True, "Success"
+        
+    return False, "Invalid OTP."
 
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):

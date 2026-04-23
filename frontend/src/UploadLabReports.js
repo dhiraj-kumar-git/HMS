@@ -21,6 +21,7 @@ function UploadLabReports() {
   const [errors, setErrors] = useState({});
   const [uploadedReports, setUploadedReports] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
   const toast = useToast();
 
   const token = localStorage.getItem("token");
@@ -74,6 +75,7 @@ function UploadLabReports() {
   // FULLY FIXED upload flow
   const handleUpload = async () => {
     if (!validate()) return;
+    setIsUploading(true);
 
     try {
       // 1. Get presigned URL
@@ -150,6 +152,8 @@ function UploadLabReports() {
         description: err.message,
         status: "error",
       });
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -211,7 +215,7 @@ function UploadLabReports() {
             )}
           </FormControl>
 
-          <Button colorScheme="blue" onClick={handleUpload}>
+          <Button colorScheme="blue" onClick={handleUpload} isLoading={isUploading}>
             Upload
           </Button>
         </Stack>

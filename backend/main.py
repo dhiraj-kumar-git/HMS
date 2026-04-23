@@ -1,4 +1,5 @@
 import base64
+import random
 import io
 import os
 from tempfile import NamedTemporaryFile
@@ -873,8 +874,50 @@ def public_verify_patient():
     if not patient:
         return jsonify({"error": "No patient found with this Institute ID"}), 404
         
+    email = patient.get("email")
+    if not email:
+        return jsonify({"error": "Patient does not have a registered email address for OTP."}), 400
+        
+    otp = str(random.randint(1000, 9999))
+    if not database.store_patient_otp(institute_id, otp):
+        return jsonify({"error": "Failed to generate OTP"}), 500
+        
+    # Mask email for frontend
+    try:
+        user, domain = email.split('@')
+        masked_email = user[0] + "***@" + domain
+    except:
+        masked_email = "your registered email"
+        
+    subject = "Your BITS Medical Centre OTP"
+    body = f"Dear {patient.get('name')},\n\nYour OTP to verify your appointment booking is: {otp}\n\nThis code will expire in 5 minutes.\n\nRegards,\nBITS Pilani Medical Centre"
+    
+    send_email(email, subject, body)
+        
     return jsonify({
-        "message": "Patient verified", 
+        "requires_otp": True,
+        "email": masked_email
+    }), 200
+
+@app.route('/api/public/verify-otp', methods=['POST'])
+def public_verify_otp():
+    data = request.json
+    institute_id = data.get("institute_id")
+    otp = data.get("otp")
+    
+    if not institute_id or not otp:
+        return jsonify({"error": "Institute ID and OTP are required"}), 400
+        
+    success, msg = database.verify_patient_otp(institute_id, otp)
+    if not success:
+        return jsonify({"error": msg}), 400
+        
+    patient = database.get_patient_by_id(institute_id)
+    if not patient:
+        return jsonify({"error": "No patient found"}), 404
+        
+    return jsonify({
+        "message": "OTP verified successfully", 
         "institute_id": patient.get("institute_id"), 
         "name": patient.get("name"),
         "doctor_assigned": patient.get("doctor_assigned"),

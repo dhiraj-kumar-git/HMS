@@ -133,9 +133,9 @@ const hospitalSurveyData = [
 
 // Demo data for the bar chart (Student, Staff, Other)
 const patientTypeData = [
-  { category: 'Student', count: 635 },
-  { category: 'Staff', count: 930 },
-  { category: 'Other', count: 1250 }
+  { category: 'Student', count: 1250 },
+  { category: 'Staff', count: 235 },
+  { category: 'Other', count: 120 }
 ];
 
 export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout }) {
@@ -146,26 +146,26 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
     <Flex w="100vw" h="100vh" bg="gray.50" overflow="hidden">
       {/* Sidebar */}
       <Box
-            w={{ base: '200px', md: '250px' }}
-            bg="white"
-            boxShadow="md"
-            position="sticky"
-            top="0"
-            h="100vh"
-            overflowY="auto"
+        w={{ base: '200px', md: '250px' }}
+        bg="white"
+        boxShadow="md"
+        position="sticky"
+        top="0"
+        h="100vh"
+        overflowY="auto"
+      >
+        {/* HEADER SLOT */}
+        <Box position="relative" h="48px" px="4" mb="4">
+          <Text
+            position="absolute"
+            top="60%"
+            transform="translateY(-50%)"
+            fontSize={{ base: 'xl', md: '2xl' }}
+            fontWeight="bold"
           >
-            {/* HEADER SLOT */}
-            <Box position="relative" h="48px" px="4" mb="4">
-              <Text
-                position="absolute"
-                top="60%"
-                transform="translateY(-50%)"
-                fontSize={{ base: 'xl', md: '2xl' }}
-                fontWeight="bold"
-              >
-                BITS MED-C
-              </Text>
-            </Box>
+            BITS MED-C
+          </Text>
+        </Box>
         <SidebarItem icon={FiHome} label="Dashboard" to="/admin" />
         <SidebarItem icon={FiUserPlus} label="Create User" to="/admin/create-user" />
         <SidebarItem icon={FiUsers} label="Users List" to="/admin/users-list" />
@@ -255,7 +255,7 @@ function DashboardHome() {
   // We add a modal for viewing all New Patients
   const { isOpen, onOpen, onClose } = useDisclosure();
   const [newPatients, setNewPatients] = useState([]);
-  
+
   // Fetch new patients from the backend when DashboardHome mounts.
   useEffect(() => {
     const fetchNewPatients = async () => {
@@ -266,7 +266,7 @@ function DashboardHome() {
           headers: { Authorization: `Bearer ${token}` }
         });
         // Optionally, filter for active patients (assuming new patients are those with workflow_status === "active")
-        const activePatients = response.data.filter(patient => patient.workflow_status === "active");
+        const activePatients = response.data.filter(patient => patient.workflow_status === "inactive");
         setNewPatients(activePatients);
       } catch (error) {
         console.error("Error fetching new patients:", error);
@@ -281,25 +281,25 @@ function DashboardHome() {
       <SimpleGrid columns={{ base: 1, md: 4 }} spacing={{ base: '4', md: '6' }} mb="8">
         <StatCard
           title="New Patients"
-          value={newPatients.length}
+          value="35"
           icon={FiUsers}
           bgGradient="linear(to-r, teal.400, blue.400)"
         />
         <StatCard
           title="Our Doctors"
-          value="12"
+          value="8"
           icon={FiUserPlus}
           bgGradient="linear(to-r, green.400, green.600)"
         />
         <StatCard
-          title="Today's Operation"
-          value="05"
+          title="Today's Visits"
+          value="12"
           icon={FiCalendar}
           bgGradient="linear(to-r, orange.400, orange.500)"
         />
         <StatCard
           title="Hospital Earning"
-          value="₹​ 36,546"
+          value="₹​ 1024"
           icon={FiCreditCard}
           bgGradient="linear(to-r, gray.600, gray.700)"
         />
