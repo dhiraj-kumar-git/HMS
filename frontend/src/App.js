@@ -22,6 +22,7 @@ import AddMedicine from './AddMedicine';
 import InventoryList from './InventoryList';
 import LabTest from './LabTest';
 import AllPatients from './AllPatients';
+import PatientHistory from './PatientHistory';
 import PatientLabReports from "./PatientLabReports";
 import UploadLabReports from "./UploadLabReports";
 
@@ -113,6 +114,16 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             element={
               isLoggedIn && role === 'doctor' ? (
                 <AllPatients />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/doctor/patient-history/:id"
+            element={
+              isLoggedIn && role === 'doctor' ? (
+                <PatientHistory />
               ) : (
                 <Navigate to="/login" />
               )
