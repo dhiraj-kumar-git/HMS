@@ -23,7 +23,14 @@ import {
   AccordionIcon,
   Alert,
   AlertIcon,
-  Spinner
+  Spinner,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiCheckCircle, FiCalendar } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -38,6 +45,12 @@ const PatientBooking = () => {
   const [instituteId, setInstituteId] = useState('');
   const [verifiedPatient, setVerifiedPatient] = useState(null);
   const [verifying, setVerifying] = useState(false);
+
+  // OTP States
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState('');
 
   const [doctors, setDoctors] = useState([]);
   const [bookingData, setBookingData] = useState({
@@ -115,7 +128,12 @@ const PatientBooking = () => {
     setVerifying(true);
     try {
       const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id });
-      setVerifiedPatient(response.data);
+      if (response.data.requires_otp) {
+        setMaskedEmail(response.data.email);
+        setShowOtpModal(true);
+      } else {
+        setVerifiedPatient(response.data);
+      }
     } catch (err) {
       setVerifiedPatient(null);
       toast({
@@ -128,6 +146,41 @@ const PatientBooking = () => {
       });
     } finally {
       setVerifying(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpInput) {
+      toast({ title: "OTP required", status: "warning", duration: 2000, position: 'top' });
+      return;
+    }
+    setVerifyingOtp(true);
+    try {
+      const response = await axios.post(`${BASE_URL}/api/public/verify-otp`, {
+        institute_id: instituteId,
+        otp: otpInput
+      });
+      setVerifiedPatient(response.data);
+      setShowOtpModal(false);
+      setOtpInput('');
+      toast({
+        title: "Verified",
+        description: "Your identity has been confirmed.",
+        status: "success",
+        duration: 3000,
+        position: 'top'
+      });
+    } catch (err) {
+      toast({
+        title: "Verification Failed",
+        description: err.response?.data?.error || "Invalid or expired OTP.",
+        status: "error",
+        duration: 3000,
+        position: 'top',
+        isClosable: true,
+      });
+    } finally {
+      setVerifyingOtp(false);
     }
   };
 
@@ -471,78 +524,78 @@ const PatientBooking = () => {
                 </Flex>
 
                 {/* Visit History Section */}
-                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a => 
-                  a.status === 'completed' || 
+                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a =>
+                  a.status === 'completed' ||
                   (a.prescription_summary && a.prescription_summary.length > 0) ||
                   (a.lab_test_summary && a.lab_test_summary.length > 0) ||
                   (a.diagnosis_note && a.diagnosis_note.length > 0) ||
                   (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
                 ).length > 0 && (
-                  <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                    <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
-                      <Icon as={FiCalendar} mr={3} /> My Visit History
-                    </Heading>
-                    <Accordion allowMultiple>
-                      {verifiedPatient.appointments.filter(a => 
-                        a.status === 'completed' || 
-                        (a.prescription_summary && a.prescription_summary.length > 0) ||
-                        (a.lab_test_summary && a.lab_test_summary.length > 0) ||
-                        (a.diagnosis_note && a.diagnosis_note.length > 0) ||
-                        (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
-                      ).slice().reverse().map((app, idx) => (
-                        <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
-                          <h2>
-                            <AccordionButton _expanded={{ bg: "gray.50" }}>
-                              <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
-                                {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
-                              </Box>
-                              <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
-                                {app.status === 'completed' ? "Completed" : "In Progress"}
-                              </Badge>
-                              <AccordionIcon />
-                            </AccordionButton>
-                          </h2>
-                          <AccordionPanel pb={4} bg="gray.50">
-                            <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
-                              <Box>
-                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
-                                {app.prescription_summary && app.prescription_summary.length > 0 ? (
-                                  <VStack align="start" spacing={1}>
-                                    {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
-                                  </VStack>
-                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                              </Box>
-                              <Box>
-                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
-                                {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
-                                  <VStack align="start" spacing={1}>
-                                    {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
-                                  </VStack>
-                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                              </Box>
-                              <Box gridColumn={{ md: "span 2" }}>
-                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
-                                {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
-                                  <VStack align="start" spacing={1}>
-                                    {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
-                                  </VStack>
-                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                              </Box>
-                              <Box gridColumn={{ md: "span 2" }}>
-                                <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
-                                {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
-                                  <VStack align="start" spacing={1}>
-                                    {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
-                                  </VStack>
-                                ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                              </Box>
-                            </Grid>
-                          </AccordionPanel>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
-                  </Box>
-                )}
+                    <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                      <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
+                        <Icon as={FiCalendar} mr={3} /> My Visit History
+                      </Heading>
+                      <Accordion allowMultiple>
+                        {verifiedPatient.appointments.filter(a =>
+                          a.status === 'completed' ||
+                          (a.prescription_summary && a.prescription_summary.length > 0) ||
+                          (a.lab_test_summary && a.lab_test_summary.length > 0) ||
+                          (a.diagnosis_note && a.diagnosis_note.length > 0) ||
+                          (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                        ).slice().reverse().map((app, idx) => (
+                          <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
+                            <h2>
+                              <AccordionButton _expanded={{ bg: "gray.50" }}>
+                                <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
+                                  {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
+                                </Box>
+                                <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
+                                  {app.status === 'completed' ? "Completed" : "In Progress"}
+                                </Badge>
+                                <AccordionIcon />
+                              </AccordionButton>
+                            </h2>
+                            <AccordionPanel pb={4} bg="gray.50">
+                              <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
+                                <Box>
+                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
+                                  {app.prescription_summary && app.prescription_summary.length > 0 ? (
+                                    <VStack align="start" spacing={1}>
+                                      {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
+                                    </VStack>
+                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                                </Box>
+                                <Box>
+                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
+                                  {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
+                                    <VStack align="start" spacing={1}>
+                                      {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
+                                    </VStack>
+                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                                </Box>
+                                <Box gridColumn={{ md: "span 2" }}>
+                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
+                                  {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
+                                    <VStack align="start" spacing={1}>
+                                      {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
+                                    </VStack>
+                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                                </Box>
+                                <Box gridColumn={{ md: "span 2" }}>
+                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
+                                  {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
+                                    <VStack align="start" spacing={1}>
+                                      {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
+                                    </VStack>
+                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+                                </Box>
+                              </Grid>
+                            </AccordionPanel>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    </Box>
+                  )}
               </VStack>
             )}
 
@@ -743,6 +796,59 @@ const PatientBooking = () => {
           </Box>
         )}
       </Box>
+
+      {/* OTP Verification Modal */}
+      <Modal isOpen={showOtpModal} onClose={() => setShowOtpModal(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="teal.800">Verify Your Identity</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <Box p={4} bg="teal.50" borderRadius="md" w="100%">
+                <Text fontSize="sm" color="teal.800" textAlign="center">
+                  We've sent a 4-digit OTP to your registered email address:<br />
+                  <strong>{maskedEmail}</strong>
+                </Text>
+              </Box>
+              <FormControl isRequired>
+                <FormLabel>Enter OTP</FormLabel>
+                <Input
+                  placeholder="----"
+                  size="lg"
+                  textAlign="center"
+                  letterSpacing="0.5em"
+                  maxLength={4}
+                  value={otpInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+
+                    // Allow only digits and max 4 length
+                    if (/^\d{0,4}$/.test(value)) {
+                      setOtpInput(value);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleVerifyOtp();
+                    }
+                  }}
+                />
+              </FormControl>
+              <Text fontSize="xs" color="gray.500" textAlign="center">
+                This code will expire in 5 minutes.
+              </Text>
+            </VStack>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setShowOtpModal(false)}>Cancel</Button>
+            <Button colorScheme="teal" ml={3} isLoading={verifyingOtp} onClick={handleVerifyOtp}>
+              Verify OTP
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Flex>
   );
 };
