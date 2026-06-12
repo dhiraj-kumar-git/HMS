@@ -28,7 +28,7 @@ import axios from 'axios';
 import BASE_URL from './Config';
 
 const RELATION_OPTIONS = [
-  "Spouse", "Son", "Daughter", "Father", "Mother", 
+  "Spouse", "Son", "Daughter", "Father", "Mother",
   "Father-in-law", "Mother-in-law", "Other"
 ];
 
@@ -180,7 +180,7 @@ const StaffRegistration = () => {
         <Tabs isFitted variant="enclosed" colorScheme="blue">
           <TabList mb="1em">
             <Tab>New Registration</Tab>
-            <Tab>Add Dependant Later</Tab>
+            <Tab>Add New Dependant</Tab>
           </TabList>
 
           <TabPanels>
@@ -188,7 +188,7 @@ const StaffRegistration = () => {
               <form onSubmit={submitNewRegistration}>
                 <VStack spacing={6} align="stretch">
                   <Heading size="md" color="blue.600">Primary Member Details</Heading>
-                  
+
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                     <FormControl isRequired>
                       <FormLabel>PSRN ID</FormLabel>
@@ -249,14 +249,14 @@ const StaffRegistration = () => {
 
                   {dependants.map((dep, index) => (
                     <Box key={index} p={4} borderWidth="1px" borderRadius="md" position="relative">
-                      <IconButton 
-                        icon={<FiTrash2 />} 
-                        colorScheme="red" 
-                        variant="ghost" 
-                        size="sm" 
-                        position="absolute" 
-                        top={2} 
-                        right={2} 
+                      <IconButton
+                        icon={<FiTrash2 />}
+                        colorScheme="red"
+                        variant="ghost"
+                        size="sm"
+                        position="absolute"
+                        top={2}
+                        right={2}
                         onClick={() => removeDependantRow(index)}
                       />
                       <Text fontWeight="bold" mb={4}>Dependant #{index + 1}</Text>
@@ -316,18 +316,18 @@ const StaffRegistration = () => {
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                     <FormControl isRequired>
                       <FormLabel>Full Name</FormLabel>
-                      <Input value={singleDependant.name} onChange={(e) => setSingleDependant({...singleDependant, name: e.target.value})} focusBorderColor="blue.500" />
+                      <Input value={singleDependant.name} onChange={(e) => setSingleDependant({ ...singleDependant, name: e.target.value })} focusBorderColor="blue.500" />
                     </FormControl>
                     <FormControl isRequired>
                       <FormLabel>Date of Birth</FormLabel>
-                      <Input type="date" max={new Date().toISOString().split('T')[0]} value={singleDependant.date_of_birth} onChange={(e) => setSingleDependant({...singleDependant, date_of_birth: e.target.value})} focusBorderColor="blue.500" />
+                      <Input type="date" max={new Date().toISOString().split('T')[0]} value={singleDependant.date_of_birth} onChange={(e) => setSingleDependant({ ...singleDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
                     </FormControl>
                   </SimpleGrid>
 
                   <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
                     <FormControl isRequired>
                       <FormLabel>Gender</FormLabel>
-                      <Select placeholder="Select Gender" value={singleDependant.gender} onChange={(e) => setSingleDependant({...singleDependant, gender: e.target.value})} focusBorderColor="blue.500">
+                      <Select placeholder="Select Gender" value={singleDependant.gender} onChange={(e) => setSingleDependant({ ...singleDependant, gender: e.target.value })} focusBorderColor="blue.500">
                         <option value="Male">Male</option>
                         <option value="Female">Female</option>
                         <option value="Other">Other</option>
@@ -335,7 +335,7 @@ const StaffRegistration = () => {
                     </FormControl>
                     <FormControl isRequired>
                       <FormLabel>Relation</FormLabel>
-                      <Select placeholder="Select Relation" value={singleDependant.relation} onChange={(e) => setSingleDependant({...singleDependant, relation: e.target.value})} focusBorderColor="blue.500">
+                      <Select placeholder="Select Relation" value={singleDependant.relation} onChange={(e) => setSingleDependant({ ...singleDependant, relation: e.target.value })} focusBorderColor="blue.500">
                         {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </Select>
                     </FormControl>
@@ -344,7 +344,7 @@ const StaffRegistration = () => {
                   {singleDependant.relation === 'Other' && (
                     <FormControl isRequired>
                       <FormLabel>Specify Relation</FormLabel>
-                      <Input value={singleDependant.custom_relation} onChange={(e) => setSingleDependant({...singleDependant, custom_relation: e.target.value})} focusBorderColor="blue.500" />
+                      <Input value={singleDependant.custom_relation} onChange={(e) => setSingleDependant({ ...singleDependant, custom_relation: e.target.value })} focusBorderColor="blue.500" />
                     </FormControl>
                   )}
 
