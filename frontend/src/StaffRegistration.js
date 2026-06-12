@@ -29,7 +29,7 @@ import {
   ModalCloseButton,
   ModalFooter
 } from '@chakra-ui/react';
-import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2, FiEdit2 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from './Config';
@@ -80,6 +80,16 @@ const StaffRegistration = () => {
   const [verifying, setVerifying] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [maskedEmail, setMaskedEmail] = useState('');
+
+  // Edit State
+  const [editingDependant, setEditingDependant] = useState(null);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingLoading, setEditingLoading] = useState(false);
+
+  // Delete State
+  const [deleteConfirmModalOpen, setDeleteConfirmModalOpen] = useState(false);
+  const [dependantToDelete, setDependantToDelete] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const handlePrimaryChange = (e) => {
     setPrimary({ ...primary, [e.target.name]: e.target.value });
@@ -172,6 +182,58 @@ const StaffRegistration = () => {
     }
   };
 
+  const confirmDeleteDependant = (dep) => {
+    setDependantToDelete(dep);
+    setDeleteConfirmModalOpen(true);
+  };
+
+  const executeDeleteDependant = async () => {
+    if (!dependantToDelete) return;
+    setDeleteLoading(true);
+    try {
+      await axios.delete(`${BASE_URL}/api/family/dependant/${dependantToDelete.institute_id}`);
+      toast({ title: "Dependant Deleted", status: "success", duration: 2000, isClosable: true });
+      checkExistingDependants();
+      setDeleteConfirmModalOpen(false);
+      setDependantToDelete(null);
+    } catch (err) {
+      toast({ title: "Failed to delete", description: err.response?.data?.error || "Unknown error", status: "error", duration: 3000, isClosable: true });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleEditClick = (dep) => {
+    // Format date_of_birth to YYYY-MM-DD for the input if needed
+    let dob = dep.date_of_birth;
+    if (dob && dob.includes("T")) {
+      dob = dob.split("T")[0];
+    } else if (dob && dob.$date) {
+      dob = dob.$date.split("T")[0];
+    } else if (dob) {
+      try {
+        dob = new Date(dob).toISOString().split('T')[0];
+      } catch (e) { }
+    }
+    setEditingDependant({ ...dep, date_of_birth: dob });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    setEditingLoading(true);
+    try {
+      await axios.put(`${BASE_URL}/api/family/dependant/${editingDependant.institute_id}`, editingDependant);
+      toast({ title: "Dependant Updated", status: "success", duration: 2000, isClosable: true });
+      setIsEditModalOpen(false);
+      checkExistingDependants();
+    } catch (err) {
+      toast({ title: "Failed to update", description: err.response?.data?.error || "Unknown error", status: "error", duration: 3000, isClosable: true });
+    } finally {
+      setEditingLoading(false);
+    }
+  };
+
   const submitNewRegistration = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -234,7 +296,7 @@ const StaffRegistration = () => {
         position: 'top'
       });
       setSingleDependant({ name: '', date_of_birth: '', gender: '', relation: '', custom_relation: '' });
-      setExistingPsrn('');
+      checkExistingDependants();
     } catch (err) {
       toast({
         title: "Failed to Add Dependant",
@@ -406,8 +468,14 @@ const StaffRegistration = () => {
                     <Input placeholder="Enter the PSRN ID of the primary staff member" value={existingPsrn} onChange={(e) => { setExistingPsrn(e.target.value); setIsVerified(false); }} focusBorderColor="blue.500" />
                   </FormControl>
                   <Box>
-                    <Button colorScheme="blue" onClick={handleVerify} isLoading={verifying || fetchingDependants}>
-                      Verify PSRN
+                    <Button 
+                      colorScheme={isVerified ? "green" : "blue"} 
+                      onClick={handleVerify} 
+                      isLoading={verifying || fetchingDependants}
+                      isDisabled={isVerified}
+                      leftIcon={isVerified ? <FiUserCheck /> : undefined}
+                    >
+                      {isVerified ? "Verified" : "Verify PSRN"}
                     </Button>
                   </Box>
 
@@ -419,10 +487,16 @@ const StaffRegistration = () => {
                           {existingDependants.length > 0 ? (
                             <VStack align="stretch" spacing={2}>
                               {existingDependants.map((dep, idx) => (
-                                <Box key={idx} p={3} bg="white" borderRadius="md" shadow="sm">
-                                  <Text fontWeight="bold">{dep.name}</Text>
-                                  <Text fontSize="sm" color="gray.600">ID: {dep.institute_id} | Relation: {dep.relation}</Text>
-                                </Box>
+                                <HStack key={idx} p={3} bg="white" borderRadius="md" shadow="sm" justify="space-between">
+                                  <Box>
+                                    <Text fontWeight="bold">{dep.name}</Text>
+                                    <Text fontSize="sm" color="gray.600">ID: {dep.institute_id} | Relation: {dep.relation}</Text>
+                                  </Box>
+                                  <HStack>
+                                    <IconButton icon={<FiEdit2 />} size="sm" colorScheme="blue" variant="ghost" onClick={() => handleEditClick(dep)} aria-label="Edit" />
+                                    <IconButton icon={<FiTrash2 />} size="sm" colorScheme="red" variant="ghost" onClick={() => confirmDeleteDependant(dep)} aria-label="Delete" />
+                                  </HStack>
+                                </HStack>
                               ))}
                             </VStack>
                           ) : (
@@ -531,6 +605,76 @@ const StaffRegistration = () => {
             <Button variant="ghost" onClick={() => setShowOtpModal(false)}>Cancel</Button>
             <Button colorScheme="blue" ml={3} isLoading={verifyingOtp} onClick={handleVerifyOtp}>
               Verify OTP
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Edit Dependant Modal */}
+      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} size="xl">
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <form onSubmit={handleEditSubmit}>
+            <ModalHeader color="blue.800">Edit Dependant Details</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody pb={6}>
+              {editingDependant && (
+                <VStack spacing={4} align="stretch">
+                  <FormControl isRequired>
+                    <FormLabel>Full Name</FormLabel>
+                    <Input value={editingDependant.name || ''} onChange={(e) => setEditingDependant({ ...editingDependant, name: e.target.value })} focusBorderColor="blue.500" />
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel>Email (Optional)</FormLabel>
+                    <Input type="email" value={editingDependant.email || ''} onChange={(e) => setEditingDependant({ ...editingDependant, email: e.target.value })} focusBorderColor="blue.500" />
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel>Date of Birth</FormLabel>
+                    <Input type="date" max={new Date().toISOString().split('T')[0]} value={editingDependant.date_of_birth || ''} onChange={(e) => setEditingDependant({ ...editingDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
+                  </FormControl>
+                  <SimpleGrid columns={2} spacing={4}>
+                    <FormControl isRequired>
+                      <FormLabel>Gender</FormLabel>
+                      <Select value={editingDependant.gender || ''} onChange={(e) => setEditingDependant({ ...editingDependant, gender: e.target.value })} focusBorderColor="blue.500">
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </Select>
+                    </FormControl>
+                    <FormControl isRequired>
+                      <FormLabel>Relation</FormLabel>
+                      <Select value={editingDependant.relation || ''} onChange={(e) => setEditingDependant({ ...editingDependant, relation: e.target.value })} focusBorderColor="blue.500">
+                        {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                      </Select>
+                    </FormControl>
+                  </SimpleGrid>
+                </VStack>
+              )}
+            </ModalBody>
+            <ModalFooter bg="gray.50" borderBottomRadius="xl">
+              <Button variant="ghost" onClick={() => setIsEditModalOpen(false)}>Cancel</Button>
+              <Button type="submit" colorScheme="blue" ml={3} isLoading={editingLoading}>
+                Save Changes
+              </Button>
+            </ModalFooter>
+          </form>
+        </ModalContent>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal isOpen={deleteConfirmModalOpen} onClose={() => setDeleteConfirmModalOpen(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="red.600">Delete Dependant Details</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Text>Are you sure you want to permanently delete the dependant details for <b>{dependantToDelete?.name}</b>?</Text>
+            <Text mt={2} fontSize="sm" color="gray.500">This action cannot be undone.</Text>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setDeleteConfirmModalOpen(false)}>Cancel</Button>
+            <Button colorScheme="red" ml={3} isLoading={deleteLoading} onClick={executeDeleteDependant}>
+              Delete
             </Button>
           </ModalFooter>
         </ModalContent>
