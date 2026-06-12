@@ -28,6 +28,7 @@ import UploadLabReports from "./UploadLabReports";
 
 import PatientPortal from './PatientPortal';
 import PatientRegistration from './PatientRegistration';
+import StaffRegistration from './StaffRegistration';
 import PatientBooking from './PatientBooking';
 
 const theme = extendTheme({
@@ -203,6 +204,7 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
           {/* Public Portal Routes */}
           <Route path="/portal" element={<PatientPortal />} />
           <Route path="/portal/register" element={<PatientRegistration />} />
+          <Route path="/portal/staff-register" element={<StaffRegistration />} />
           <Route path="/portal/book-appointment" element={<PatientBooking />} />
 
           {/* Base and Catch-all routes */}

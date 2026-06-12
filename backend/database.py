@@ -39,6 +39,7 @@ try:
     patients.create_index("institute_id", unique=True)
     patients.create_index("doctor_assigned")
     patients.create_index([("workflow_status", 1), ("bill_status", 1), ("lab_status", 1)])
+    patients.create_index("psrn_id")
     users.create_index("username", unique=True)
     inventory.create_index("medicine_id", unique=True)
     sessions.create_index("session_id", unique=True)
@@ -330,6 +331,24 @@ def get_patient_by_id(institute_id):
     if not result:
         return None
     return _map_aggregated_patient(result[0])
+
+# Retrieve family members by PSRN ID
+def get_family_by_psrn(psrn_id):
+    pipeline = [
+        {"$match": {"psrn_id": psrn_id}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    result = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in result]
+
 
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):

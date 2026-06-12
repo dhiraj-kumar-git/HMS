@@ -12,6 +12,8 @@ class Patient:
     address: str
     patient_type: str
     registration_time: datetime
+    psrn_id: Optional[str] = None
+    relation: Optional[str] = None
     doctor_assigned: Optional[str] = None
     email: Optional[str] = None
     bill_status: Optional[str] = "none"

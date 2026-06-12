@@ -9,7 +9,7 @@ import {
   useColorModeValue,
   Icon,
 } from '@chakra-ui/react';
-import { FiUserPlus, FiCalendar } from 'react-icons/fi';
+import { FiUserPlus, FiCalendar, FiUsers } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 const PatientPortal = () => {
@@ -106,6 +106,35 @@ const PatientPortal = () => {
               onClick={() => navigate('/portal/book-appointment')}
             >
               Book Appointment
+            </Button>
+          </Box>
+
+          {/* Faculty/Staff Card */}
+          <Box
+            bg={cardBg}
+            p={8}
+            borderRadius="2xl"
+            boxShadow="xl"
+            flex="1"
+            transition="all 0.3s ease"
+            _hover={{ transform: 'translateY(-5px)', boxShadow: '2xl' }}
+            textAlign="center"
+          >
+            <Icon as={FiUsers} w={12} h={12} color="purple.500" mb={4} />
+            <Heading as="h3" size="lg" mb={4} color="gray.700">
+              Faculty & Staff
+            </Heading>
+            <Text color="gray.500" mb={8}>
+              Register yourself and your dependants using your PSRN ID.
+            </Text>
+            <Button
+              size="lg"
+              colorScheme="purple"
+              w="100%"
+              borderRadius="xl"
+              onClick={() => navigate('/portal/staff-register')}
+            >
+              Register Family
             </Button>
           </Box>
         </Flex>
