@@ -20,7 +20,14 @@ import {
   IconButton,
   Divider,
   HStack,
-  Text
+  Text,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
+  ModalFooter
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
@@ -55,11 +62,24 @@ const StaffRegistration = () => {
   const [existingPsrn, setExistingPsrn] = useState('');
   const [singleDependant, setSingleDependant] = useState({
     name: '',
+    email: '',
     date_of_birth: '',
     gender: '',
     relation: '',
     custom_relation: ''
   });
+
+  const [existingDependants, setExistingDependants] = useState([]);
+  const [fetchingDependants, setFetchingDependants] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+
+  // OTP State
+  const [isVerified, setIsVerified] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [maskedEmail, setMaskedEmail] = useState('');
 
   const handlePrimaryChange = (e) => {
     setPrimary({ ...primary, [e.target.name]: e.target.value });
@@ -72,12 +92,84 @@ const StaffRegistration = () => {
   };
 
   const addDependantRow = () => {
-    setDependants([...dependants, { name: '', date_of_birth: '', gender: '', relation: '', custom_relation: '' }]);
+    setDependants([...dependants, { name: '', email: '', date_of_birth: '', gender: '', relation: '', custom_relation: '' }]);
   };
 
   const removeDependantRow = (index) => {
     const newDeps = dependants.filter((_, i) => i !== index);
     setDependants(newDeps);
+  };
+
+  const handleVerify = async () => {
+    if (!existingPsrn) {
+      toast({ title: "Error", description: "Please enter a PSRN ID first.", status: "error", duration: 3000, isClosable: true });
+      return;
+    }
+    setVerifying(true);
+    try {
+      const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: existingPsrn });
+      if (response.data.requires_otp) {
+        setMaskedEmail(response.data.email);
+        setShowOtpModal(true);
+      } else {
+        setIsVerified(true);
+        checkExistingDependants();
+      }
+    } catch (err) {
+      toast({
+        title: "Verification Failed",
+        description: err.response?.data?.error || "Institute ID not found.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      setIsVerified(false);
+      setExistingDependants([]);
+      setHasFetched(false);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpInput) {
+      toast({ title: "OTP required", status: "warning", duration: 2000 });
+      return;
+    }
+    setVerifyingOtp(true);
+    try {
+      await axios.post(`${BASE_URL}/api/public/verify-otp`, {
+        institute_id: existingPsrn,
+        otp: otpInput
+      });
+      setShowOtpModal(false);
+      setIsVerified(true);
+      checkExistingDependants();
+      toast({ title: "Identity Verified", status: "success", duration: 2000 });
+    } catch (err) {
+      toast({ title: "Invalid OTP", status: "error", duration: 3000 });
+      setIsVerified(false);
+    } finally {
+      setVerifyingOtp(false);
+      setOtpInput('');
+    }
+  };
+
+  const checkExistingDependants = async () => {
+    setFetchingDependants(true);
+    setHasFetched(false);
+    try {
+      const response = await axios.get(`${BASE_URL}/api/family/${existingPsrn}`);
+      const dependantsOnly = response.data.filter(f => f.patient_type === 'Dependent');
+      setExistingDependants(dependantsOnly);
+      setHasFetched(true);
+    } catch (err) {
+      toast({ title: "Error", description: "Failed to fetch dependants.", status: "error", duration: 3000, isClosable: true });
+      setExistingDependants([]);
+      setHasFetched(false);
+    } finally {
+      setFetchingDependants(false);
+    }
   };
 
   const submitNewRegistration = async (e) => {
@@ -260,10 +352,14 @@ const StaffRegistration = () => {
                         onClick={() => removeDependantRow(index)}
                       />
                       <Text fontWeight="bold" mb={4}>Dependant #{index + 1}</Text>
-                      <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
                         <FormControl isRequired>
                           <FormLabel>Name</FormLabel>
                           <Input value={dep.name} onChange={(e) => handleDependantChange(index, 'name', e.target.value)} />
+                        </FormControl>
+                        <FormControl>
+                          <FormLabel>Email (Optional)</FormLabel>
+                          <Input type="email" value={dep.email} onChange={(e) => handleDependantChange(index, 'email', e.target.value)} placeholder="Defaults to primary email" />
                         </FormControl>
                         <FormControl isRequired>
                           <FormLabel>Date of Birth</FormLabel>
@@ -307,56 +403,138 @@ const StaffRegistration = () => {
                 <VStack spacing={6} align="stretch">
                   <FormControl isRequired>
                     <FormLabel>Existing PSRN ID</FormLabel>
-                    <Input placeholder="Enter the PSRN ID of the primary staff member" value={existingPsrn} onChange={(e) => setExistingPsrn(e.target.value)} focusBorderColor="blue.500" />
+                    <Input placeholder="Enter the PSRN ID of the primary staff member" value={existingPsrn} onChange={(e) => { setExistingPsrn(e.target.value); setIsVerified(false); }} focusBorderColor="blue.500" />
                   </FormControl>
+                  <Box>
+                    <Button colorScheme="blue" onClick={handleVerify} isLoading={verifying || fetchingDependants}>
+                      Verify PSRN
+                    </Button>
+                  </Box>
 
-                  <Divider my={2} />
-                  <Heading size="md" color="blue.600">New Dependant Details</Heading>
+                  {isVerified && (
+                    <>
+                      {hasFetched && (
+                        <Box mt={2} mb={2} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+                          <Heading size="sm" mb={3} color="gray.700">Currently Registered Dependants:</Heading>
+                          {existingDependants.length > 0 ? (
+                            <VStack align="stretch" spacing={2}>
+                              {existingDependants.map((dep, idx) => (
+                                <Box key={idx} p={3} bg="white" borderRadius="md" shadow="sm">
+                                  <Text fontWeight="bold">{dep.name}</Text>
+                                  <Text fontSize="sm" color="gray.600">ID: {dep.institute_id} | Relation: {dep.relation}</Text>
+                                </Box>
+                              ))}
+                            </VStack>
+                          ) : (
+                            <Text color="gray.600" fontStyle="italic">No dependants are currently registered under this PSRN ID.</Text>
+                          )}
+                        </Box>
+                      )}
 
-                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                    <FormControl isRequired>
-                      <FormLabel>Full Name</FormLabel>
-                      <Input value={singleDependant.name} onChange={(e) => setSingleDependant({ ...singleDependant, name: e.target.value })} focusBorderColor="blue.500" />
-                    </FormControl>
-                    <FormControl isRequired>
-                      <FormLabel>Date of Birth</FormLabel>
-                      <Input type="date" max={new Date().toISOString().split('T')[0]} value={singleDependant.date_of_birth} onChange={(e) => setSingleDependant({ ...singleDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
-                    </FormControl>
-                  </SimpleGrid>
+                      <Divider my={2} />
+                      <Heading size="md" color="blue.600">New Dependant Details</Heading>
 
-                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
-                    <FormControl isRequired>
-                      <FormLabel>Gender</FormLabel>
-                      <Select placeholder="Select Gender" value={singleDependant.gender} onChange={(e) => setSingleDependant({ ...singleDependant, gender: e.target.value })} focusBorderColor="blue.500">
-                        <option value="Male">Male</option>
-                        <option value="Female">Female</option>
-                        <option value="Other">Other</option>
-                      </Select>
-                    </FormControl>
-                    <FormControl isRequired>
-                      <FormLabel>Relation</FormLabel>
-                      <Select placeholder="Select Relation" value={singleDependant.relation} onChange={(e) => setSingleDependant({ ...singleDependant, relation: e.target.value })} focusBorderColor="blue.500">
-                        {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                      </Select>
-                    </FormControl>
-                  </SimpleGrid>
+                      <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+                        <FormControl isRequired>
+                          <FormLabel>Full Name</FormLabel>
+                          <Input value={singleDependant.name} onChange={(e) => setSingleDependant({ ...singleDependant, name: e.target.value })} focusBorderColor="blue.500" />
+                        </FormControl>
+                        <FormControl>
+                          <FormLabel>Email (Optional)</FormLabel>
+                          <Input type="email" value={singleDependant.email} onChange={(e) => setSingleDependant({ ...singleDependant, email: e.target.value })} focusBorderColor="blue.500" placeholder="Defaults to primary" />
+                        </FormControl>
+                        <FormControl isRequired>
+                          <FormLabel>Date of Birth</FormLabel>
+                          <Input type="date" max={new Date().toISOString().split('T')[0]} value={singleDependant.date_of_birth} onChange={(e) => setSingleDependant({ ...singleDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
+                        </FormControl>
+                      </SimpleGrid>
 
-                  {singleDependant.relation === 'Other' && (
-                    <FormControl isRequired>
-                      <FormLabel>Specify Relation</FormLabel>
-                      <Input value={singleDependant.custom_relation} onChange={(e) => setSingleDependant({ ...singleDependant, custom_relation: e.target.value })} focusBorderColor="blue.500" />
-                    </FormControl>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6}>
+                        <FormControl isRequired>
+                          <FormLabel>Gender</FormLabel>
+                          <Select placeholder="Select Gender" value={singleDependant.gender} onChange={(e) => setSingleDependant({ ...singleDependant, gender: e.target.value })} focusBorderColor="blue.500">
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Other">Other</option>
+                          </Select>
+                        </FormControl>
+                        <FormControl isRequired>
+                          <FormLabel>Relation</FormLabel>
+                          <Select placeholder="Select Relation" value={singleDependant.relation} onChange={(e) => setSingleDependant({ ...singleDependant, relation: e.target.value })} focusBorderColor="blue.500">
+                            {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                          </Select>
+                        </FormControl>
+                      </SimpleGrid>
+
+                      {singleDependant.relation === 'Other' && (
+                        <FormControl isRequired>
+                          <FormLabel>Specify Relation</FormLabel>
+                          <Input value={singleDependant.custom_relation} onChange={(e) => setSingleDependant({ ...singleDependant, custom_relation: e.target.value })} focusBorderColor="blue.500" />
+                        </FormControl>
+                      )}
+
+                      <Button type="submit" colorScheme="green" size="lg" w="100%" borderRadius="xl" isLoading={loading} mt={4}>
+                        Add Dependant
+                      </Button>
+                    </>
                   )}
-
-                  <Button type="submit" colorScheme="green" size="lg" w="100%" borderRadius="xl" isLoading={loading} mt={4}>
-                    Add Dependant
-                  </Button>
                 </VStack>
               </form>
             </TabPanel>
           </TabPanels>
         </Tabs>
       </Box>
+
+      {/* OTP Verification Modal */}
+      <Modal isOpen={showOtpModal} onClose={() => setShowOtpModal(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="blue.800">Verify Your Identity</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <Box p={4} bg="blue.50" borderRadius="md" w="100%">
+                <Text fontSize="sm" color="blue.800" textAlign="center">
+                  We've sent a 4-digit OTP to your registered email address:<br />
+                  <strong>{maskedEmail}</strong>
+                </Text>
+              </Box>
+              <FormControl isRequired>
+                <FormLabel>Enter OTP</FormLabel>
+                <Input
+                  placeholder="----"
+                  size="lg"
+                  textAlign="center"
+                  letterSpacing="0.5em"
+                  maxLength={4}
+                  value={otpInput}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (/^\d{0,4}$/.test(value)) {
+                      setOtpInput(value);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleVerifyOtp();
+                    }
+                  }}
+                />
+              </FormControl>
+              <Text fontSize="xs" color="gray.500" textAlign="center">
+                This code will expire in 5 minutes.
+              </Text>
+            </VStack>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setShowOtpModal(false)}>Cancel</Button>
+            <Button colorScheme="blue" ml={3} isLoading={verifyingOtp} onClick={handleVerifyOtp}>
+              Verify OTP
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </Flex>
   );
 };

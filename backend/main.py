@@ -874,16 +874,21 @@ def add_dependant_later():
     next_idx = len(existing_deps) + 1
     dep_id = f"{psrn_id}-DEP{next_idx}"
 
+    primary_member = next((f for f in family if f.get("institute_id") == psrn_id), {})
+    primary_email = primary_member.get("email")
+    primary_contact = primary_member.get("contact_no")
+    primary_address = primary_member.get("address")
+
     dep_data = {
         "name": dep.get("name"),
         "date_of_birth": dep.get("date_of_birth"),
         "gender": dep.get("gender"),
-        "contact_no": dep.get("contact_no"),
+        "contact_no": dep.get("contact_no") or primary_contact,
         "institute_id": dep_id,
         "psrn_id": psrn_id,
         "relation": dep.get("relation"),
-        "email": dep.get("email"),
-        "address": dep.get("address"),
+        "email": dep.get("email") or primary_email,
+        "address": dep.get("address") or primary_address,
         "patient_type": "Dependent",
         "workflow_status": "inactive",
         "bill_status": "none",
