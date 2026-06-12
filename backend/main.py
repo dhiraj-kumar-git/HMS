@@ -798,6 +798,111 @@ def public_register_patient():
         
     return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
 
+# ---- STAFF & FAMILY REGISTRATION ENDPOINTS ----
+
+@app.route('/api/public/register_staff', methods=['POST'])
+def public_register_staff():
+    data = request.json
+    primary = data.get("primary")
+    dependants = data.get("dependants", [])
+
+    if not primary or not primary.get("psrn_id"):
+        return jsonify({"error": "Primary member details and PSRN ID are required"}), 400
+
+    psrn_id = primary.get("psrn_id")
+
+    # Register Primary
+    primary_data = {
+        "name": primary.get("name"),
+        "date_of_birth": primary.get("date_of_birth"),
+        "gender": primary.get("gender"),
+        "contact_no": primary.get("contact_no"),
+        "institute_id": psrn_id,  # Primary gets PSRN as institute ID
+        "psrn_id": psrn_id,
+        "relation": "Self",
+        "email": primary.get("email"),
+        "address": primary.get("address"),
+        "patient_type": primary.get("patient_type", "Faculty"),
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none"
+    }
+
+    result_id = database.register_patient(primary_data)
+    if result_id is None:
+        return jsonify({"error": f"PSRN ID {psrn_id} is already registered."}), 409
+
+    # Register Dependants sequentially
+    for idx, dep in enumerate(dependants, start=1):
+        dep_id = f"{psrn_id}-DEP{idx}"
+        dep_data = {
+            "name": dep.get("name"),
+            "date_of_birth": dep.get("date_of_birth"),
+            "gender": dep.get("gender"),
+            "contact_no": dep.get("contact_no") or primary.get("contact_no"),
+            "institute_id": dep_id,
+            "psrn_id": psrn_id,
+            "relation": dep.get("relation"),
+            "email": dep.get("email") or primary.get("email"),
+            "address": dep.get("address") or primary.get("address"),
+            "patient_type": "Dependent",
+            "workflow_status": "inactive",
+            "bill_status": "none",
+            "lab_status": "none"
+        }
+        database.register_patient(dep_data)
+
+    return jsonify({"message": "Staff and dependants registered successfully", "institute_id": psrn_id}), 201
+
+@app.route('/api/public/add_dependant', methods=['POST'])
+def add_dependant_later():
+    data = request.json
+    psrn_id = data.get("psrn_id")
+    dep = data.get("dependant")
+
+    if not psrn_id or not dep:
+        return jsonify({"error": "PSRN ID and dependant details are required"}), 400
+
+    # Find existing family to count dependants
+    family = database.get_family_by_psrn(psrn_id)
+    if not family:
+        return jsonify({"error": "PSRN ID not found in records"}), 404
+
+    # Count how many dependants currently exist to generate the next ID
+    # Rely on checking IDs that start with PSRN-DEP
+    existing_deps = [f for f in family if f.get("institute_id", "").startswith(f"{psrn_id}-DEP")]
+    next_idx = len(existing_deps) + 1
+    dep_id = f"{psrn_id}-DEP{next_idx}"
+
+    dep_data = {
+        "name": dep.get("name"),
+        "date_of_birth": dep.get("date_of_birth"),
+        "gender": dep.get("gender"),
+        "contact_no": dep.get("contact_no"),
+        "institute_id": dep_id,
+        "psrn_id": psrn_id,
+        "relation": dep.get("relation"),
+        "email": dep.get("email"),
+        "address": dep.get("address"),
+        "patient_type": "Dependent",
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none"
+    }
+    
+    result_id = database.register_patient(dep_data)
+    if result_id is None:
+        return jsonify({"error": "Failed to add dependant. ID may already exist."}), 500
+
+    return jsonify({"message": "Dependant added successfully", "institute_id": dep_id}), 201
+
+@app.route('/api/family/<psrn_id>', methods=['GET'])
+def get_family(psrn_id):
+    family = database.get_family_by_psrn(psrn_id)
+    if not family:
+        return jsonify({"error": "No family found for this PSRN ID"}), 404
+    return jsonify(family), 200
+
 
 # ---- ADMIN BULK REGISTRATION ENDPOINTS ----
 
@@ -920,6 +1025,7 @@ def public_verify_otp():
         "message": "OTP verified successfully", 
         "institute_id": patient.get("institute_id"), 
         "name": patient.get("name"),
+        "psrn_id": patient.get("psrn_id"),
         "doctor_assigned": patient.get("doctor_assigned"),
         "appointments": patient.get("appointments", [])
     }), 200

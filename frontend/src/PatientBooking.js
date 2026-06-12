@@ -44,6 +44,7 @@ const PatientBooking = () => {
 
   const [instituteId, setInstituteId] = useState('');
   const [verifiedPatient, setVerifiedPatient] = useState(null);
+  const [familyMembers, setFamilyMembers] = useState([]);
   const [verifying, setVerifying] = useState(false);
 
   // OTP States
@@ -122,6 +123,24 @@ const PatientBooking = () => {
     }
   };
 
+  const fetchFamily = async (psrn_id) => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/family/${psrn_id}`);
+      setFamilyMembers(response.data);
+    } catch (err) {
+      setFamilyMembers([]);
+    }
+  };
+
+  const setVerifiedAndCheckFamily = (patientData) => {
+    setVerifiedPatient(patientData);
+    if (patientData.psrn_id) {
+      fetchFamily(patientData.psrn_id);
+    } else {
+      setFamilyMembers([]);
+    }
+  };
+
   const handleVerify = async (idToVerify) => {
     const id = idToVerify || instituteId;
     if (!id) return;
@@ -132,7 +151,7 @@ const PatientBooking = () => {
         setMaskedEmail(response.data.email);
         setShowOtpModal(true);
       } else {
-        setVerifiedPatient(response.data);
+        setVerifiedAndCheckFamily(response.data);
       }
     } catch (err) {
       setVerifiedPatient(null);
@@ -160,7 +179,7 @@ const PatientBooking = () => {
         institute_id: instituteId,
         otp: otpInput
       });
-      setVerifiedPatient(response.data);
+      setVerifiedAndCheckFamily(response.data);
       setShowOtpModal(false);
       setOtpInput('');
       toast({
@@ -462,6 +481,30 @@ const PatientBooking = () => {
                 <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
               </Box>
             </Flex>
+
+            {familyMembers.length > 1 && (
+              <Box mb={6} p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                <FormControl>
+                  <FormLabel fontWeight="bold" color="teal.800">Who is this appointment for?</FormLabel>
+                  <Select 
+                    value={verifiedPatient.institute_id} 
+                    onChange={(e) => {
+                      const selected = familyMembers.find(f => f.institute_id === e.target.value);
+                      if (selected) setVerifiedPatient(selected);
+                    }}
+                    focusBorderColor="teal.500"
+                    bg="gray.50"
+                  >
+                    {familyMembers.map(member => (
+                      <option key={member.institute_id} value={member.institute_id}>
+                        {member.name} ({member.relation || 'Self'})
+                      </option>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
+
 
             {bookingFlow === 'dashboard' && (
               <VStack spacing={6} align="stretch">
