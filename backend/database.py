@@ -197,6 +197,7 @@ def register_patient(patient_data):
 
     registration_time = datetime.now()
     patient_data["registration_time"] = registration_time
+    patient_data["account_status"] = patient_data.get("account_status", "active")
     
     # Ensure date_of_birth is a datetime object for $dateDiff aggregation
     dob = patient_data.get("date_of_birth")
@@ -242,6 +243,13 @@ def delete_dependant(institute_id):
         {"institute_id": institute_id, "patient_type": "Dependant"}
     )
     return result.deleted_count > 0
+
+def archive_patient(institute_id):
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"account_status": "archived"}}
+    )
+    return result.matched_count > 0
 
 def book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
     # Create the Visit
@@ -747,6 +755,7 @@ def _validate_and_parse_bulk_row(row):
         "workflow_status": "inactive",
         "bill_status":    "none",
         "lab_status":     "none",
+        "account_status": "active",
         "import_source":  "bulk_csv",
     }
 
