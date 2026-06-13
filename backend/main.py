@@ -1134,7 +1134,8 @@ def public_verify_otp():
         "name": patient.get("name"),
         "psrn_id": patient.get("psrn_id"),
         "doctor_assigned": patient.get("doctor_assigned"),
-        "appointments": patient.get("appointments", [])
+        "appointments": patient.get("appointments", []),
+        "bill_status": patient.get("bill_status", "none")
     }), 200
 
 @app.route('/api/public/book-appointment', methods=['POST'])

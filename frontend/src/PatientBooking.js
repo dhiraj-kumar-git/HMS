@@ -32,7 +32,7 @@ import {
   ModalBody,
   ModalCloseButton
 } from '@chakra-ui/react';
-import { FiArrowLeft, FiCheckCircle, FiCalendar } from 'react-icons/fi';
+import { FiArrowLeft, FiCheckCircle, FiCalendar, FiAlertTriangle } from 'react-icons/fi';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from './Config';
@@ -64,6 +64,40 @@ const PatientBooking = () => {
   const [scheduleWarning, setScheduleWarning] = useState('');
   const [alternativeDoctor, setAlternativeDoctor] = useState(null);
   const [bookingFlow, setBookingFlow] = useState('dashboard');
+  const [showBillingWarning, setShowBillingWarning] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [showFutureBookingWarning, setShowFutureBookingWarning] = useState(false);
+
+  const handleProceedWithFutureBooking = () => {
+    setShowFutureBookingWarning(false);
+    setBookingFlow('future');
+  };
+
+  const handleProceedWithWarning = () => {
+    setShowBillingWarning(false);
+    if (pendingAction) {
+      pendingAction();
+      setPendingAction(null);
+    }
+  };
+
+  const handleQuickBookClick = (docUsername) => {
+    if (verifiedPatient?.bill_status === 'pending') {
+      setPendingAction(() => () => handleQuickBook(docUsername));
+      setShowBillingWarning(true);
+    } else {
+      handleQuickBook(docUsername);
+    }
+  };
+
+  const handleFutureBookingClick = () => {
+    if (verifiedPatient?.bill_status === 'pending') {
+      setPendingAction(() => () => setShowFutureBookingWarning(true));
+      setShowBillingWarning(true);
+    } else {
+      setShowFutureBookingWarning(true);
+    }
+  };
 
   const parseShiftTime = (timeStr) => {
     if (!timeStr) return "09:00";
@@ -93,7 +127,7 @@ const PatientBooking = () => {
       const hh = String(current.getHours()).padStart(2, '0');
       const mm = String(current.getMinutes()).padStart(2, '0');
       slots.push(`${hh}:${mm}`);
-      current.setMinutes(current.getMinutes() + 5);
+      current.setMinutes(current.getMinutes() + 10);
     }
     return slots;
   };
@@ -234,13 +268,13 @@ const PatientBooking = () => {
         } else if (now > endTimeDate) {
           targetDate = endTimeDate;   // After shift -> default to end time
         } else {
-          // During shift -> round to nearest 5 mins
-          const ms = 1000 * 60 * 5;
+          // During shift -> round to nearest 10 mins
+          const ms = 1000 * 60 * 10;
           targetDate = new Date(Math.round(now.getTime() / ms) * ms);
         }
       }
     } else {
-      const ms = 1000 * 60 * 5;
+      const ms = 1000 * 60 * 10;
       targetDate = new Date(Math.round(new Date().getTime() / ms) * ms);
     }
 
@@ -282,7 +316,7 @@ const PatientBooking = () => {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
-          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s. Please check with the Hospital Receptionist before proceeding to confirm the appointment.`;
           altDoc = doctors.find(alt =>
             alt.username !== doc.username &&
             alt.department === doc.department &&
@@ -310,7 +344,7 @@ const PatientBooking = () => {
         const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
-          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s.`;
+          warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s. Please check with the Hospital Receptionist before proceeding to confirm the appointment.`;
           altDoc = doctors.find(alt =>
             alt.username !== doc.username &&
             alt.department === doc.department &&
@@ -486,8 +520,8 @@ const PatientBooking = () => {
               <Box mb={6} p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
                 <FormControl>
                   <FormLabel fontWeight="bold" color="teal.800">Who is this appointment for?</FormLabel>
-                  <Select 
-                    value={verifiedPatient.institute_id} 
+                  <Select
+                    value={verifiedPatient.institute_id}
                     onChange={(e) => {
                       const selected = familyMembers.find(f => f.institute_id === e.target.value);
                       if (selected) setVerifiedPatient(selected);
@@ -516,7 +550,7 @@ const PatientBooking = () => {
                     <Button
                       size="sm"
                       colorScheme="blue"
-                      onClick={() => handleQuickBook(prevDoc.username)}
+                      onClick={() => handleQuickBookClick(prevDoc.username)}
                     >
                       Book with {prevDoc.display_name} Again
                     </Button>
@@ -545,7 +579,7 @@ const PatientBooking = () => {
                                 w="100%"
                                 colorScheme="teal"
                                 variant="solid"
-                                onClick={() => handleQuickBook(doc.username)}
+                                onClick={() => handleQuickBookClick(doc.username)}
                               >
                                 Book Now
                               </Button>
@@ -561,7 +595,7 @@ const PatientBooking = () => {
 
                 <Flex direction="column" align="center" mt={2} bg="gray.50" p={6} borderRadius="xl" border="1px dashed" borderColor="gray.300">
                   <Text color="gray.600" mb={3} textAlign="center">Don't see your doctor or want to plan ahead instead?</Text>
-                  <Button size="lg" colorScheme="gray" variant="outline" onClick={() => setBookingFlow('future')}>
+                  <Button size="lg" colorScheme="gray" variant="outline" onClick={handleFutureBookingClick}>
                     Schedule for a Later Date
                   </Button>
                 </Flex>
@@ -737,9 +771,9 @@ const PatientBooking = () => {
                           />
                         </FormControl>
                         <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username}>
-                          <FormLabel color="gray.700">Time Slot (5-min intervals)</FormLabel>
+                          <FormLabel color="gray.700">Time Slot</FormLabel>
                           <Select
-                            placeholder="Select a 5-min slot"
+                            placeholder="Select a time slot"
                             value={bookingData.timeSlot}
                             onChange={(e) => setBookingData({ ...bookingData, timeSlot: e.target.value })}
                             focusBorderColor="teal.500"
@@ -777,6 +811,22 @@ const PatientBooking = () => {
                             )}
                           </Alert>
                         )}
+
+                        {bookingData.date && (() => {
+                          const today = new Date();
+                          const localTodayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+                          return bookingData.date > localTodayStr;
+                        })() && (
+                            <Alert status="warning" borderRadius="md" mt={3}>
+                              <AlertIcon />
+                              <Box>
+                                <Text fontSize="sm" fontWeight="bold">Future Date Warning</Text>
+                                <Text fontSize="sm">
+                                  You are scheduling an appointment for a later date ({bookingData.date}). Please review your booking details before confirming.
+                                </Text>
+                              </Box>
+                            </Alert>
+                          )}
                         <Button
                           type="submit"
                           colorScheme="teal"
@@ -839,6 +889,58 @@ const PatientBooking = () => {
           </Box>
         )}
       </Box>
+
+      {/* Billing Warning Modal */}
+      <Modal isOpen={showBillingWarning} onClose={() => setShowBillingWarning(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="red.600" display="flex" alignItems="center">
+            <Icon as={FiAlertTriangle} mr={2} />
+            Pending Bill Notice
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Text>
+              You have a pending bill for a previous visit or lab test. We recommend visiting the <strong>Medical Counter</strong> to clear your dues.
+            </Text>
+            <Text mt={3} fontWeight="bold">
+              Do you still want to proceed with booking a new appointment?
+            </Text>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setShowBillingWarning(false)}>Cancel</Button>
+            <Button colorScheme="red" ml={3} onClick={handleProceedWithWarning}>
+              Proceed to Book
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Future Booking Warning Modal */}
+      <Modal isOpen={showFutureBookingWarning} onClose={() => setShowFutureBookingWarning(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="orange.600" display="flex" alignItems="center">
+            <Icon as={FiAlertTriangle} mr={2} />
+            Schedule Notice
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Text>
+              The Doctor might or might not be available at your selected date and time. Please refer to the visiting doctor schedule to ensure you are booking the right slot.
+            </Text>
+            <Text mt={3} fontWeight="bold">
+              Do you want to proceed with advanced booking?
+            </Text>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setShowFutureBookingWarning(false)}>Cancel</Button>
+            <Button colorScheme="orange" ml={3} onClick={handleProceedWithFutureBooking}>
+              Proceed
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* OTP Verification Modal */}
       <Modal isOpen={showOtpModal} onClose={() => setShowOtpModal(false)} isCentered>
