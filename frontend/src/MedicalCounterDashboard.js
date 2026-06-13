@@ -507,7 +507,7 @@ function MedicalCounterDashboard() {
                     onClick={() => handleSelectPatient(patient)}
                   >
                     <Td>{patient.institute_id}</Td>
-                    <Td>{patient.name}</Td>
+                    <Td textTransform="capitalize">{(patient.name || '').toLowerCase()}</Td>
                     <Td>{patient.age || '-'}</Td>
                     <Td>
                       <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
