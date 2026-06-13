@@ -298,7 +298,7 @@ const StaffRegistration = () => {
       });
       setShowRegisterOtpModal(false);
       setTimeout(() => {
-        navigate('/portal/book-appointment', { state: { autoFillInstituteId: primary.psrn_id } });
+        navigate('/portal');
       }, 1500);
     } catch (err) {
       toast({

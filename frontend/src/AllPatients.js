@@ -400,7 +400,7 @@ export default function AllPatients({ onLogout }) {
                         onClick={() => handleRowClick(patient)}
                       >
                         <Td>{patient.institute_id}</Td>
-                        <Td>{patient.name}</Td>
+                        <Td textTransform="capitalize">{(patient.name || '').toLowerCase()}</Td>
                         <Td>{patient.submitted_by || 'N/A'}</Td>
                         <Td>
                           <Box

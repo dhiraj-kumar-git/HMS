@@ -32,8 +32,13 @@ import {
   VStack,
   Divider,
   IconButton,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverArrow,
+  PopoverBody,
 } from '@chakra-ui/react';
-import { FiUploadCloud, FiDownload, FiAlertCircle, FiFile, FiRefreshCw } from 'react-icons/fi';
+import { FiUploadCloud, FiDownload, FiAlertCircle, FiFile, FiRefreshCw, FiHelpCircle, FiInfo } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
 
@@ -42,6 +47,7 @@ export default function PatientsList() {
   const [search, setSearch] = useState('');
   const toast = useToast();
   const { isOpen, onOpen, onClose: closeModal } = useDisclosure();
+  const { isOpen: isGuideOpen, onOpen: onGuideOpen, onClose: onGuideClose } = useDisclosure();
   const fileInputRef = useRef(null);
 
   // --- Upload flow state ---
@@ -64,14 +70,14 @@ export default function PatientsList() {
       const { data } = await axios.get(`${BASE_URL}/patients`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      
+
       // Sort patients by institute_id alphabetically
       const sortedData = data.sort((a, b) => {
         const idA = (a.institute_id || "").toString().toLowerCase();
         const idB = (b.institute_id || "").toString().toLowerCase();
         return idA.localeCompare(idB);
       });
-      
+
       setPatients(sortedData);
     } catch (err) {
       console.error(err);
@@ -221,6 +227,15 @@ export default function PatientsList() {
         </Flex>
         <HStack spacing={3}>
           <Button
+            leftIcon={<FiHelpCircle />}
+            variant="ghost"
+            colorScheme="blue"
+            size="sm"
+            onClick={onGuideOpen}
+          >
+            Status Guide
+          </Button>
+          <Button
             leftIcon={<FiDownload />}
             variant="outline"
             colorScheme="blue"
@@ -269,7 +284,7 @@ export default function PatientsList() {
             {currentPatients.map((p) => (
               <Tr key={p.institute_id} _hover={{ bg: 'gray.50' }}>
                 <Td>{p.institute_id}</Td>
-                <Td>{p.name}</Td>
+                <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
                 <Td>{p.contact_no}</Td>
                 <Td>{p.age ?? '-'}</Td>
                 <Td>
@@ -557,6 +572,88 @@ export default function PatientsList() {
                 </Button>
               </>
             )}
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* ===== Status Guide Modal ===== */}
+      <Modal isOpen={isGuideOpen} onClose={onGuideClose} isCentered size="lg">
+        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader>
+            <Flex align="center" gap={2}>
+              <Icon as={FiHelpCircle} color="blue.500" boxSize={5} />
+              Patients Status Guide
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <VStack spacing={6} align="stretch">
+              <Box>
+                <Heading size="sm" mb={3} color="gray.700">Workflow Statuses</Heading>
+                <VStack align="start" spacing={3}>
+                  <Box>
+                    <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="green">active</Badge>
+                    <Text fontSize="sm">Patient is registered and has booked an appointment.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="orange">consultation</Badge>
+                    <Text fontSize="sm">Patient is currently consulting with the doctor.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="purple">lab test pending</Badge>
+                    <Text fontSize="sm">Doctor has recommended lab tests, and the patient needs to visit the lab.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="blue">consultation completed</Badge>
+                    <Text fontSize="sm">Patient has finished their visit with the doctor.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="gray">completed</Badge>
+                    <Text fontSize="sm">The entire workflow for this visit is completed.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="gray">inactive</Badge>
+                    <Text fontSize="sm">Patient has not visited the Hospital.</Text>
+                  </Box>
+                </VStack>
+              </Box>
+              <Divider />
+              <Box>
+                <Heading size="sm" mb={3} color="gray.700">Billing Statuses</Heading>
+                <VStack align="start" spacing={3}>
+                  <Box>
+                    <Badge variant="outline" mb={1} fontSize="10px" colorScheme="green">paid</Badge>
+                    <Text fontSize="sm">All outstanding bills for the visit/labs are cleared.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="outline" mb={1} fontSize="10px" colorScheme="red">pending</Badge>
+                    <Text fontSize="sm">There are pending dues to be paid at the medical counter.</Text>
+                  </Box>
+                </VStack>
+              </Box>
+              <Divider />
+              <Box>
+                <Heading size="sm" mb={3} color="gray.700">Lab Statuses</Heading>
+                <VStack align="start" spacing={3}>
+                  <Box>
+                    <Badge variant="outline" mb={1} fontSize="10px" colorScheme="orange">active</Badge>
+                    <Text fontSize="sm">Lab tests have been prescribed and are actively being processed.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="outline" mb={1} fontSize="10px" colorScheme="blue">pending</Badge>
+                    <Text fontSize="sm">Waiting for lab results to be uploaded.</Text>
+                  </Box>
+                  <Box>
+                    <Badge variant="outline" mb={1} fontSize="10px" colorScheme="green">completed</Badge>
+                    <Text fontSize="sm">Lab results are uploaded and ready for doctor/patient review.</Text>
+                  </Box>
+                </VStack>
+              </Box>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" onClick={onGuideClose}>Close</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

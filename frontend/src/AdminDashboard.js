@@ -392,7 +392,7 @@ function DashboardHome() {
               <Tbody>
                 {newPatients.slice(0, 3).map((p) => (
                   <Tr key={p.institute_id}>
-                    <Td>{p.name}</Td>
+                    <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>
                     <Td>{p.workflow_status}</Td>
@@ -448,7 +448,7 @@ function DashboardHome() {
               <Tbody>
                 {newPatients.map((p) => (
                   <Tr key={p.institute_id}>
-                    <Td>{p.name}</Td>
+                    <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>
                     <Td>{p.workflow_status}</Td>
