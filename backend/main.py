@@ -800,6 +800,40 @@ def public_register_patient():
 
 # ---- STAFF & FAMILY REGISTRATION ENDPOINTS ----
 
+def generate_relation_id(psrn_id, relation, existing_family):
+    rel = str(relation).strip().upper()
+    prefix = "OTHER"
+    if "SON" in rel: prefix = "SON"
+    elif "DAUGHTER" in rel: prefix = "DAUGHTER"
+    elif "SPOUSE" in rel or "WIFE" in rel or "HUSBAND" in rel: prefix = "SPOUSE"
+    elif "FATHER-IN-LAW" in rel: prefix = "FIL"
+    elif "MOTHER-IN-LAW" in rel: prefix = "MIL"
+    elif "FATHER" in rel: prefix = "FATHER"
+    elif "MOTHER" in rel: prefix = "MOTHER"
+    
+    always_number = prefix in ["SON", "DAUGHTER", "OTHER"]
+    
+    existing_ids = [f.get("institute_id", "") for f in existing_family if f.get("institute_id", "").startswith(f"{psrn_id}-{prefix}")]
+    
+    if not existing_ids:
+        return f"{psrn_id}-{prefix}1" if always_number else f"{psrn_id}-{prefix}"
+        
+    max_idx = 0
+    unnumbered_exists = False
+    
+    for eid in existing_ids:
+        suffix = eid[len(f"{psrn_id}-{prefix}"):]
+        if suffix == "":
+            unnumbered_exists = True
+        elif suffix.isdigit():
+            max_idx = max(max_idx, int(suffix))
+            
+    if max_idx == 0 and unnumbered_exists:
+        max_idx = 1
+        
+    next_idx = max_idx + 1
+    return f"{psrn_id}-{prefix}{next_idx}"
+
 @app.route('/api/public/register_staff', methods=['POST'])
 def public_register_staff():
     data = request.json
@@ -833,8 +867,9 @@ def public_register_staff():
         return jsonify({"error": f"PSRN ID {psrn_id} is already registered."}), 409
 
     # Register Dependants sequentially
-    for idx, dep in enumerate(dependants, start=1):
-        dep_id = f"{psrn_id}-DEP{idx}"
+    current_family = []
+    for dep in dependants:
+        dep_id = generate_relation_id(psrn_id, dep.get("relation", "Other"), current_family)
         dep_data = {
             "name": dep.get("name"),
             "date_of_birth": dep.get("date_of_birth"),
@@ -851,6 +886,7 @@ def public_register_staff():
             "lab_status": "none"
         }
         database.register_patient(dep_data)
+        current_family.append(dep_data)
 
     return jsonify({"message": "Staff and dependants registered successfully", "institute_id": psrn_id}), 201
 
@@ -905,25 +941,12 @@ def add_dependant_later():
     if not psrn_id or not dep:
         return jsonify({"error": "PSRN ID and dependant details are required"}), 400
 
-    # Find existing family to count dependants
+    # Find existing family to pass to generate_relation_id
     family = database.get_family_by_psrn(psrn_id)
     if not family:
         return jsonify({"error": "PSRN ID not found in records"}), 404
 
-    # Count how many dependants currently exist to generate the next ID
-    # Get the maximum existing DEP index to prevent collisions if one was deleted
-    existing_deps = [f for f in family if f.get("institute_id", "").startswith(f"{psrn_id}-DEP")]
-    max_idx = 0
-    for f in existing_deps:
-        id_str = f.get("institute_id", "")
-        parts = id_str.split("-DEP")
-        if len(parts) == 2 and parts[1].isdigit():
-            idx = int(parts[1])
-            if idx > max_idx:
-                max_idx = idx
-                
-    next_idx = max_idx + 1
-    dep_id = f"{psrn_id}-DEP{next_idx}"
+    dep_id = generate_relation_id(psrn_id, dep.get("relation", "Other"), family)
 
     primary_member = next((f for f in family if f.get("institute_id") == psrn_id), {})
     primary_email = primary_member.get("email")
@@ -971,6 +994,18 @@ def remove_dependant(institute_id):
     if not database.delete_dependant(institute_id):
         return jsonify({"error": "Failed to delete dependant"}), 400
     return jsonify({"message": "Dependant deleted successfully"}), 200
+
+@app.route('/api/admin/archive_patient/<institute_id>', methods=['PUT'])
+@jwt_required()
+def admin_archive_patient(institute_id):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    if not database.archive_patient(institute_id):
+        return jsonify({"error": "Patient not found"}), 404
+        
+    return jsonify({"message": "Patient archived successfully"}), 200
 
 
 # ---- ADMIN BULK REGISTRATION ENDPOINTS ----
@@ -1048,6 +1083,9 @@ def public_verify_patient():
     if not patient:
         return jsonify({"error": "No patient found with this Institute ID"}), 404
         
+    if patient.get("account_status") == "archived":
+        return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
+        
     email = patient.get("email")
     if not email:
         return jsonify({"error": "Patient does not have a registered email address for OTP."}), 400
@@ -1108,6 +1146,10 @@ def public_book_appointment():
     
     if not all([institute_id, doctor_username, appointment_time]):
         return jsonify({"error": "Missing required fields"}), 400
+        
+    patient = database.get_patient_by_id(institute_id)
+    if not patient or patient.get("account_status") == "archived":
+        return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
         
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
     doctor_name = doctor.get("display_name") if doctor else doctor_username
