@@ -845,7 +845,7 @@ def public_register_staff():
             "relation": dep.get("relation"),
             "email": dep.get("email") or primary.get("email"),
             "address": dep.get("address") or primary.get("address"),
-            "patient_type": "Dependent",
+            "patient_type": "Dependant",
             "workflow_status": "inactive",
             "bill_status": "none",
             "lab_status": "none"
@@ -853,6 +853,48 @@ def public_register_staff():
         database.register_patient(dep_data)
 
     return jsonify({"message": "Staff and dependants registered successfully", "institute_id": psrn_id}), 201
+
+@app.route('/api/public/send_registration_otp', methods=['POST'])
+def send_registration_otp():
+    data = request.json
+    email = data.get("email")
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+        
+    otp = str(random.randint(1000, 9999))
+    if database.redis_client:
+        database.redis_client.setex(f"otp_{email}", 300, otp)
+    else:
+        return jsonify({"error": "Failed to generate OTP (Redis offline)"}), 500
+        
+    subject = "Your BITS Medical Centre Registration OTP"
+    body = f"Hello,\n\nYour OTP to verify your Staff Registration is: {otp}\n\nThis code will expire in 5 minutes.\n\nRegards,\nBITS Pilani Medical Centre"
+    
+    send_email(email, subject, body)
+    
+    return jsonify({"message": "OTP sent successfully"}), 200
+
+@app.route('/api/public/verify_registration_otp', methods=['POST'])
+def verify_registration_otp():
+    data = request.json
+    email = data.get("email")
+    user_otp = data.get("otp")
+    
+    if not email or not user_otp:
+        return jsonify({"error": "Email and OTP are required"}), 400
+        
+    if not database.redis_client:
+        return jsonify({"error": "OTP service unavailable"}), 500
+        
+    stored_otp = database.redis_client.get(f"otp_{email}")
+    if not stored_otp:
+        return jsonify({"error": "OTP expired or not found. Please request a new one."}), 400
+        
+    if stored_otp != user_otp:
+        return jsonify({"error": "Invalid OTP"}), 400
+        
+    database.redis_client.delete(f"otp_{email}")
+    return jsonify({"message": "OTP verified successfully"}), 200
 
 @app.route('/api/public/add_dependant', methods=['POST'])
 def add_dependant_later():
@@ -898,7 +940,7 @@ def add_dependant_later():
         "relation": dep.get("relation"),
         "email": dep.get("email") or primary_email,
         "address": dep.get("address") or primary_address,
-        "patient_type": "Dependent",
+        "patient_type": "Dependant",
         "workflow_status": "inactive",
         "bill_status": "none",
         "lab_status": "none"

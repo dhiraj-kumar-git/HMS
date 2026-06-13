@@ -232,14 +232,14 @@ def update_dependant(institute_id, updated_data):
     updated_data.pop("institute_id", None)
 
     result = patients.update_one(
-        {"institute_id": institute_id, "patient_type": "Dependent"},
+        {"institute_id": institute_id, "patient_type": "Dependant"},
         {"$set": updated_data}
     )
     return result.matched_count > 0
 
 def delete_dependant(institute_id):
     result = patients.delete_one(
-        {"institute_id": institute_id, "patient_type": "Dependent"}
+        {"institute_id": institute_id, "patient_type": "Dependant"}
     )
     return result.deleted_count > 0
 
@@ -727,7 +727,7 @@ def _validate_and_parse_bulk_row(row):
         raise ValueError(f"Invalid contact_no '{contact_no}': must be exactly 10 digits")
 
     # Validate patient_type
-    valid_types = ["Student", "Faculty", "Staff", "Dependent", "Other"]
+    valid_types = ["Student", "Faculty", "Staff", "Dependant", "Other"]
     if patient_type not in valid_types:
         raise ValueError(f"Invalid patient_type '{patient_type}': must be one of {valid_types}")
 
