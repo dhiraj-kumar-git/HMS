@@ -869,21 +869,35 @@ def add_dependant_later():
         return jsonify({"error": "PSRN ID not found in records"}), 404
 
     # Count how many dependants currently exist to generate the next ID
-    # Rely on checking IDs that start with PSRN-DEP
+    # Get the maximum existing DEP index to prevent collisions if one was deleted
     existing_deps = [f for f in family if f.get("institute_id", "").startswith(f"{psrn_id}-DEP")]
-    next_idx = len(existing_deps) + 1
+    max_idx = 0
+    for f in existing_deps:
+        id_str = f.get("institute_id", "")
+        parts = id_str.split("-DEP")
+        if len(parts) == 2 and parts[1].isdigit():
+            idx = int(parts[1])
+            if idx > max_idx:
+                max_idx = idx
+                
+    next_idx = max_idx + 1
     dep_id = f"{psrn_id}-DEP{next_idx}"
+
+    primary_member = next((f for f in family if f.get("institute_id") == psrn_id), {})
+    primary_email = primary_member.get("email")
+    primary_contact = primary_member.get("contact_no")
+    primary_address = primary_member.get("address")
 
     dep_data = {
         "name": dep.get("name"),
         "date_of_birth": dep.get("date_of_birth"),
         "gender": dep.get("gender"),
-        "contact_no": dep.get("contact_no"),
+        "contact_no": dep.get("contact_no") or primary_contact,
         "institute_id": dep_id,
         "psrn_id": psrn_id,
         "relation": dep.get("relation"),
-        "email": dep.get("email"),
-        "address": dep.get("address"),
+        "email": dep.get("email") or primary_email,
+        "address": dep.get("address") or primary_address,
         "patient_type": "Dependent",
         "workflow_status": "inactive",
         "bill_status": "none",
@@ -902,6 +916,19 @@ def get_family(psrn_id):
     if not family:
         return jsonify({"error": "No family found for this PSRN ID"}), 404
     return jsonify(family), 200
+
+@app.route('/api/family/dependant/<institute_id>', methods=['PUT'])
+def edit_dependant(institute_id):
+    data = request.json
+    if not database.update_dependant(institute_id, data):
+        return jsonify({"error": "Failed to update dependant"}), 400
+    return jsonify({"message": "Dependant updated successfully"}), 200
+
+@app.route('/api/family/dependant/<institute_id>', methods=['DELETE'])
+def remove_dependant(institute_id):
+    if not database.delete_dependant(institute_id):
+        return jsonify({"error": "Failed to delete dependant"}), 400
+    return jsonify({"message": "Dependant deleted successfully"}), 200
 
 
 # ---- ADMIN BULK REGISTRATION ENDPOINTS ----

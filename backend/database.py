@@ -218,6 +218,31 @@ def register_patient(patient_data):
     patients.insert_one(patient_data)
     return institute_id  # Return the Institute ID
 
+def update_dependant(institute_id, updated_data):
+    # Ensure date_of_birth is a datetime object if it was passed as string
+    dob = updated_data.get("date_of_birth")
+    if dob and isinstance(dob, str):
+        try:
+            updated_data["date_of_birth"] = datetime.strptime(dob, "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Prevent MongoDB from throwing "modifying immutable field" errors
+    updated_data.pop("_id", None)
+    updated_data.pop("institute_id", None)
+
+    result = patients.update_one(
+        {"institute_id": institute_id, "patient_type": "Dependent"},
+        {"$set": updated_data}
+    )
+    return result.matched_count > 0
+
+def delete_dependant(institute_id):
+    result = patients.delete_one(
+        {"institute_id": institute_id, "patient_type": "Dependent"}
+    )
+    return result.deleted_count > 0
+
 def book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
     # Create the Visit
     v = Visit(
