@@ -49,7 +49,7 @@ def generate_excel_template():
     gender_dv.add('E2:E1000') # Gender is Col E
 
     # Patient Type Validation
-    type_dv = DataValidation(type="list", formula1='"Student,Faculty,Staff,Dependent,Other"', allow_blank=True)
+    type_dv = DataValidation(type="list", formula1='"Student,Faculty,Staff,Dependant,Other"', allow_blank=True)
     type_dv.error = 'Your entry is not in the list'
     type_dv.errorTitle = 'Invalid Entry'
     ws.add_data_validation(type_dv)

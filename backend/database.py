@@ -39,6 +39,7 @@ try:
     patients.create_index("institute_id", unique=True)
     patients.create_index("doctor_assigned")
     patients.create_index([("workflow_status", 1), ("bill_status", 1), ("lab_status", 1)])
+    patients.create_index("psrn_id")
     users.create_index("username", unique=True)
     inventory.create_index("medicine_id", unique=True)
     sessions.create_index("session_id", unique=True)
@@ -196,6 +197,7 @@ def register_patient(patient_data):
 
     registration_time = datetime.now()
     patient_data["registration_time"] = registration_time
+    patient_data["account_status"] = patient_data.get("account_status", "active")
     
     # Ensure date_of_birth is a datetime object for $dateDiff aggregation
     dob = patient_data.get("date_of_birth")
@@ -216,6 +218,38 @@ def register_patient(patient_data):
     
     patients.insert_one(patient_data)
     return institute_id  # Return the Institute ID
+
+def update_dependant(institute_id, updated_data):
+    # Ensure date_of_birth is a datetime object if it was passed as string
+    dob = updated_data.get("date_of_birth")
+    if dob and isinstance(dob, str):
+        try:
+            updated_data["date_of_birth"] = datetime.strptime(dob, "%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Prevent MongoDB from throwing "modifying immutable field" errors
+    updated_data.pop("_id", None)
+    updated_data.pop("institute_id", None)
+
+    result = patients.update_one(
+        {"institute_id": institute_id, "patient_type": "Dependant"},
+        {"$set": updated_data}
+    )
+    return result.matched_count > 0
+
+def delete_dependant(institute_id):
+    result = patients.delete_one(
+        {"institute_id": institute_id, "patient_type": "Dependant"}
+    )
+    return result.deleted_count > 0
+
+def archive_patient(institute_id):
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {"account_status": "archived"}}
+    )
+    return result.matched_count > 0
 
 def book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
     # Create the Visit
@@ -330,6 +364,24 @@ def get_patient_by_id(institute_id):
     if not result:
         return None
     return _map_aggregated_patient(result[0])
+
+# Retrieve family members by PSRN ID
+def get_family_by_psrn(psrn_id):
+    pipeline = [
+        {"$match": {"psrn_id": psrn_id}},
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
+    ]
+    result = list(patients.aggregate(pipeline))
+    return [_map_aggregated_patient(p) for p in result]
+
 
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
@@ -683,7 +735,7 @@ def _validate_and_parse_bulk_row(row):
         raise ValueError(f"Invalid contact_no '{contact_no}': must be exactly 10 digits")
 
     # Validate patient_type
-    valid_types = ["Student", "Faculty", "Staff", "Dependent", "Other"]
+    valid_types = ["Student", "Faculty", "Staff", "Dependant", "Other"]
     if patient_type not in valid_types:
         raise ValueError(f"Invalid patient_type '{patient_type}': must be one of {valid_types}")
 
@@ -703,6 +755,7 @@ def _validate_and_parse_bulk_row(row):
         "workflow_status": "inactive",
         "bill_status":    "none",
         "lab_status":     "none",
+        "account_status": "active",
         "import_source":  "bulk_csv",
     }
 

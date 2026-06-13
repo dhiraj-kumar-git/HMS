@@ -152,9 +152,6 @@ const PatientRegistration = () => {
                   focusBorderColor="blue.500"
                 >
                   <option value="Student">Student</option>
-                  <option value="Faculty">Faculty</option>
-                  <option value="Staff">Staff</option>
-                  <option value="Dependent">Dependent</option>
                   <option value="Other">Other</option>
                 </Select>
               </FormControl>

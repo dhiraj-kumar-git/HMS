@@ -798,6 +798,215 @@ def public_register_patient():
         
     return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
 
+# ---- STAFF & FAMILY REGISTRATION ENDPOINTS ----
+
+def generate_relation_id(psrn_id, relation, existing_family):
+    rel = str(relation).strip().upper()
+    prefix = "OTHER"
+    if "SON" in rel: prefix = "SON"
+    elif "DAUGHTER" in rel: prefix = "DAUGHTER"
+    elif "SPOUSE" in rel or "WIFE" in rel or "HUSBAND" in rel: prefix = "SPOUSE"
+    elif "FATHER-IN-LAW" in rel: prefix = "FIL"
+    elif "MOTHER-IN-LAW" in rel: prefix = "MIL"
+    elif "FATHER" in rel: prefix = "FATHER"
+    elif "MOTHER" in rel: prefix = "MOTHER"
+    
+    always_number = prefix in ["SON", "DAUGHTER", "OTHER"]
+    
+    existing_ids = [f.get("institute_id", "") for f in existing_family if f.get("institute_id", "").startswith(f"{psrn_id}-{prefix}")]
+    
+    if not existing_ids:
+        return f"{psrn_id}-{prefix}1" if always_number else f"{psrn_id}-{prefix}"
+        
+    max_idx = 0
+    unnumbered_exists = False
+    
+    for eid in existing_ids:
+        suffix = eid[len(f"{psrn_id}-{prefix}"):]
+        if suffix == "":
+            unnumbered_exists = True
+        elif suffix.isdigit():
+            max_idx = max(max_idx, int(suffix))
+            
+    if max_idx == 0 and unnumbered_exists:
+        max_idx = 1
+        
+    next_idx = max_idx + 1
+    return f"{psrn_id}-{prefix}{next_idx}"
+
+@app.route('/api/public/register_staff', methods=['POST'])
+def public_register_staff():
+    data = request.json
+    primary = data.get("primary")
+    dependants = data.get("dependants", [])
+
+    if not primary or not primary.get("psrn_id"):
+        return jsonify({"error": "Primary member details and PSRN ID are required"}), 400
+
+    psrn_id = primary.get("psrn_id")
+
+    # Register Primary
+    primary_data = {
+        "name": primary.get("name"),
+        "date_of_birth": primary.get("date_of_birth"),
+        "gender": primary.get("gender"),
+        "contact_no": primary.get("contact_no"),
+        "institute_id": psrn_id,  # Primary gets PSRN as institute ID
+        "psrn_id": psrn_id,
+        "relation": "Self",
+        "email": primary.get("email"),
+        "address": primary.get("address"),
+        "patient_type": primary.get("patient_type", "Faculty"),
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none"
+    }
+
+    result_id = database.register_patient(primary_data)
+    if result_id is None:
+        return jsonify({"error": f"PSRN ID {psrn_id} is already registered."}), 409
+
+    # Register Dependants sequentially
+    current_family = []
+    for dep in dependants:
+        dep_id = generate_relation_id(psrn_id, dep.get("relation", "Other"), current_family)
+        dep_data = {
+            "name": dep.get("name"),
+            "date_of_birth": dep.get("date_of_birth"),
+            "gender": dep.get("gender"),
+            "contact_no": dep.get("contact_no") or primary.get("contact_no"),
+            "institute_id": dep_id,
+            "psrn_id": psrn_id,
+            "relation": dep.get("relation"),
+            "email": dep.get("email") or primary.get("email"),
+            "address": dep.get("address") or primary.get("address"),
+            "patient_type": "Dependant",
+            "workflow_status": "inactive",
+            "bill_status": "none",
+            "lab_status": "none"
+        }
+        database.register_patient(dep_data)
+        current_family.append(dep_data)
+
+    return jsonify({"message": "Staff and dependants registered successfully", "institute_id": psrn_id}), 201
+
+@app.route('/api/public/send_registration_otp', methods=['POST'])
+def send_registration_otp():
+    data = request.json
+    email = data.get("email")
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+        
+    otp = str(random.randint(1000, 9999))
+    if database.redis_client:
+        database.redis_client.setex(f"otp_{email}", 300, otp)
+    else:
+        return jsonify({"error": "Failed to generate OTP (Redis offline)"}), 500
+        
+    subject = "Your BITS Medical Centre Registration OTP"
+    body = f"Hello,\n\nYour OTP to verify your Staff Registration is: {otp}\n\nThis code will expire in 5 minutes.\n\nRegards,\nBITS Pilani Medical Centre"
+    
+    send_email(email, subject, body)
+    
+    return jsonify({"message": "OTP sent successfully"}), 200
+
+@app.route('/api/public/verify_registration_otp', methods=['POST'])
+def verify_registration_otp():
+    data = request.json
+    email = data.get("email")
+    user_otp = data.get("otp")
+    
+    if not email or not user_otp:
+        return jsonify({"error": "Email and OTP are required"}), 400
+        
+    if not database.redis_client:
+        return jsonify({"error": "OTP service unavailable"}), 500
+        
+    stored_otp = database.redis_client.get(f"otp_{email}")
+    if not stored_otp:
+        return jsonify({"error": "OTP expired or not found. Please request a new one."}), 400
+        
+    if stored_otp != user_otp:
+        return jsonify({"error": "Invalid OTP"}), 400
+        
+    database.redis_client.delete(f"otp_{email}")
+    return jsonify({"message": "OTP verified successfully"}), 200
+
+@app.route('/api/public/add_dependant', methods=['POST'])
+def add_dependant_later():
+    data = request.json
+    psrn_id = data.get("psrn_id")
+    dep = data.get("dependant")
+
+    if not psrn_id or not dep:
+        return jsonify({"error": "PSRN ID and dependant details are required"}), 400
+
+    # Find existing family to pass to generate_relation_id
+    family = database.get_family_by_psrn(psrn_id)
+    if not family:
+        return jsonify({"error": "PSRN ID not found in records"}), 404
+
+    dep_id = generate_relation_id(psrn_id, dep.get("relation", "Other"), family)
+
+    primary_member = next((f for f in family if f.get("institute_id") == psrn_id), {})
+    primary_email = primary_member.get("email")
+    primary_contact = primary_member.get("contact_no")
+    primary_address = primary_member.get("address")
+
+    dep_data = {
+        "name": dep.get("name"),
+        "date_of_birth": dep.get("date_of_birth"),
+        "gender": dep.get("gender"),
+        "contact_no": dep.get("contact_no") or primary_contact,
+        "institute_id": dep_id,
+        "psrn_id": psrn_id,
+        "relation": dep.get("relation"),
+        "email": dep.get("email") or primary_email,
+        "address": dep.get("address") or primary_address,
+        "patient_type": "Dependant",
+        "workflow_status": "inactive",
+        "bill_status": "none",
+        "lab_status": "none"
+    }
+    
+    result_id = database.register_patient(dep_data)
+    if result_id is None:
+        return jsonify({"error": "Failed to add dependant. ID may already exist."}), 500
+
+    return jsonify({"message": "Dependant added successfully", "institute_id": dep_id}), 201
+
+@app.route('/api/family/<psrn_id>', methods=['GET'])
+def get_family(psrn_id):
+    family = database.get_family_by_psrn(psrn_id)
+    if not family:
+        return jsonify({"error": "No family found for this PSRN ID"}), 404
+    return jsonify(family), 200
+
+@app.route('/api/family/dependant/<institute_id>', methods=['PUT'])
+def edit_dependant(institute_id):
+    data = request.json
+    if not database.update_dependant(institute_id, data):
+        return jsonify({"error": "Failed to update dependant"}), 400
+    return jsonify({"message": "Dependant updated successfully"}), 200
+
+@app.route('/api/family/dependant/<institute_id>', methods=['DELETE'])
+def remove_dependant(institute_id):
+    if not database.delete_dependant(institute_id):
+        return jsonify({"error": "Failed to delete dependant"}), 400
+    return jsonify({"message": "Dependant deleted successfully"}), 200
+
+@app.route('/api/admin/archive_patient/<institute_id>', methods=['PUT'])
+@jwt_required()
+def admin_archive_patient(institute_id):
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+    
+    if not database.archive_patient(institute_id):
+        return jsonify({"error": "Patient not found"}), 404
+        
+    return jsonify({"message": "Patient archived successfully"}), 200
+
 
 # ---- ADMIN BULK REGISTRATION ENDPOINTS ----
 
@@ -874,6 +1083,9 @@ def public_verify_patient():
     if not patient:
         return jsonify({"error": "No patient found with this Institute ID"}), 404
         
+    if patient.get("account_status") == "archived":
+        return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
+        
     email = patient.get("email")
     if not email:
         return jsonify({"error": "Patient does not have a registered email address for OTP."}), 400
@@ -920,6 +1132,7 @@ def public_verify_otp():
         "message": "OTP verified successfully", 
         "institute_id": patient.get("institute_id"), 
         "name": patient.get("name"),
+        "psrn_id": patient.get("psrn_id"),
         "doctor_assigned": patient.get("doctor_assigned"),
         "appointments": patient.get("appointments", [])
     }), 200
@@ -933,6 +1146,10 @@ def public_book_appointment():
     
     if not all([institute_id, doctor_username, appointment_time]):
         return jsonify({"error": "Missing required fields"}), 400
+        
+    patient = database.get_patient_by_id(institute_id)
+    if not patient or patient.get("account_status") == "archived":
+        return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
         
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
     doctor_name = doctor.get("display_name") if doctor else doctor_username

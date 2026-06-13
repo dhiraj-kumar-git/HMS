@@ -9,7 +9,7 @@ import {
   useColorModeValue,
   Icon,
 } from '@chakra-ui/react';
-import { FiUserPlus, FiCalendar } from 'react-icons/fi';
+import { FiUserPlus, FiCalendar, FiUsers } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 const PatientPortal = () => {
@@ -28,7 +28,7 @@ const PatientPortal = () => {
       flexDir="column"
       position="relative"
     >
-      <VStack spacing={8} maxW="800px" w="100%">
+      <VStack spacing={8} maxW="1100px" w="100%">
         <Box textAlign="center">
           <Heading
             as="h1"
@@ -52,23 +52,27 @@ const PatientPortal = () => {
           justify="center"
         >
           {/* New Patient Card */}
-          <Box
+          <Flex
             bg={cardBg}
             p={8}
             borderRadius="2xl"
             boxShadow="xl"
             flex="1"
+            direction="column"
+            justify="space-between"
             transition="all 0.3s ease"
             _hover={{ transform: 'translateY(-5px)', boxShadow: '2xl' }}
             textAlign="center"
           >
-            <Icon as={FiUserPlus} w={12} h={12} color="blue.500" mb={4} />
-            <Heading as="h3" size="lg" mb={4} color="gray.700">
-              New Visitors
-            </Heading>
-            <Text color="gray.500" mb={8}>
-              First time here? Register seamlessly into our system using your Institute ID to get started.
-            </Text>
+            <Box>
+              <Icon as={FiUserPlus} w={12} h={12} color="blue.500" mb={4} />
+              <Heading as="h3" size="lg" mb={4} color="gray.700">
+                New Visitors
+              </Heading>
+              <Text color="gray.500" mb={8}>
+                First time here? Register seamlessly into our system using your Institute ID to get started.
+              </Text>
+            </Box>
             <Button
               size="lg"
               colorScheme="blue"
@@ -78,26 +82,30 @@ const PatientPortal = () => {
             >
               Register Now
             </Button>
-          </Box>
+          </Flex>
 
           {/* Returning Patient Card */}
-          <Box
+          <Flex
             bg={cardBg}
             p={8}
             borderRadius="2xl"
             boxShadow="xl"
             flex="1"
+            direction="column"
+            justify="space-between"
             transition="all 0.3s ease"
             _hover={{ transform: 'translateY(-5px)', boxShadow: '2xl' }}
             textAlign="center"
           >
-            <Icon as={FiCalendar} w={12} h={12} color="teal.500" mb={4} />
-            <Heading as="h3" size="lg" mb={4} color="gray.700">
-              Returning Patients
-            </Heading>
-            <Text color="gray.500" mb={8}>
-              Already registered? Book a new appointment quickly with your Institute ID.
-            </Text>
+            <Box>
+              <Icon as={FiCalendar} w={12} h={12} color="teal.500" mb={4} />
+              <Heading as="h3" size="lg" mb={4} color="gray.700">
+                Returning Patients
+              </Heading>
+              <Text color="gray.500" mb={8}>
+                Already registered? Book a new appointment quickly with your Institute ID.
+              </Text>
+            </Box>
             <Button
               size="lg"
               colorScheme="teal"
@@ -107,7 +115,40 @@ const PatientPortal = () => {
             >
               Book Appointment
             </Button>
-          </Box>
+          </Flex>
+
+          {/* Faculty/Staff Card */}
+          <Flex
+            bg={cardBg}
+            p={8}
+            borderRadius="2xl"
+            boxShadow="xl"
+            flex="1"
+            direction="column"
+            justify="space-between"
+            transition="all 0.3s ease"
+            _hover={{ transform: 'translateY(-5px)', boxShadow: '2xl' }}
+            textAlign="center"
+          >
+            <Box>
+              <Icon as={FiUsers} w={12} h={12} color="purple.500" mb={4} />
+              <Heading as="h3" size="lg" mb={4} color="gray.700">
+                Faculty & Staff
+              </Heading>
+              <Text color="gray.500" mb={8}>
+                Register yourself and your dependants using your PSRN ID.
+              </Text>
+            </Box>
+            <Button
+              size="lg"
+              colorScheme="purple"
+              w="100%"
+              borderRadius="xl"
+              onClick={() => navigate('/portal/staff-register')}
+            >
+              Register Family
+            </Button>
+          </Flex>
         </Flex>
       </VStack>
       <Button
