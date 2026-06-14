@@ -310,7 +310,11 @@ def _map_aggregated_patient(patient):
             "prescription_summary": v.get("prescription_summary", []),
             "prescription_remarks_summary": v.get("prescription_remarks_summary", []),
             "lab_test_summary": v.get("lab_test_summary", []),
-            "diagnosis_note": v.get("diagnosis_note", [])
+            "diagnosis_note": v.get("diagnosis_note", []),
+            "prescriptions_draft": v.get("prescriptions", []),
+            "prescription_details_draft": v.get("prescription_details", []),
+            "lab_tests_draft": v.get("lab_tests", []),
+            "remarks_draft": v.get("remarks", [])
         })
         patient["prescriptions"].extend(v.get("prescriptions", []))
         patient["prescription_details"].extend(v.get("prescription_details", []))
@@ -478,8 +482,32 @@ def _finalize_visit(institute_id, mark_as_completed=True):
                 {"$set": update_data}
             )
 
-# Add a prescription to a patient (recording the doctor's note)
-def add_prescription(institute_id, prescription, doctor_username):
+# [NEW] Overwrite consultation details using $set to prevent duplicates
+def update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+    visit_id = _get_active_visit_id(institute_id)
+    if not visit_id: return False
+    
+    timestamp = datetime.now().isoformat()
+    
+    # Structure natively to preserve expected db formats
+    new_prescriptions = [{"doctor": doctor_username, "note": p, "timestamp": timestamp} for p in prescriptions]
+    new_prescription_details = [{"doctor": doctor_username, "prescription_details": pd, "timestamp": timestamp} for pd in prescription_details]
+    new_lab_tests = [{"doctor": doctor_username, "lab_test": lt, "timestamp": timestamp} for lt in lab_tests]
+    new_remarks = [{"doctor": doctor_username, "remark": r, "timestamp": timestamp} for r in remarks]
+    
+    result = visits.update_one(
+        {"visit_id": visit_id},
+        {"$set": {
+            "prescriptions": new_prescriptions,
+            "prescription_details": new_prescription_details,
+            "lab_tests": new_lab_tests,
+            "remarks": new_remarks
+        }}
+    )
+    return result.matched_count > 0
+
+# Add a prescription to a patient (Legacy)
+def add_prescription_legacy(institute_id, prescription, doctor_username):
     visit_id = _get_active_visit_id(institute_id)
     if not visit_id: return False
     result = visits.update_one(
@@ -488,8 +516,8 @@ def add_prescription(institute_id, prescription, doctor_username):
     )
     return result.modified_count > 0
 
-# Add a prescription to a patient by setting a new 'prescription_details' field
-def add_prescription_details(institute_id, prescription_details, doctor_username):
+# Add a prescription to a patient by setting a new 'prescription_details' field (Legacy)
+def add_prescription_details_legacy(institute_id, prescription_details, doctor_username):
     visit_id = _get_active_visit_id(institute_id)
     if not visit_id: return False
     result = visits.update_one(
@@ -498,8 +526,8 @@ def add_prescription_details(institute_id, prescription_details, doctor_username
     )
     return result.modified_count > 0
 
-# Add a lab test to a patient (recording only the lab test details)
-def add_lab_test(institute_id, lab_test, doctor_username):
+# Add a lab test to a patient (recording only the lab test details) (Legacy)
+def add_lab_test_legacy(institute_id, lab_test, doctor_username):
     visit_id = _get_active_visit_id(institute_id)
     if not visit_id: return False
     result = visits.update_one(
@@ -522,9 +550,8 @@ def add_lab_report(institute_id, report_details):
     if patient:
         new_workflow_status = patient.get("workflow_status", "completed")
         if new_workflow_status == "lab test pending":
-            # Optional: change back to consultation or keep as lab test pending.
-            # Keeping it as consultation makes it clearer it's back to the doctor.
-            new_workflow_status = "consultation"
+            # Per your request, we move the patient to "completed" rather than returning them to the doctor.
+            new_workflow_status = "completed"
             
         patients.update_one(
             {"institute_id": institute_id},
@@ -559,8 +586,8 @@ def get_lab_reports():
             reports.append(assembled)
     return reports
 
-# Add a remark to a patient (recording the remark separately)
-def add_remark(institute_id, remark, doctor_username):
+# Add a remark to a patient (recording the remark separately) (Legacy)
+def add_remark_legacy(institute_id, remark, doctor_username):
     visit_id = _get_active_visit_id(institute_id)
     if not visit_id: return False
     result = visits.update_one(
@@ -611,7 +638,7 @@ def consultation_patient(institute_id, has_labs, has_meds):
             "doctor_finalized": False
         }}
     )
-    return result.modified_count > 0
+    return result.matched_count > 0
 
 # Move patient to 'consultation completed' or 'completed'
 def complete_consultation(institute_id):
@@ -666,7 +693,8 @@ def get_active_pending_patients():
     """
     pipeline = [
         {"$match": {
-            "bill_status": "pending"
+            "bill_status": "pending",
+            "doctor_finalized": True
         }},
         {
             "$lookup": {
@@ -852,8 +880,8 @@ def submit_lab_results(institute_id, results):
 
     new_workflow_status = patient.get("workflow_status", "completed")
     if new_workflow_status == "lab test pending":
-        # Keep visible for the doctor
-        new_workflow_status = "consultation"
+        # Per your request, we move the patient to "completed" rather than returning them to the doctor.
+        new_workflow_status = "completed"
 
     return patients.update_one(
         {"institute_id": institute_id},

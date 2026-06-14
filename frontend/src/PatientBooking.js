@@ -822,7 +822,7 @@ const PatientBooking = () => {
                               <Box>
                                 <Text fontSize="sm" fontWeight="bold">Future Date Warning</Text>
                                 <Text fontSize="sm">
-                                  You are scheduling an appointment for a later date ({bookingData.date}). Please review your booking details before confirming.
+                                  You are scheduling an appointment for a later date ({bookingData.date}). Please review your booking details with the Hospital Receptionist before confirming.
                                 </Text>
                               </Box>
                             </Alert>
