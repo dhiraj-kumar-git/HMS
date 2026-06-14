@@ -588,8 +588,6 @@ export default function DoctorsDashboard() {
   const currentPatients = displayedPatients.slice(indexOfFirstPatient, indexOfLastPatient);
   const totalPages = Math.ceil(displayedPatients.length / patientsPerPage);
 
-  // DEFINE totalCount HERE
-  const totalCount = patients.length;
 
   if (loading) {
     return (
@@ -735,9 +733,6 @@ export default function DoctorsDashboard() {
             <Flex align="center" gap={3} ml={{ base: 0, md: 4 }}>
               <Badge colorScheme="blue" px={3} py={1} borderRadius="full" fontSize="xs">
                 Current Patients: {displayedPatients.length}
-              </Badge>
-              <Badge colorScheme="purple" px={3} py={1} borderRadius="full" fontSize="xs">
-                Total Bookings: {totalCount}
               </Badge>
             </Flex>
           </Flex>

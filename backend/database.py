@@ -506,36 +506,6 @@ def update_consultation_details(institute_id, doctor_username, prescriptions, pr
     )
     return result.matched_count > 0
 
-# Add a prescription to a patient (Legacy)
-def add_prescription_legacy(institute_id, prescription, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"prescriptions": {"doctor": doctor_username, "note": prescription, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
-
-# Add a prescription to a patient by setting a new 'prescription_details' field (Legacy)
-def add_prescription_details_legacy(institute_id, prescription_details, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"prescription_details": {"doctor": doctor_username, "prescription_details": prescription_details, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
-
-# Add a lab test to a patient (recording only the lab test details) (Legacy)
-def add_lab_test_legacy(institute_id, lab_test, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"lab_tests": {"doctor": doctor_username, "lab_test": lab_test, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
-
 # Add a lab report to a patient
 def add_lab_report(institute_id, report_details):
     # Find the most recent visit, active or not, to attach the report
@@ -586,15 +556,6 @@ def get_lab_reports():
             reports.append(assembled)
     return reports
 
-# Add a remark to a patient (recording the remark separately) (Legacy)
-def add_remark_legacy(institute_id, remark, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"remarks": {"doctor": doctor_username, "remark": remark, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
 
 # Mark a patient as complete (workflow_status "completed") when no meds/labs are given
 # (This is now largely replaced by the two-step consultation flow)
