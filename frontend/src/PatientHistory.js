@@ -170,7 +170,7 @@ export default function PatientHistory() {
                 <h2>
                   <AccordionButton _expanded={{ bg: expandedBg }}>
                     <Box flex="1" textAlign="left" fontWeight="bold" color={textColor}>
-                      {app.time ? new Date(app.time.split('T')[0]).toLocaleDateString() : 'Unknown Date'} {app.time && app.time.includes('T') ? `at ${app.time.split('T')[1]}` : ''} - {app.doctor_name || 'Doctor'}
+                      {app.time ? new Date(app.time.split('T')[0]).toLocaleDateString('en-GB') : 'Unknown Date'} {app.time && app.time.includes('T') ? `at ${app.time.split('T')[1]}` : ''} - {app.doctor_name || 'Doctor'}
                     </Box>
                     <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
                     <AccordionIcon />
