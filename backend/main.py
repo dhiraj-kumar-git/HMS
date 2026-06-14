@@ -327,6 +327,8 @@ def get_all_patients_for_doctor():
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized"}), 403
 
+    username = get_jwt_identity()
+
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 0))
@@ -335,7 +337,12 @@ def get_all_patients_for_doctor():
         limit = 0
         
     skip = (page - 1) * limit if limit > 0 else 0
-    all_patients = database.get_all_patients(skip, limit)
+    
+    # get doctor display name
+    doctor_user = database.users.find_one({"username": username})
+    doctor_display_name = doctor_user.get("display_name", username) if doctor_user else username
+
+    all_patients = database.get_patient_history_for_doctor(username, doctor_display_name, skip, limit)
     return jsonify(all_patients), 200
 
 # Endpoint to fetch the list of doctors (accessible by receptionists and admins)

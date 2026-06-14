@@ -82,6 +82,7 @@ export default function DoctorsDashboard() {
   const token = localStorage.getItem("token");
 
   // GLOBAL STATE
+  const [dutyTiming, setDutyTiming] = useState("Checking schedule...");
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true); // initial full‐page load
   const [listLoading, setListLoading] = useState(false); // list‐only refresh
@@ -139,16 +140,10 @@ export default function DoctorsDashboard() {
   }, [dateFilter, sortBy, filterInstituteId]);
 
   useEffect(() => {
-    const fetchDisplayName = async () => {
+    const fetchUserDetails = async () => {
       try {
         const token = localStorage.getItem("token");
         const username = localStorage.getItem("username");
-
-        const cachedName = localStorage.getItem("display_name");
-        if (cachedName) {
-          setDisplayName(cachedName);
-          return;
-        }
 
         const res = await axios.get(`${BASE_URL}/users/${username}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -156,15 +151,31 @@ export default function DoctorsDashboard() {
 
         const fetchedName = res.data.display_name || username;
         setDisplayName(fetchedName);
-
         localStorage.setItem("display_name", fetchedName);
+
+        // Determine duty timing for today
+        const schedule = res.data.schedule || [];
+        const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        
+        const todaysShifts = schedule.filter(shift => 
+          Array.isArray(shift.duty_days) && shift.duty_days.includes(todayStr)
+        );
+
+        if (todaysShifts.length > 0) {
+          const timingStrs = todaysShifts.map(s => `${s.start_time} - ${s.end_time}`);
+          setDutyTiming(`${timingStrs.join(', ')} on duty`);
+        } else {
+          setDutyTiming("Not on duty today");
+        }
+
       } catch (error) {
-        console.error("Error fetching display name:", error);
+        console.error("Error fetching user details:", error);
         setDisplayName(localStorage.getItem("username"));
+        setDutyTiming("Schedule unavailable");
       }
     };
 
-    fetchDisplayName();
+    fetchUserDetails();
   }, []);
 
   /** FETCH PATIENTS HELPERS **/
@@ -580,18 +591,6 @@ export default function DoctorsDashboard() {
         px="4"
         position="relative"
       >
-        <Flex
-          position="absolute"
-          left="50%"
-          transform="translateX(-50%)"
-          align="center"
-        >
-          <FiCalendar size={18} />
-          <Text ml="2" fontSize="sm" color="gray.600">
-            {currentTime}
-          </Text>
-        </Flex>
-
         <HStack
           spacing={{ base: "3", md: "4" }}
           position="absolute"
@@ -668,9 +667,9 @@ export default function DoctorsDashboard() {
                   You have {displayedPatients.length} patient bookings today.
                 </Text>
                 <Flex align="center" mt="4">
-                  <Box w="2" h="2" bg="green.400" borderRadius="full" mr="2" />
-                  <Text fontSize="xs" color="green.600">
-                    09:00 AM - 12:00 PM on duty
+                  <Box w="2" h="2" bg={dutyTiming.includes("Not on duty") ? "red.400" : "green.400"} borderRadius="full" mr="2" />
+                  <Text fontSize="xs" color={dutyTiming.includes("Not on duty") ? "red.600" : "green.600"}>
+                    {dutyTiming}
                   </Text>
                 </Flex>
               </Box>

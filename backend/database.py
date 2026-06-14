@@ -404,6 +404,48 @@ def get_patients_by_doctor(doctor_username):
     pts = list(patients.aggregate(pipeline))
     return [_map_aggregated_patient(p) for p in pts]
 
+# Get historical completed patients for a specific doctor
+def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0, limit=0):
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        {
+            "$match": {
+                "patient_visits": {
+                    "$elemMatch": {
+                        "$or": [
+                            {"doctor_username": doctor_username},
+                            {"doctor_name": doctor_display_name}
+                        ],
+                        "status": "completed"
+                    }
+                }
+            }
+        }
+    ]
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    if limit > 0:
+        pipeline.append({"$limit": limit})
+        
+    pipeline.append(COMPUTE_AGE_STAGE)
+    
+    pts = list(patients.aggregate(pipeline))
+    result = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
+
+
 # Helper to get the active visit ID for a patient
 def _get_active_visit_id(institute_id):
     # Find the most recent active visit

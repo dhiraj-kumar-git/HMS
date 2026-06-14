@@ -175,6 +175,9 @@ export default function AllPatients({ onLogout }) {
   useEffect(() => {
     let tempList = [...patients];
 
+    // Note: The backend endpoint (/doctor/all_patients) now securely filters 
+    // and returns ONLY the historical completed patients for this specific doctor.
+
     // Search by name or Institute ID
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -301,7 +304,7 @@ export default function AllPatients({ onLogout }) {
           flex="1"
         >
           <Heading fontSize="xl" mb={4} color="blue.800">
-            All Patients
+            Patient Visit History
           </Heading>
 
           {/* Filter Bar */}
