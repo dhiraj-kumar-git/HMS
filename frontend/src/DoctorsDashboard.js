@@ -112,6 +112,8 @@ export default function DoctorsDashboard() {
   const [selectedLabTests, setSelectedLabTests] = useState([]);
   const [medicineSearch, setMedicineSearch] = useState("");
   const [labTestSearch, setLabTestSearch] = useState("");
+  const [customMedicine, setCustomMedicine] = useState("");
+  const [customLabTest, setCustomLabTest] = useState("");
 
   // SAVED IN CURRENT SESSION
   const [sessionSavedPrescriptions, setSessionSavedPrescriptions] = useState([]);
@@ -359,6 +361,18 @@ export default function DoctorsDashboard() {
       ...selectedLabTests.map((t) => t.test_name),
     ]);
     setSelectedLabTests([]);
+  };
+
+  const handleAddCustomMedicine = () => {
+    if (!customMedicine.trim()) return;
+    setSessionSavedMedicines((prev) => [...prev, customMedicine.trim()]);
+    setCustomMedicine("");
+  };
+
+  const handleAddCustomLabTest = () => {
+    if (!customLabTest.trim()) return;
+    setSessionSavedLabTests((prev) => [...prev, customLabTest.trim()]);
+    setCustomLabTest("");
   };
 
   const handleRemovePrescription = (idx) => {
@@ -907,7 +921,7 @@ export default function DoctorsDashboard() {
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton />
-          <ModalBody p={0} display="flex" h="500px">
+          <ModalBody p={0} display="flex" minH="500px" maxH="75vh">
 
             {/* Left Pane - Inputs (Tabs) */}
             <Box flex="2" bg="white" borderRight="1px solid" borderColor="gray.100" overflowY="auto">
@@ -993,6 +1007,25 @@ export default function DoctorsDashboard() {
                       >
                         Add to List
                       </Button>
+
+                      <Flex mt={6} gap={2} align="center">
+                        <Input
+                          placeholder="Or type custom medicine..."
+                          value={customMedicine}
+                          onChange={(e) => setCustomMedicine(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomMedicine();
+                            }
+                          }}
+                          bg="gray.50"
+                          focusBorderColor="green.500"
+                        />
+                        <Button colorScheme="green" onClick={handleAddCustomMedicine} variant="outline">
+                          Add Custom
+                        </Button>
+                      </Flex>
                     </FormControl>
                   </TabPanel>
 
@@ -1024,6 +1057,25 @@ export default function DoctorsDashboard() {
                       >
                         Add to List
                       </Button>
+
+                      <Flex mt={6} gap={2} align="center">
+                        <Input
+                          placeholder="Or type custom lab test..."
+                          value={customLabTest}
+                          onChange={(e) => setCustomLabTest(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomLabTest();
+                            }
+                          }}
+                          bg="gray.50"
+                          focusBorderColor="purple.500"
+                        />
+                        <Button colorScheme="purple" onClick={handleAddCustomLabTest} variant="outline">
+                          Add Custom
+                        </Button>
+                      </Flex>
                     </FormControl>
                   </TabPanel>
                 </TabPanels>
