@@ -310,7 +310,11 @@ def _map_aggregated_patient(patient):
             "prescription_summary": v.get("prescription_summary", []),
             "prescription_remarks_summary": v.get("prescription_remarks_summary", []),
             "lab_test_summary": v.get("lab_test_summary", []),
-            "diagnosis_note": v.get("diagnosis_note", [])
+            "diagnosis_note": v.get("diagnosis_note", []),
+            "prescriptions_draft": v.get("prescriptions", []),
+            "prescription_details_draft": v.get("prescription_details", []),
+            "lab_tests_draft": v.get("lab_tests", []),
+            "remarks_draft": v.get("remarks", [])
         })
         patient["prescriptions"].extend(v.get("prescriptions", []))
         patient["prescription_details"].extend(v.get("prescription_details", []))
@@ -404,6 +408,48 @@ def get_patients_by_doctor(doctor_username):
     pts = list(patients.aggregate(pipeline))
     return [_map_aggregated_patient(p) for p in pts]
 
+# Get historical completed patients for a specific doctor
+def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0, limit=0):
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        },
+        {
+            "$match": {
+                "patient_visits": {
+                    "$elemMatch": {
+                        "$or": [
+                            {"doctor_username": doctor_username},
+                            {"doctor_name": doctor_display_name}
+                        ],
+                        "status": "completed"
+                    }
+                }
+            }
+        }
+    ]
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    if limit > 0:
+        pipeline.append({"$limit": limit})
+        
+    pipeline.append(COMPUTE_AGE_STAGE)
+    
+    pts = list(patients.aggregate(pipeline))
+    result = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
+
+
 # Helper to get the active visit ID for a patient
 def _get_active_visit_id(institute_id):
     # Find the most recent active visit
@@ -436,35 +482,29 @@ def _finalize_visit(institute_id, mark_as_completed=True):
                 {"$set": update_data}
             )
 
-# Add a prescription to a patient (recording the doctor's note)
-def add_prescription(institute_id, prescription, doctor_username):
+# [NEW] Overwrite consultation details using $set to prevent duplicates
+def update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
     visit_id = _get_active_visit_id(institute_id)
     if not visit_id: return False
+    
+    timestamp = datetime.now().isoformat()
+    
+    # Structure natively to preserve expected db formats
+    new_prescriptions = [{"doctor": doctor_username, "note": p, "timestamp": timestamp} for p in prescriptions]
+    new_prescription_details = [{"doctor": doctor_username, "prescription_details": pd, "timestamp": timestamp} for pd in prescription_details]
+    new_lab_tests = [{"doctor": doctor_username, "lab_test": lt, "timestamp": timestamp} for lt in lab_tests]
+    new_remarks = [{"doctor": doctor_username, "remark": r, "timestamp": timestamp} for r in remarks]
+    
     result = visits.update_one(
         {"visit_id": visit_id},
-        {"$push": {"prescriptions": {"doctor": doctor_username, "note": prescription, "timestamp": datetime.now().isoformat()}}}
+        {"$set": {
+            "prescriptions": new_prescriptions,
+            "prescription_details": new_prescription_details,
+            "lab_tests": new_lab_tests,
+            "remarks": new_remarks
+        }}
     )
-    return result.modified_count > 0
-
-# Add a prescription to a patient by setting a new 'prescription_details' field
-def add_prescription_details(institute_id, prescription_details, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"prescription_details": {"doctor": doctor_username, "prescription_details": prescription_details, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
-
-# Add a lab test to a patient (recording only the lab test details)
-def add_lab_test(institute_id, lab_test, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"lab_tests": {"doctor": doctor_username, "lab_test": lab_test, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
+    return result.matched_count > 0
 
 # Add a lab report to a patient
 def add_lab_report(institute_id, report_details):
@@ -480,9 +520,8 @@ def add_lab_report(institute_id, report_details):
     if patient:
         new_workflow_status = patient.get("workflow_status", "completed")
         if new_workflow_status == "lab test pending":
-            # Optional: change back to consultation or keep as lab test pending.
-            # Keeping it as consultation makes it clearer it's back to the doctor.
-            new_workflow_status = "consultation"
+            # Per your request, we move the patient to "completed" rather than returning them to the doctor.
+            new_workflow_status = "completed"
             
         patients.update_one(
             {"institute_id": institute_id},
@@ -517,15 +556,6 @@ def get_lab_reports():
             reports.append(assembled)
     return reports
 
-# Add a remark to a patient (recording the remark separately)
-def add_remark(institute_id, remark, doctor_username):
-    visit_id = _get_active_visit_id(institute_id)
-    if not visit_id: return False
-    result = visits.update_one(
-        {"visit_id": visit_id},
-        {"$push": {"remarks": {"doctor": doctor_username, "remark": remark, "timestamp": datetime.now().isoformat()}}}
-    )
-    return result.modified_count > 0
 
 # Mark a patient as complete (workflow_status "completed") when no meds/labs are given
 # (This is now largely replaced by the two-step consultation flow)
@@ -569,7 +599,7 @@ def consultation_patient(institute_id, has_labs, has_meds):
             "doctor_finalized": False
         }}
     )
-    return result.modified_count > 0
+    return result.matched_count > 0
 
 # Move patient to 'consultation completed' or 'completed'
 def complete_consultation(institute_id):
@@ -624,7 +654,8 @@ def get_active_pending_patients():
     """
     pipeline = [
         {"$match": {
-            "bill_status": "pending"
+            "bill_status": "pending",
+            "doctor_finalized": True
         }},
         {
             "$lookup": {
@@ -810,8 +841,8 @@ def submit_lab_results(institute_id, results):
 
     new_workflow_status = patient.get("workflow_status", "completed")
     if new_workflow_status == "lab test pending":
-        # Keep visible for the doctor
-        new_workflow_status = "consultation"
+        # Per your request, we move the patient to "completed" rather than returning them to the doctor.
+        new_workflow_status = "completed"
 
     return patients.update_one(
         {"institute_id": institute_id},

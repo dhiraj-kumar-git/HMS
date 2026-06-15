@@ -73,6 +73,10 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
 import Multiselect from "multiselect-react-dropdown";
+const toTitleCase = (str) => {
+  if (!str) return '';
+  return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+};
 
 export default function DoctorsDashboard() {
   const navigate = useNavigate();
@@ -82,6 +86,7 @@ export default function DoctorsDashboard() {
   const token = localStorage.getItem("token");
 
   // GLOBAL STATE
+  const [dutyTiming, setDutyTiming] = useState("Checking schedule...");
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true); // initial full‐page load
   const [listLoading, setListLoading] = useState(false); // list‐only refresh
@@ -107,6 +112,8 @@ export default function DoctorsDashboard() {
   const [selectedLabTests, setSelectedLabTests] = useState([]);
   const [medicineSearch, setMedicineSearch] = useState("");
   const [labTestSearch, setLabTestSearch] = useState("");
+  const [customMedicine, setCustomMedicine] = useState("");
+  const [customLabTest, setCustomLabTest] = useState("");
 
   // SAVED IN CURRENT SESSION
   const [sessionSavedPrescriptions, setSessionSavedPrescriptions] = useState([]);
@@ -120,7 +127,7 @@ export default function DoctorsDashboard() {
 
   // ADDITIONAL FILTERS
   const [dateFilter, setDateFilter] = useState('');
-  const [sortBy, setSortBy] = useState('');
+  const [sortBy, setSortBy] = useState('date');
 
   // PAGINATION
   const [currentPage, setCurrentPage] = useState(1);
@@ -139,16 +146,10 @@ export default function DoctorsDashboard() {
   }, [dateFilter, sortBy, filterInstituteId]);
 
   useEffect(() => {
-    const fetchDisplayName = async () => {
+    const fetchUserDetails = async () => {
       try {
         const token = localStorage.getItem("token");
         const username = localStorage.getItem("username");
-
-        const cachedName = localStorage.getItem("display_name");
-        if (cachedName) {
-          setDisplayName(cachedName);
-          return;
-        }
 
         const res = await axios.get(`${BASE_URL}/users/${username}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -156,15 +157,31 @@ export default function DoctorsDashboard() {
 
         const fetchedName = res.data.display_name || username;
         setDisplayName(fetchedName);
-
         localStorage.setItem("display_name", fetchedName);
+
+        // Determine duty timing for today
+        const schedule = res.data.schedule || [];
+        const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        
+        const todaysShifts = schedule.filter(shift => 
+          Array.isArray(shift.duty_days) && shift.duty_days.includes(todayStr)
+        );
+
+        if (todaysShifts.length > 0) {
+          const timingStrs = todaysShifts.map(s => `${s.start_time} - ${s.end_time}`);
+          setDutyTiming(`${timingStrs.join(', ')} on duty`);
+        } else {
+          setDutyTiming("Not on duty today");
+        }
+
       } catch (error) {
-        console.error("Error fetching display name:", error);
+        console.error("Error fetching user details:", error);
         setDisplayName(localStorage.getItem("username"));
+        setDutyTiming("Schedule unavailable");
       }
     };
 
-    fetchDisplayName();
+    fetchUserDetails();
   }, []);
 
   /** FETCH PATIENTS HELPERS **/
@@ -175,21 +192,28 @@ export default function DoctorsDashboard() {
       const res = await axios.get(`${BASE_URL}/doctor/patients`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const patientsWithDetails = res.data.map((patient) => ({
-        ...patient,
-        doctorAssigned: patient.doctor_assigned,
-        visitingTime: new Date(patient.registration_time).toLocaleString(
-          "en-US",
-          {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-            day: "2-digit",
-            month: "long",
-            year: "numeric",
-          }
-        ),
-      }));
+      const patientsWithDetails = res.data.map((patient) => {
+        const doctorAppointments = patient.appointments?.filter(a => a.doctor_username === patient.doctor_assigned) || [];
+        const latestAppt = doctorAppointments[doctorAppointments.length - 1];
+        const appointmentTimeStr = latestAppt?.time || patient.registration_time;
+
+        return {
+          ...patient,
+          doctorAssigned: patient.doctor_assigned,
+          rawAppointmentTime: appointmentTimeStr,
+          visitingTime: new Date(appointmentTimeStr).toLocaleString(
+            "en-US",
+            {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            }
+          ),
+        };
+      });
       setPatients(patientsWithDetails);
 
       // Derive readyToComplete from workflow_status
@@ -339,6 +363,18 @@ export default function DoctorsDashboard() {
     setSelectedLabTests([]);
   };
 
+  const handleAddCustomMedicine = () => {
+    if (!customMedicine.trim()) return;
+    setSessionSavedMedicines((prev) => [...prev, customMedicine.trim()]);
+    setCustomMedicine("");
+  };
+
+  const handleAddCustomLabTest = () => {
+    if (!customLabTest.trim()) return;
+    setSessionSavedLabTests((prev) => [...prev, customLabTest.trim()]);
+    setCustomLabTest("");
+  };
+
   const handleRemovePrescription = (idx) => {
     setSessionSavedPrescriptions((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -358,22 +394,17 @@ export default function DoctorsDashboard() {
     try {
       const token = localStorage.getItem("token");
 
-      const promises = [];
-
-      sessionSavedPrescriptions.forEach(p => {
-        promises.push(axios.post(`${BASE_URL}/doctor/add_prescription_details`, { institute_id: selectedPatient.institute_id, prescription_details: p }, { headers: { Authorization: `Bearer ${token}` } }));
-      });
-      sessionSavedRemarks.forEach(r => {
-        promises.push(axios.post(`${BASE_URL}/doctor/add_remark`, { institute_id: selectedPatient.institute_id, remark: r }, { headers: { Authorization: `Bearer ${token}` } }));
-      });
-      sessionSavedMedicines.forEach(m => {
-        promises.push(axios.post(`${BASE_URL}/doctor/add_prescription`, { institute_id: selectedPatient.institute_id, prescription: m }, { headers: { Authorization: `Bearer ${token}` } }));
-      });
-      sessionSavedLabTests.forEach(t => {
-        promises.push(axios.post(`${BASE_URL}/doctor/add_lab_test`, { institute_id: selectedPatient.institute_id, lab_test: t }, { headers: { Authorization: `Bearer ${token}` } }));
-      });
-
-      await Promise.all(promises);
+      // Save all details in a single efficient PUT request
+      await axios.put(
+        `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.institute_id}`,
+        {
+          prescriptions: sessionSavedMedicines,
+          prescription_details: sessionSavedPrescriptions,
+          lab_tests: sessionSavedLabTests,
+          remarks: sessionSavedRemarks
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
       const hasLabs = sessionSavedLabTests.length > 0;
       const hasMeds = sessionSavedMedicines.length > 0;
@@ -467,10 +498,19 @@ export default function DoctorsDashboard() {
   // Open modal
   const openPatientModal = (patient) => {
     setSelectedPatient(patient);
-    setSessionSavedPrescriptions([]);
-    setSessionSavedRemarks([]);
-    setSessionSavedMedicines([]);
-    setSessionSavedLabTests([]);
+    
+    // Find the active appointment to pull drafts from
+    const activeAppt = patient.appointments?.slice().reverse().find(a => 
+      a.doctor_username === patient.doctor_assigned && 
+      (a.status === "upcoming" || a.status === "consultation")
+    ) || {};
+
+    const extractDrafts = (draftArray, key) => (draftArray || []).map(d => d[key]);
+
+    setSessionSavedPrescriptions(extractDrafts(activeAppt.prescription_details_draft, "prescription_details"));
+    setSessionSavedRemarks(extractDrafts(activeAppt.remarks_draft, "remark"));
+    setSessionSavedMedicines(extractDrafts(activeAppt.prescriptions_draft, "note"));
+    setSessionSavedLabTests(extractDrafts(activeAppt.lab_tests_draft, "lab_test"));
     setPrescriptionDetails("");
     setRemark("");
     onOpen();
@@ -509,12 +549,13 @@ export default function DoctorsDashboard() {
     year: "numeric",
   });
 
-  // Helper to safely parse dates for sorting and filtering
-  const parseVisitingTime = (timeStr) => {
-    if (!timeStr || typeof timeStr !== 'string') return new Date(0);
-    const cleanedStr = timeStr.replace(' at ', ' ');
-    const d = new Date(cleanedStr);
-    return isNaN(d.getTime()) ? new Date(0) : d;
+  // Helper to safely get timestamp for sorting
+  const getRegistrationTimestamp = (timeStr) => {
+    if (!timeStr) return 0;
+    // Strip trailing Z if present to prevent UTC shifting, backend time is already local IST
+    const s = timeStr.replace(/Z$/, ''); 
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? 0 : d.getTime();
   };
 
   // Filtered patients list
@@ -532,9 +573,14 @@ export default function DoctorsDashboard() {
   // Filter by selected date
   if (dateFilter) {
     displayedPatients = displayedPatients.filter((p) => {
-      const parsedDate = parseVisitingTime(p.visitingTime);
-      if (parsedDate.getTime() === 0) return false;
-      const createdDate = parsedDate.toISOString().split('T')[0];
+      if (!p.rawAppointmentTime) return false;
+      const ts = getRegistrationTimestamp(p.rawAppointmentTime);
+      if (ts === 0) return false;
+      
+      // Parse directly as local time to match HTML date input format
+      const d = new Date(ts);
+      const createdDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      
       return createdDate === dateFilter;
     });
   }
@@ -544,9 +590,9 @@ export default function DoctorsDashboard() {
     displayedPatients.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   } else if (sortBy === 'date') {
     displayedPatients.sort((a, b) => {
-      const dateA = parseVisitingTime(a.visitingTime).getTime();
-      const dateB = parseVisitingTime(b.visitingTime).getTime();
-      return dateB - dateA;
+      const dateA = getRegistrationTimestamp(a.rawAppointmentTime);
+      const dateB = getRegistrationTimestamp(b.rawAppointmentTime);
+      return dateA - dateB; // Ascending order: Earliest appointments first
     });
   }
 
@@ -556,8 +602,6 @@ export default function DoctorsDashboard() {
   const currentPatients = displayedPatients.slice(indexOfFirstPatient, indexOfLastPatient);
   const totalPages = Math.ceil(displayedPatients.length / patientsPerPage);
 
-  // DEFINE totalCount HERE
-  const totalCount = patients.length;
 
   if (loading) {
     return (
@@ -580,18 +624,6 @@ export default function DoctorsDashboard() {
         px="4"
         position="relative"
       >
-        <Flex
-          position="absolute"
-          left="50%"
-          transform="translateX(-50%)"
-          align="center"
-        >
-          <FiCalendar size={18} />
-          <Text ml="2" fontSize="sm" color="gray.600">
-            {currentTime}
-          </Text>
-        </Flex>
-
         <HStack
           spacing={{ base: "3", md: "4" }}
           position="absolute"
@@ -645,120 +677,7 @@ export default function DoctorsDashboard() {
         maxW="1200px"
         overflowY="auto"
       >
-        {/* Top cards */}
-        <Grid templateColumns={{ base: "1fr", lg: "3fr 3fr" }} gap="0" mb="8">
-          {/* Welcome */}
-          <Box
-            bg="white"
-            borderRadius="2xl"
-            boxShadow="md"
-            p="6"
-            minH="260px"
-            maxW="550px"
-          >
-            <Flex align="center" justify="space-between">
-              <Box>
-                <Text fontSize="lg" fontWeight="medium" color="gray.800">
-                  Good Morning
-                </Text>
-                <Text fontSize="2xl" fontWeight="bold" color="gray.800">
-                  {displayName || username}
-                </Text>
-                <Text fontSize="sm" color="gray.500" mt="4" lineHeight="short">
-                  You have {displayedPatients.length} patient bookings today.
-                </Text>
-                <Flex align="center" mt="4">
-                  <Box w="2" h="2" bg="green.400" borderRadius="full" mr="2" />
-                  <Text fontSize="xs" color="green.600">
-                    09:00 AM - 12:00 PM on duty
-                  </Text>
-                </Flex>
-              </Box>
-              <Image
-                src="/images/doctor.svg"
-                alt="Doctor Illustration"
-                w="100%"
-                maxW="280px"
-                h="auto"
-              />
-            </Flex>
-          </Box>
-
-          {/* Search & Stats */}
-          <Box>
-            <Box bg="blue.600" borderRadius="2xl" boxShadow="md" p="6" mb="8">
-              <Text fontSize="2xl" fontWeight="hairline" color="white" mb="3">
-                Search Patient
-              </Text>
-              <Flex gap="3">
-                <Input
-                  placeholder="Enter Institute ID"
-                  bg="blue.100"
-                  border="2px solid white"
-                  borderRadius="lg"
-                  fontSize="sm"
-                  color="black"
-                  _placeholder={{ color: "gray.600" }}
-                  value={searchInstituteId}
-                  onChange={(e) => setSearchInstituteId(e.target.value)}
-                />
-                <Button
-                  bg="white"
-                  color="blue.700"
-                  _hover={{ bg: "gray.100" }}
-                  borderRadius="lg"
-                  px="6"
-                  fontWeight="medium"
-                  fontSize="sm"
-                  onClick={() => {
-                    setFilterInstituteId(searchInstituteId.trim());
-                    setCurrentPage(1);
-                  }}
-                >
-                  Search
-                </Button>
-              </Flex>
-            </Box>
-            <Flex gap="4">
-              <Box
-                flex="1"
-                bg="white"
-                borderRadius="2xl"
-                boxShadow="md"
-                p="4"
-                display="flex"
-                flexDir="column"
-                align="center"
-                justify="center"
-              >
-                <Text fontSize="md" color="gray.500" mb="1">
-                  Current Patients
-                </Text>
-                <Text fontSize="3xl" fontWeight="hairline" color="blue.600">
-                  {displayedPatients.length}
-                </Text>
-              </Box>
-              <Box
-                flex="1"
-                bg="white"
-                borderRadius="2xl"
-                boxShadow="md"
-                p="4"
-                display="flex"
-                flexDir="column"
-                align="center"
-                justify="center"
-              >
-                <Text fontSize="md" color="gray.500" mb="1">
-                  Total Bookings
-                </Text>
-                <Text fontSize="3xl" fontWeight="hairline" color="blue.600">
-                  {totalCount}
-                </Text>
-              </Box>
-            </Flex>
-          </Box>
-        </Grid>
+        {/* Top layout removed for optimized real estate */}
 
         {/* Upcoming Patients + Refresh */}
         <Flex align="center" mb="4" justify="space-between">
@@ -823,6 +742,13 @@ export default function DoctorsDashboard() {
                 onChange={(e) => setDateFilter(e.target.value)}
               />
             </Flex>
+
+            {/* Counters */}
+            <Flex align="center" gap={3} ml={{ base: 0, md: 4 }}>
+              <Badge colorScheme="blue" px={3} py={1} borderRadius="full" fontSize="xs">
+                Current Patients: {displayedPatients.length}
+              </Badge>
+            </Flex>
           </Flex>
 
           {/* Sort By */}
@@ -831,15 +757,14 @@ export default function DoctorsDashboard() {
               Sort By
             </Text>
             <Select
-              placeholder="Default"
               size="sm"
               borderRadius="md"
               w={{ base: '100px', md: '150px' }}
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
             >
-              <option value="name">Name</option>
               <option value="date">Date</option>
+              <option value="name">Name</option>
             </Select>
           </Flex>
         </Box>
@@ -871,12 +796,12 @@ export default function DoctorsDashboard() {
                   <Table variant="simple">
                     <Thead bg="gray.100">
                       <Tr>
-                        <Th>Institute ID</Th>
-                        <Th>Name</Th>
-                        <Th>Age</Th>
-                        <Th>Gender</Th>
-                        <Th>Booking Time</Th>
-                        <Th>Lab Reports</Th>
+                        <Th textAlign="center">Institute ID</Th>
+                        <Th textAlign="center">Name</Th>
+                        <Th textAlign="center">Age</Th>
+                        <Th textAlign="center">Gender</Th>
+                        <Th textAlign="center">Appointment Time</Th>
+                        <Th textAlign="center">Lab Reports</Th>
                         <Th textAlign="center">Actions</Th>
                       </Tr>
                     </Thead>
@@ -887,8 +812,8 @@ export default function DoctorsDashboard() {
                           _hover={{ bg: 'gray.50', cursor: 'pointer' }}
                           onClick={() => openPatientModal(p)}
                         >
-                          <Td>
-                            <Flex align="center">
+                          <Td textAlign="center">
+                            <Flex align="center" justify="center">
                               <Text fontSize="sm" color="gray.600">{p.institute_id}</Text>
                               <IconButton
                                 aria-label="Copy PSRN"
@@ -909,16 +834,16 @@ export default function DoctorsDashboard() {
                               />
                             </Flex>
                           </Td>
-                          <Td>
-                            <Flex align="center">
-                              <Avatar size="sm" name={p.name} mr="2" />
-                              <Text fontSize="sm" color="gray.800">{p.name}</Text>
+                          <Td textAlign="center">
+                            <Flex align="center" justify="center">
+                              <Avatar size="sm" name={toTitleCase(p.name)} mr="2" />
+                              <Text fontSize="sm" color="gray.800">{toTitleCase(p.name)}</Text>
                             </Flex>
                           </Td>
-                          <Td><Text fontSize="sm">{p.age}</Text></Td>
-                          <Td><Text fontSize="sm">{p.gender}</Text></Td>
-                          <Td><Text fontSize="sm">{p.visitingTime}</Text></Td>
-                          <Td>
+                          <Td textAlign="center"><Text fontSize="sm">{p.age}</Text></Td>
+                          <Td textAlign="center"><Text fontSize="sm">{p.gender}</Text></Td>
+                          <Td textAlign="center"><Text fontSize="sm">{p.visitingTime}</Text></Td>
+                          <Td textAlign="center">
                             {Array.isArray(p.lab_reports) && p.lab_reports.some((r) => r && r.s3_key) ? (
                               <Button
                                 size="sm"
@@ -992,11 +917,11 @@ export default function DoctorsDashboard() {
         <ModalContent borderRadius="2xl" overflow="hidden">
           <ModalHeader borderBottom="1px solid" borderColor="gray.100" bg="gray.50">
             {selectedPatient
-              ? `${selectedPatient.name} (ID: ${selectedPatient.institute_id})`
+              ? `${toTitleCase(selectedPatient.name)} (ID: ${selectedPatient.institute_id})`
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton />
-          <ModalBody p={0} display="flex" h="500px">
+          <ModalBody p={0} display="flex" minH="500px" maxH="75vh">
 
             {/* Left Pane - Inputs (Tabs) */}
             <Box flex="2" bg="white" borderRight="1px solid" borderColor="gray.100" overflowY="auto">
@@ -1082,6 +1007,25 @@ export default function DoctorsDashboard() {
                       >
                         Add to List
                       </Button>
+
+                      <Flex mt={6} gap={2} align="center">
+                        <Input
+                          placeholder="Or type custom medicine..."
+                          value={customMedicine}
+                          onChange={(e) => setCustomMedicine(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomMedicine();
+                            }
+                          }}
+                          bg="gray.50"
+                          focusBorderColor="green.500"
+                        />
+                        <Button colorScheme="green" onClick={handleAddCustomMedicine} variant="outline">
+                          Add Custom
+                        </Button>
+                      </Flex>
                     </FormControl>
                   </TabPanel>
 
@@ -1113,6 +1057,25 @@ export default function DoctorsDashboard() {
                       >
                         Add to List
                       </Button>
+
+                      <Flex mt={6} gap={2} align="center">
+                        <Input
+                          placeholder="Or type custom lab test..."
+                          value={customLabTest}
+                          onChange={(e) => setCustomLabTest(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleAddCustomLabTest();
+                            }
+                          }}
+                          bg="gray.50"
+                          focusBorderColor="purple.500"
+                        />
+                        <Button colorScheme="purple" onClick={handleAddCustomLabTest} variant="outline">
+                          Add Custom
+                        </Button>
+                      </Flex>
                     </FormControl>
                   </TabPanel>
                 </TabPanels>

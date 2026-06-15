@@ -327,6 +327,8 @@ def get_all_patients_for_doctor():
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized"}), 403
 
+    username = get_jwt_identity()
+
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 0))
@@ -335,7 +337,12 @@ def get_all_patients_for_doctor():
         limit = 0
         
     skip = (page - 1) * limit if limit > 0 else 0
-    all_patients = database.get_all_patients(skip, limit)
+    
+    # get doctor display name
+    doctor_user = database.users.find_one({"username": username})
+    doctor_display_name = doctor_user.get("display_name", username) if doctor_user else username
+
+    all_patients = database.get_patient_history_for_doctor(username, doctor_display_name, skip, limit)
     return jsonify(all_patients), 200
 
 # Endpoint to fetch the list of doctors (accessible by receptionists and admins)
@@ -426,85 +433,26 @@ def get_doctor_patients():
     patients_list = database.get_patients_by_doctor(doctor_username)
     return jsonify(patients_list), 200
 
-# Endpoint for doctor to add a prescription
-@app.route('/doctor/add_prescription', methods=['POST'])
+# [NEW] Endpoint for doctor to overwrite all drafted consultation details at once
+@app.route('/doctor/save_consultation_details/<institute_id>', methods=['PUT'])
 @jwt_required()
-def add_prescription_route():
+def save_consultation_details_route(institute_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
     data = request.json
-    institute_id = data.get("institute_id")
-    prescription = data.get("prescription")
-
-    if not institute_id or not prescription:
-        return jsonify({"error": "Missing required fields"}), 400
-
     doctor_username = get_jwt_identity()
-    if database.add_prescription(institute_id, prescription, doctor_username):
-        return jsonify({"message": "Prescription added successfully"}), 200
-    return jsonify({"error": "Failed to add prescription"}), 400
+    
+    prescriptions = data.get("prescriptions", [])
+    prescription_details = data.get("prescription_details", [])
+    lab_tests = data.get("lab_tests", [])
+    remarks = data.get("remarks", [])
 
-# Endpoint for doctor to add prescription details
-@app.route('/doctor/add_prescription_details', methods=['POST'])
-@jwt_required()
-def add_prescription_details_route():
-    claims = get_jwt()
-    if claims.get("role") != "doctor":
-        return jsonify({"error": "Unauthorized access"}), 403
+    if database.update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+        return jsonify({"message": "Consultation details saved successfully"}), 200
+    return jsonify({"error": "Failed to save consultation details"}), 400
 
-    data = request.json    
-    institute_id = data.get("institute_id")
-    prescription_details = data.get("prescription_details")
-
-    if not institute_id or not prescription_details:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    doctor_username = get_jwt_identity()
-    if database.add_prescription_details(institute_id, prescription_details, doctor_username):
-        return jsonify({"message": "Prescription details added successfully"}), 200
-    return jsonify({"error": "Failed to add prescription details"}), 400
-
-# Endpoint for doctor to add a lab test
-@app.route('/doctor/add_lab_test', methods=['POST'])
-@jwt_required()
-def add_lab_test_route():
-    claims = get_jwt()
-    if claims.get("role") != "doctor":
-        return jsonify({"error": "Unauthorized access"}), 403
-
-    data = request.json
-    institute_id = data.get("institute_id")
-    lab_test = data.get("lab_test")
-
-    if not institute_id or not lab_test:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    doctor_username = get_jwt_identity()
-    if database.add_lab_test(institute_id, lab_test, doctor_username):
-        return jsonify({"message": "Lab test added successfully"}), 200
-    return jsonify({"error": "Failed to add lab test"}), 400
-
-# Endpoint for doctor to add a remark
-@app.route('/doctor/add_remark', methods=['POST'])
-@jwt_required()
-def add_remark_route():
-    claims = get_jwt()
-    if claims.get("role") != "doctor":
-        return jsonify({"error": "Unauthorized access"}), 403
-
-    data = request.json
-    institute_id = data.get("institute_id")
-    remark = data.get("remark")
-
-    if not institute_id or not remark:
-        return jsonify({"error": "Missing required fields"}), 400
-
-    doctor_username = get_jwt_identity()
-    if database.add_remark(institute_id, remark, doctor_username):
-        return jsonify({"message": "Remark added successfully"}), 200
-    return jsonify({"error": "Failed to add remark"}), 400
 
 # Endpoint for doctor to confirm consultation details and update statuses
 @app.route('/doctor/save_consultation/<institute_id>', methods=['POST'])

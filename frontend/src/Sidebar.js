@@ -120,7 +120,7 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
           <SidebarItem icon={FiHome} label="Doctor Dashboard" to="/doctor" />
           <SidebarItem
             icon={FiUsers}
-            label="View All Patients"
+            label="Patient Visit History"
             to="/doctor/all-patients"
           />
         </>
