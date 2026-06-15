@@ -37,23 +37,13 @@ import {
   IconButton,
   SimpleGrid,
   Badge,
+  Icon,
 } from '@chakra-ui/react';
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw } from 'react-icons/fi';
+import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
-
-// Utility to convert numbers to words (up to 9999)
-const numberToWords = (num) => {
-  const a = [
-    'Zero','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
-    'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'
-  ];
-  const b = ['', '', 'Twenty','Thirty','Forty','Fifty','Sixty','Seventy','Eighty','Ninety'];
-  if (num < 20) return a[num];
-  if (num < 100) return b[Math.floor(num/10)] + (num%10 ? ' ' + a[num%10] : '');
-  if (num < 1000) return a[Math.floor(num/100)] + ' Hundred' + (num%100 ? ' ' + numberToWords(num%100) : '');
-  return a[Math.floor(num/1000)] + ' Thousand' + (num%1000 ? ' ' + numberToWords(num%1000) : '');
-};
+import StatusGuideModal from './StatusGuideModal';
+import { calculateAge, formatDateTimeIST, numberToWords } from './utils';
 
 function MedicalCounterDashboard() {
   const [registrations, setRegistrations] = useState([]);
@@ -64,8 +54,11 @@ function MedicalCounterDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [labTestsConfig, setLabTestsConfig] = useState([]); // New state for lab tests config
 
+  // History state removed
+
   const toast = useToast();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  const { isOpen: isGuideOpen, onOpen: onGuideOpen, onClose: onGuideClose } = useDisclosure();
   const printRef = useRef(null);
 
   // Colors for styling
@@ -74,6 +67,7 @@ function MedicalCounterDashboard() {
   const headerBg = useColorModeValue('white', 'gray.800');
   const bodyBg = useColorModeValue('gray.50', 'gray.900');
   const tableHeaderBg = useColorModeValue('gray.100', 'gray.700');
+  const modalFooterBg = useColorModeValue('gray.50', 'gray.800');
 
   // Default logout function
   const defaultLogout = () => {
@@ -141,7 +135,7 @@ function MedicalCounterDashboard() {
       };
       fetchLabTestsConfig();
     }, []);
-    
+
   // When a patient row is clicked, open the modal and reset preview flag
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient);
@@ -181,8 +175,11 @@ function MedicalCounterDashboard() {
   const handlePrintReceipt = async () => {
     if (!selectedPatient) return;
     try {
+      let finalInvoiceNo = selectedPatient.invoice_no || '';
+      let finalTotal = calculateTotal();
+      
       const token = localStorage.getItem('token');
-      await axios.post(
+      const response = await axios.post(
         `${BASE_URL}/pay_bill`,
         {
           institute_id: selectedPatient.institute_id,
@@ -190,9 +187,19 @@ function MedicalCounterDashboard() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      finalInvoiceNo = response.data.invoice_no || finalInvoiceNo;
+      // Generate active patient items HTML
+      const printItemsHtml = (selectedPatient.lab_tests || []).map((t,i) => {
+        const gross = getTestPrice(t.lab_test);
+        const discPerc = t.discount || 0;
+        const discAmt = (gross * discPerc / 100).toFixed(2);
+        const rembPerc = t.rembPerc || 0;
+        const rembAmt = (gross * rembPerc / 100).toFixed(2);
+        const amt = (gross - discAmt - rembAmt).toFixed(2);
+        return `<tr><td>${i+1}</td><td>${t.lab_test}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt}</td><td>${rembPerc}</td><td>${rembAmt}</td><td>${amt}</td></tr>`;
+      }).join('');
 
       // Build HTML for printing
-        const total = calculateTotal();
       const html = `
           <html>
           <head>
@@ -217,39 +224,23 @@ function MedicalCounterDashboard() {
               <div>MEDICAL CENTRE</div>
               <div>Vidya Vihar, Pilani, RAJASTHAN</div>
               <div>Contact: 01596-515525 | medc@pilani.bits-pilani.ac.in | Fax:01596-244183</div>
-              <div>Date/Time: ${new Date().toLocaleString()}</div>
+              <div>Date/Time: ${formatDateTimeIST(new Date())}</div>
             </div>
             <hr style="border:1px solid #000; margin:8px 0;" />
-
             <div class="title">* PAYMENT RECEIPT *</div>
-
-            <!-- ← and another one here -->
             <hr style="border:1px solid #000; margin:8px 0;" />
-
-            <table class="small-table" style="margin-bottom:10px;">
             <table class="small-table" style="margin-bottom:10px;">
               <tr>
-                <td>Invoice No.:</td>
-                <td>${selectedPatient.invoice_no || ''}</td>
-                <td>Institute ID:</td>
-                <td>${selectedPatient.institute_id}</td>
+                <td>Invoice No.:</td><td>${finalInvoiceNo}</td>
+                <td>Institute ID:</td><td>${selectedPatient.institute_id}</td>
               </tr>
               <tr>
-                <td>UMR:</td>
-                <td>${selectedPatient.umrn || ''}</td>
-                <td>Age/Gender:</td>
-                <td>${selectedPatient.age}/${selectedPatient.gender}</td>
+                <td>UMR:</td><td>${selectedPatient.umrn || ''}</td>
+                <td>Age/Gender:</td><td>${calculateAge(selectedPatient.age)}/${selectedPatient.gender || 'N/A'}</td>
               </tr>
               <tr>
-                <td>Patient:</td>
-                <td>${selectedPatient.name}</td>
-                <td>Payment No.:</td>
-                <td>${selectedPatient.payment_no || ''}</td>
-              </tr>
-              <tr>
-                <td>Ref. Doctor:</td>
-                <td>${selectedPatient.doctor_assigned || ''}</td>
-                <td></td><td></td>
+                <td>Patient:</td><td>${selectedPatient.name || selectedPatient.patient_name || ''}</td>
+                <td>Payment No.:</td><td>${selectedPatient.payment_no || ''}</td>
               </tr>
             </table>
             <table>
@@ -261,38 +252,14 @@ function MedicalCounterDashboard() {
                 </tr>
               </thead>
               <tbody>
-                ${selectedPatient.lab_tests.map((t,i) => {
-                  const gross = getTestPrice(t.lab_test);
-                  const discPerc = t.discount || 0;
-                  const discAmt = (gross * discPerc / 100).toFixed(2);
-                  const rembPerc = t.rembPerc || 0;
-                  const rembAmt = (gross * rembPerc / 100).toFixed(2);
-                  const amt = (gross - discAmt - rembAmt).toFixed(2);
-                  return `
-                <tr>
-                  <td>${i+1}</td>
-                  <td>${t.lab_test}</td>
-                  <td>${gross.toFixed(2)}</td>
-                  <td>${discPerc}</td>
-                  <td>${discAmt}</td>
-                  <td>${rembPerc}</td>
-                  <td>${rembAmt}</td>
-                  <td>${amt}</td>
-                </tr>`;
-                }).join('')}
+                ${printItemsHtml}
               </tbody>
             </table>
             <table class="small-table" style="margin-top:10px;">
-              <tr>
-                <td>Total :</td>
-                <td style="text-align:right;">${total.toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Payment Mode:</td>
-                <td style="text-align:right;">${selectedPatient.payment_mode || 'Other'}</td>
-              </tr>
+              <tr><td>Total :</td><td style="text-align:right;">${finalTotal.toFixed(2)}</td></tr>
+              <tr><td>Payment Mode:</td><td style="text-align:right;">${selectedPatient.payment_mode || 'Cash'}</td></tr>
             </table>
-            <div class="amount-words">${numberToWords(Math.round(total))} Rupees Only</div>
+            <div class="amount-words">${numberToWords(Math.round(finalTotal))} Rupees Only</div>
             <div class="footer">
               Treated By: ${selectedPatient.treated_by || ''}<br/>
               * PLEASE KEEP YOUR HOSPITAL CLEAN *<br/>
@@ -333,7 +300,7 @@ function MedicalCounterDashboard() {
           <Box textAlign="center" mb={2}>
             <Heading size="md">Birla Institute of Technology & Science</Heading>
             <Text>MEDICAL CENTRE, Pilani, Rajasthan</Text>
-            <Text>Date/Time: {new Date().toLocaleString()}</Text>
+            <Text>Date/Time: {formatDateTimeIST(new Date())}</Text>
             <Divider borderColor="black" borderWidth="1px" my={2} />
           </Box>
           <Divider mb={2} />
@@ -343,8 +310,8 @@ function MedicalCounterDashboard() {
             <Text>Invoice No.: {selectedPatient.invoice_no}</Text>
             <Text>Institute ID: {selectedPatient.institute_id}</Text>
             <Text>UMR: {selectedPatient.umrn}</Text>
-            <Text>Age/Gender: {selectedPatient.age}/{selectedPatient.gender}</Text>
-            <Text>Patient: {selectedPatient.name}</Text>
+            <Text>Age/Gender: {calculateAge(selectedPatient.age)}/{selectedPatient.gender || 'N/A'}</Text>
+            <Text>Patient: {selectedPatient.name || selectedPatient.patient_name}</Text>
             <Text>Payment No.: {selectedPatient.payment_no}</Text>
             <Text>Ref. Doctor: {selectedPatient.doctor_assigned}</Text>
           </Grid>
@@ -358,7 +325,12 @@ function MedicalCounterDashboard() {
               </Tr>
             </Thead>
             <Tbody>
-              {selectedPatient.lab_tests.map((t,i) => {
+              {(selectedPatient.prescription_details || []).map((med, i) => (
+                <Tr key={`med-${i}`}>
+                  <Td>{i+1}</Td><Td>{med}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
+                </Tr>
+              ))}
+              {(selectedPatient.lab_tests || []).map((t,i) => {
                 const gross = getTestPrice(t.lab_test);
                 const discPerc = t.discount || 0;
                 const discAmt = (gross * discPerc / 100).toFixed(2);
@@ -367,7 +339,7 @@ function MedicalCounterDashboard() {
                 const amt = (gross - discAmt - rembAmt).toFixed(2);
                 return (
                   <Tr key={i}>
-                    <Td>{i+1}</Td>
+                    <Td>{(selectedPatient.prescription_details || []).length + i + 1}</Td>
                     <Td>{t.lab_test}</Td>
                     <Td>{gross.toFixed(2)}</Td>
                     <Td>{discPerc}</Td>
@@ -384,7 +356,7 @@ function MedicalCounterDashboard() {
             <Text>Total :</Text>
             <Text textAlign="right">{total.toFixed(2)}</Text>
             <Text>Payment Mode:</Text>
-            <Text textAlign="right">{selectedPatient.payment_mode || 'Other'}</Text>
+            <Text textAlign="right">{selectedPatient.payment_mode || 'Cash'}</Text>
           </Grid>
           <Text mt={2} fontWeight="bold">
             {numberToWords(Math.round(total))} Rupees Only
@@ -451,114 +423,125 @@ function MedicalCounterDashboard() {
 
       {/* Main Content */}
       <Box as="main" flex="1" overflowY="auto" p={{ base: 4, md: 6 }}>
-        <Box
-          w="full"
-          maxW="1200px"
-          mx="auto"
-          bg={cardBg}
-          boxShadow="md"
-          borderRadius="lg"
-          p={{ base: 4, md: 6 }}
-        >
-          <Flex align="center" mb={4}>
-            <Heading fontSize="xl" color="blue.800" mr={2}>
-              Active Patients
-            </Heading>
-            <IconButton
-              aria-label="Refresh patients"
-              icon={<FiRefreshCw />}
-              variant="ghost"
-              size="sm"
-              onClick={fetchRegistrations}
-            />
-          </Flex>
-
-          {/* Search Bar */}
-          <InputGroup mb={4} maxW="300px">
-            <InputLeftElement pointerEvents="none">
-              <FiSearch color="gray" />
-            </InputLeftElement>
-            <Input
-              placeholder="Search by name, Institute ID or age"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </InputGroup>
-
-          {/* Table list of patients with Full Status details */}
-          <Box overflowX="auto">
-            <Table variant="simple" size="sm" fontSize="sm">
-              <Thead bg={tableHeaderBg}>
-                <Tr>
-                  <Th>Institute ID</Th>
-                  <Th>Name</Th>
-                  <Th>Age</Th>
-                  <Th>Type</Th>
-                  <Th>Status</Th>
-                  <Th>Bill</Th>
-                  <Th>Lab</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {filteredRegistrations.map((patient) => (
-                  <Tr
-                    key={patient.institute_id}
-                    _hover={{ bg: 'gray.50', cursor: 'pointer' }}
-                    onClick={() => handleSelectPatient(patient)}
+              <Box
+                w="full"
+                maxW="1200px"
+                mx="auto"
+                bg={cardBg}
+                boxShadow="md"
+                borderRadius="lg"
+                p={{ base: 4, md: 6 }}
+              >
+                <Flex align="center" justify="space-between" mb={4}>
+                  <Flex align="center">
+                    <Heading fontSize="xl" color="blue.800" mr={2}>
+                      Active Patients
+                    </Heading>
+                    <IconButton
+                      aria-label="Refresh patients"
+                      icon={<FiRefreshCw />}
+                      variant="ghost"
+                      size="sm"
+                      onClick={fetchRegistrations}
+                    />
+                  </Flex>
+                  <Button
+                    leftIcon={<FiHelpCircle />}
+                    variant="ghost"
+                    colorScheme="blue"
+                    size="sm"
+                    onClick={onGuideOpen}
                   >
-                    <Td>{patient.institute_id}</Td>
-                    <Td textTransform="capitalize">{(patient.name || '').toLowerCase()}</Td>
-                    <Td>{patient.age || '-'}</Td>
-                    <Td>
-                      <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
-                        {patient.patient_type}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge 
-                        variant="subtle"
-                        fontSize="10px"
-                        colorScheme={
-                          patient.workflow_status === 'active' ? 'green' : 
-                          patient.workflow_status === 'consultation' ? 'orange' : 
-                          patient.workflow_status === 'consultation completed' ? 'blue' : 
-                          patient.workflow_status === 'lab test pending' ? 'purple' : 'gray'
-                        }
-                      >
-                        {patient.workflow_status}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge 
-                        variant="outline"
-                        fontSize="10px"
-                        colorScheme={patient.bill_status === 'paid' ? 'green' : patient.bill_status === 'pending' ? 'red' : 'gray'}
-                      >
-                        {patient.bill_status}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge 
-                        variant="outline"
-                        fontSize="10px"
-                        colorScheme={patient.lab_status === 'completed' ? 'green' : patient.lab_status === 'pending' ? 'blue' : patient.lab_status === 'active' ? 'orange' : 'gray'}
-                      >
-                        {patient.lab_status}
-                      </Badge>
-                    </Td>
-                  </Tr>
-                ))}
-                {filteredRegistrations.length === 0 && (
-                  <Tr>
-                    <Td colSpan={7} textAlign="center">
-                      No active patients found.
-                    </Td>
-                  </Tr>
-                )}
-              </Tbody>
-            </Table>
-          </Box>
-        </Box>
+                    Status Guide
+                  </Button>
+                </Flex>
+
+                {/* Search Bar */}
+                <InputGroup mb={4} maxW="300px">
+                  <InputLeftElement pointerEvents="none">
+                    <FiSearch color="gray" />
+                  </InputLeftElement>
+                  <Input
+                    placeholder="Search by name, Institute ID or age"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </InputGroup>
+
+                {/* Table list of patients with Full Status details */}
+                <Box overflowX="auto">
+                  <Table variant="simple" size="sm" fontSize="sm">
+                    <Thead bg={tableHeaderBg}>
+                      <Tr>
+                        <Th>Institute ID</Th>
+                        <Th>Name</Th>
+                        <Th>Age</Th>
+                        <Th>Type</Th>
+                        <Th>Status</Th>
+                        <Th>Bill</Th>
+                        <Th>Lab</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {filteredRegistrations.map((patient) => (
+                        <Tr
+                          key={patient.institute_id}
+                          _hover={{ bg: 'gray.50', cursor: 'pointer' }}
+                          onClick={() => handleSelectPatient(patient)}
+                        >
+                          <Td>{patient.institute_id}</Td>
+                          <Td textTransform="capitalize">{(patient.name || '').toLowerCase()}</Td>
+                          <Td>{calculateAge(patient.age)}</Td>
+                          <Td>
+                            <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
+                              {patient.patient_type}
+                            </Badge>
+                          </Td>
+                          <Td>
+                            <Badge 
+                              variant="subtle"
+                              fontSize="10px"
+                              colorScheme={
+                                patient.workflow_status === 'active' ? 'green' : 
+                                patient.workflow_status === 'consultation' ? 'orange' : 
+                                patient.workflow_status === 'consultation completed' ? 'blue' : 
+                                patient.workflow_status === 'lab test pending' ? 'purple' : 'gray'
+                              }
+                            >
+                              {patient.workflow_status}
+                            </Badge>
+                          </Td>
+                          <Td>
+                            <Badge 
+                              variant="outline"
+                              fontSize="10px"
+                              colorScheme={patient.bill_status === 'paid' ? 'green' : patient.bill_status === 'pending' ? 'red' : 'gray'}
+                            >
+                              {patient.bill_status}
+                            </Badge>
+                          </Td>
+                          <Td>
+                            <Badge 
+                              variant="outline"
+                              fontSize="10px"
+                              colorScheme={patient.lab_status === 'completed' ? 'green' : patient.lab_status === 'pending' ? 'blue' : patient.lab_status === 'active' ? 'orange' : 'gray'}
+                            >
+                              {patient.lab_status}
+                            </Badge>
+                          </Td>
+                        </Tr>
+                      ))}
+                      {filteredRegistrations.length === 0 && (
+                        <Tr>
+                          <Td colSpan={7} textAlign="center">
+                            No active patients found.
+                          </Td>
+                        </Tr>
+                      )}
+                    </Tbody>
+                  </Table>
+                </Box>
+              </Box>
 
         {/* Redesigned Modal */}
         <Modal
@@ -576,10 +559,10 @@ function MedicalCounterDashboard() {
             <Box bg="blue.800" color="white" p={4}>
               {selectedPatient && (
                 <Flex direction="column" align="center">
-                  <Heading size="md">
-                    {selectedPatient.name} (ID: {selectedPatient.institute_id})
+                  <Heading size="md" textTransform="capitalize">
+                    {(selectedPatient.name || selectedPatient.patient_name || '').toLowerCase()} (ID: {selectedPatient.institute_id})
                   </Heading>
-                  <Text fontSize="sm">Age: {selectedPatient.age || 'N/A'}</Text>
+                  <Text fontSize="sm">Age: {calculateAge(selectedPatient.age)}</Text>
                 </Flex>
               )}
             </Box>
@@ -625,8 +608,8 @@ function MedicalCounterDashboard() {
               )}
             </ModalBody>
             {/* Footer with actions */}
-            <ModalFooter p={4}>
-              {!billGenerated ? (
+            <ModalFooter p={4} borderTopWidth="1px" bg={modalFooterBg}>
+              {!billGenerated && (
                 <>
                   <Button
                     colorScheme="green"
@@ -642,26 +625,24 @@ function MedicalCounterDashboard() {
                     Cancel
                   </Button>
                 </>
-              ) : (
-                <>
-                  <Button
-                    colorScheme="blue"
-                    mr={3}
-                    onClick={handlePrintReceipt}
-                    fontSize="md"
-                    px={6}
-                    py={2}
-                  >
-                    Print Receipt
-                  </Button>
-                  <Button variant="ghost" onClick={onClose} fontSize="md" px={4} py={2}>
-                    Close
-                  </Button>
-                </>
               )}
+              {billGenerated && (
+                <Button colorScheme="blue" onClick={handlePrintReceipt} leftIcon={<FiPrinter />} mr={3}>
+                  Print Receipt
+                </Button>
+              )}
+              <Button variant="ghost" onClick={() => {
+                onClose();
+                setBillGenerated(false);
+              }}>
+                Close
+              </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>
+
+        {/* ===== Status Guide Modal ===== */}
+        <StatusGuideModal isOpen={isGuideOpen} onClose={onGuideClose} />
       </Box>
     </Flex>
   );

@@ -522,11 +522,66 @@ def pay_bill_route():
     if not institute_id:
         return jsonify({"error": "Missing institute_id"}), 400
 
-    success = database.pay_bill(institute_id, has_labs)
-    if success:
-        return jsonify({"message": "Bill paid successfully"}), 200
+    result = database.pay_bill(institute_id, has_labs)
+    if result and result.get("success"):
+        return jsonify({"message": "Bill paid successfully", "invoice_no": result.get("invoice_no")}), 200
     else:
         return jsonify({"error": "Failed to pay bill"}), 400
+
+@app.route('/medical_store/bills', methods=['GET'])
+@jwt_required()
+def get_bills_history():
+    claims = get_jwt()
+    if claims.get("role") != "medical_store":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 20))
+        skip = (page - 1) * limit
+        search_term = request.args.get('search', '')
+        
+        # parse dates
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        start_date = None
+        end_date = None
+        
+        # Handle ISO strings safely
+        from datetime import datetime
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+
+        result = database.get_bill_history_patients(skip, limit, search_term, start_date, end_date)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+@app.route('/medical_store/bills/stats', methods=['GET'])
+@jwt_required()
+def get_bills_stats():
+    claims = get_jwt()
+    if claims.get("role") != "medical_store":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        start_date_str = request.args.get('start_date')
+        end_date_str = request.args.get('end_date')
+        start_date = None
+        end_date = None
+        
+        from datetime import datetime
+        if start_date_str:
+            start_date = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+        if end_date_str:
+            end_date = datetime.fromisoformat(end_date_str.replace('Z', '+00:00'))
+
+        stats = database.get_bill_history_stats(start_date, end_date)
+        return jsonify(stats), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 # Get patients with Paid bills and Active status
 @app.route('/lab/patients', methods=['GET'])

@@ -33,6 +33,7 @@ users = db.users
 sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
 visits = db.visits # Collection for storing individual patient visits
+bills = db.bills # Collection for storing permanent billing ledger
 
 # Ensure Indexes Configuration
 try:
@@ -47,6 +48,8 @@ try:
     visits.create_index("visit_id", unique=True)
     visits.create_index("institute_id")
     visits.create_index("doctor_username")
+    bills.create_index("institute_id")
+    bills.create_index("payment_date")
 except Exception as e:
     print(f"Error creating indexes: {e}")
 
@@ -148,6 +151,62 @@ def get_all_patients(skip=0, limit=0):
             assembled.pop("_id", None)
             result.append(assembled)
     return result
+
+def get_bill_history_patients(skip=0, limit=20, search_term="", start_date=None, end_date=None):
+    query = {}
+    if search_term:
+        query["$or"] = [
+            {"institute_id": {"$regex": search_term, "$options": "i"}},
+            {"patient_name": {"$regex": search_term, "$options": "i"}},
+            {"invoice_no": {"$regex": search_term, "$options": "i"}}
+        ]
+    if start_date or end_date:
+        query["payment_date"] = {}
+        if start_date:
+            query["payment_date"]["$gte"] = start_date
+        if end_date:
+            query["payment_date"]["$lte"] = end_date
+
+    cursor = bills.find(query).sort("payment_date", -1).skip(skip).limit(limit)
+    total_count = bills.count_documents(query)
+    
+    bill_list = []
+    for doc in cursor:
+        doc["_id"] = str(doc["_id"])
+        # ensure payment_date is string
+        if isinstance(doc.get("payment_date"), datetime):
+            doc["payment_date"] = doc["payment_date"].isoformat()
+        bill_list.append(doc)
+        
+    return {
+        "bills": bill_list,
+        "total": total_count
+    }
+
+def get_bill_history_stats(start_date=None, end_date=None):
+    query = {}
+    if start_date or end_date:
+        query["payment_date"] = {}
+        if start_date:
+            query["payment_date"]["$gte"] = start_date
+        if end_date:
+            query["payment_date"]["$lte"] = end_date
+
+    pipeline = [
+        {"$match": query},
+        {"$group": {
+            "_id": None,
+            "total_revenue": {"$sum": "$total_amount"},
+            "bill_count": {"$sum": 1}
+        }}
+    ]
+    result = list(bills.aggregate(pipeline))
+    if result:
+        return {
+            "total_revenue": result[0]["total_revenue"],
+            "bill_count": result[0]["bill_count"]
+        }
+    return {"total_revenue": 0, "bill_count": 0}
 
 # Authenticate user and return role if valid
 def authenticate_user(username, password):
@@ -876,6 +935,24 @@ def add_dummy_users():
         else:
             print(f"User {user['username']} created successfully.")
 
+import json
+
+def load_lab_tests_from_config():
+    try:
+        with open("labtests_config.json", "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+def get_test_price(test_name, config_list):
+    if not test_name: return 0
+    for c in config_list:
+        if c.get("test_name", "").lower() == test_name.lower():
+            rates = c.get("rates", [])
+            if rates:
+                return rates[-1]
+    return 0
+
 def pay_bill(institute_id, has_labs):
     # Update the patient document with the bill payment and workflow updates
     patient = patients.find_one({"institute_id": institute_id})
@@ -895,17 +972,74 @@ def pay_bill(institute_id, has_labs):
     
     lab_status = "pending" if has_labs else patient.get("lab_status", "none")
     
-    # (Visit already finalized by doctor in complete_consultation or will be soon)
+    # Compute totals for snapshot
+    config_list = load_lab_tests_from_config()
+    total_amount = 0
+    billed_items = []
     
+    # Fetch recent visit to extract lab_tests and prescriptions
+    visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+    
+    lab_tests = visit.get("lab_tests", []) if visit else []
+    for t in lab_tests:
+        test_name = t.get("lab_test", "")
+        gross = get_test_price(test_name, config_list)
+        discPerc = t.get("discount", 0)
+        discAmt = gross * discPerc / 100
+        rembPerc = t.get("rembPerc", 0)
+        rembAmt = gross * rembPerc / 100
+        amt = gross - discAmt - rembAmt
+        
+        billed_items.append({
+            "type": "lab_test",
+            "name": test_name,
+            "gross": gross,
+            "discount": discPerc,
+            "discount_amount": discAmt,
+            "rembursement": rembPerc,
+            "rembursement_amount": rembAmt,
+            "amount": amt
+        })
+        total_amount += amt
+        
+    prescriptions = visit.get("prescriptions", []) if visit else []
+    for p in prescriptions:
+        billed_items.append({
+            "type": "medicine",
+            "name": p.get("note", ""),
+            "amount": 0 # Assuming medicines are dispensed without extra charge here, or handled separately
+        })
+        
+    now = datetime.utcnow()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    count = bills.count_documents({"payment_date": {"$gte": today_start}})
+    invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
+    
+    bill_doc = {
+        "invoice_no": invoice_no,
+        "payment_date": now,
+        "institute_id": patient.get("institute_id"),
+        "patient_name": patient.get("name"),
+        "patient_type": patient.get("patient_type"),
+        "age": patient.get("date_of_birth"), # Age is derived from DOB later
+        "gender": patient.get("gender"),
+        "items": billed_items,
+        "total_amount": round(total_amount, 2),
+        "payment_mode": "Cash"
+    }
+    bills.insert_one(bill_doc)
+
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
             "bill_status": "paid",
             "workflow_status": new_workflow,
-            "lab_status": lab_status
+            "lab_status": lab_status,
+            "invoice_no": invoice_no,
+            "payment_date": now
         }}
     )
-    return result.modified_count > 0
+    return {"success": result.modified_count > 0, "invoice_no": invoice_no, "total_amount": total_amount, "bill": bill_doc}
 
 # def add_lab_test(psr_no, lab_test, doctor_username):
 #     # Define reference ranges based on test type

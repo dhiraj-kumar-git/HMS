@@ -108,6 +108,11 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
         <>
           <SidebarItem icon={FiHome} label="Dashboard" to="/medical_counter" />
           <SidebarItem
+            icon={FiFileText}
+            label="Bill History"
+            to="/bill_history"
+          />
+          <SidebarItem
             icon={FiUserPlus}
             label="Add Medicine"
             to="/add-medicine"

@@ -511,7 +511,7 @@ const PatientBooking = () => {
               <Icon as={FiCheckCircle} w={6} h={6} color="teal.500" mr={3} />
               <Box>
                 <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Patient</Text>
-                <Text fontSize="lg" color="teal.900">{verifiedPatient.name}</Text>
+                <Text fontSize="lg" color="teal.900" textTransform="capitalize">{(verifiedPatient.name || '').toLowerCase()}</Text>
                 <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
               </Box>
             </Flex>
