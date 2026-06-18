@@ -72,11 +72,8 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
+import { formatDateTimeIST, getWeekdayIST, toTitleCase } from './utils';
 import Multiselect from "multiselect-react-dropdown";
-const toTitleCase = (str) => {
-  if (!str) return '';
-  return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-};
 
 export default function DoctorsDashboard() {
   const navigate = useNavigate();
@@ -161,7 +158,7 @@ export default function DoctorsDashboard() {
 
         // Determine duty timing for today
         const schedule = res.data.schedule || [];
-        const todayStr = new Date().toLocaleDateString('en-US', { weekday: 'long' });
+        const todayStr = getWeekdayIST(new Date());
         
         const todaysShifts = schedule.filter(shift => 
           Array.isArray(shift.duty_days) && shift.duty_days.includes(todayStr)
@@ -201,17 +198,7 @@ export default function DoctorsDashboard() {
           ...patient,
           doctorAssigned: patient.doctor_assigned,
           rawAppointmentTime: appointmentTimeStr,
-          visitingTime: new Date(appointmentTimeStr).toLocaleString(
-            "en-US",
-            {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            }
-          ),
+          visitingTime: formatDateTimeIST(appointmentTimeStr),
         };
       });
       setPatients(patientsWithDetails);
@@ -540,14 +527,7 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const currentTime = new Date().toLocaleString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const currentTime = formatDateTimeIST(new Date());
 
   // Helper to safely get timestamp for sorting
   const getRegistrationTimestamp = (timeStr) => {

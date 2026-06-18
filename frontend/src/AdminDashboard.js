@@ -64,6 +64,7 @@ import {
 } from 'recharts';
 import axios from 'axios';
 import BASE_URL from './Config';
+import { toTitleCase } from './utils';
 
 import CreateUser from './CreateUser';
 import UsersList from './UsersList';
@@ -392,7 +393,7 @@ function DashboardHome() {
               <Tbody>
                 {newPatients.slice(0, 3).map((p) => (
                   <Tr key={p.institute_id}>
-                    <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
+                    <Td>{toTitleCase(p.name)}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>
                     <Td>{p.workflow_status}</Td>
@@ -448,7 +449,7 @@ function DashboardHome() {
               <Tbody>
                 {newPatients.map((p) => (
                   <Tr key={p.institute_id}>
-                    <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
+                    <Td>{toTitleCase(p.name)}</Td>
                     <Td>{p.address}</Td>
                     <Td>{p.disease}</Td>
                     <Td>{p.workflow_status}</Td>

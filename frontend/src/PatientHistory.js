@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from "react-router-dom";
 import axios from 'axios';
 import BASE_URL from './Config';
+import { formatDateTimeIST, toTitleCase } from './utils';
 
 import {
   Box,
@@ -157,7 +158,7 @@ export default function PatientHistory() {
         boxShadow="md"
         mb={6}
       >
-        <Heading size="md">{patient.name}</Heading>
+        <Heading size="md">{toTitleCase(patient.name)}</Heading>
         <Text mt={2}>ID: {patient.institute_id}</Text>
       </Box>
 
@@ -170,7 +171,7 @@ export default function PatientHistory() {
                 <h2>
                   <AccordionButton _expanded={{ bg: expandedBg }}>
                     <Box flex="1" textAlign="left" fontWeight="bold" color={textColor}>
-                      {app.time ? new Date(app.time.split('T')[0]).toLocaleDateString('en-GB') : 'Unknown Date'} {app.time && app.time.includes('T') ? `at ${app.time.split('T')[1]}` : ''} - {app.doctor_name || 'Doctor'}
+                      {app.time ? formatDateTimeIST(app.time) : 'Unknown Date'} - {toTitleCase(app.doctor_name) || 'Doctor'}
                     </Box>
                     <Badge colorScheme="green" mr={3} textTransform="none">Completed</Badge>
                     <AccordionIcon />

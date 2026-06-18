@@ -8,21 +8,15 @@ import {
   Text,
   Box,
   Flex,
-  useToast
+  useToast,
+  Image,
 } from '@chakra-ui/react';
-import { calculateAge } from './utils';
+import { calculateAge, formatDateTimeIST, toTitleCase } from './utils';
 
 function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
   const toast = useToast();
 
-  const currentDateTime = new Date().toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  });
+  const currentDateTime = formatDateTimeIST(new Date());
 
 
   const handlePrint = () => {
@@ -181,7 +175,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                 <Flex mb={1}>
                   <Text width="90px">Name</Text>
                   <Text>
-                    : {prescriptionData?.name?.toUpperCase() || ''}
+                    : {toTitleCase(prescriptionData?.name) || ''}
                   </Text>
                 </Flex>
                 <Flex mb={1}>

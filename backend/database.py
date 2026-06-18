@@ -1,4 +1,4 @@
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timezone, timedelta, timezone
 from pymongo import MongoClient
 from dotenv import load_dotenv
 import os
@@ -13,7 +13,7 @@ load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
 if not MONGO_URI:
     raise ValueError("MONGO_URI is not set")
-client = MongoClient(MONGO_URI)
+client = MongoClient(MONGO_URI, tz_aware=True)
 
 # Redis connection setup with Graceful Fallback
 redis_client = None
@@ -220,7 +220,7 @@ def start_session(username, session_id):
     session_data = {
         "username": username,
         "session_id": session_id,
-        "login_time": datetime.now().isoformat(),
+        "login_time": datetime.now(timezone.utc).isoformat(),
         "active": True
     }
     sessions.insert_one(session_data)
@@ -229,13 +229,13 @@ def start_session(username, session_id):
 def end_session(username, session_id, jti=None, exp=None):
     result = sessions.update_one(
         {"username": username, "session_id": session_id, "active": True},
-        {"$set": {"active": False, "logout_time": datetime.now().isoformat()}}
+        {"$set": {"active": False, "logout_time": datetime.now(timezone.utc).isoformat()}}
     )
     
     # Blocklist the JWT using redis
     if redis_client and jti and exp:
         # Calculate time remaining on the token
-        now = datetime.timestamp(datetime.now())
+        now = datetime.timestamp(datetime.now(timezone.utc))
         expires_in = int(exp - now)
         if expires_in > 0:
             # We save the JTI with an expiration matching the token's remaining lifespan.
@@ -254,7 +254,7 @@ def register_patient(patient_data):
     if patients.find_one({"institute_id": institute_id}):
         return None # Indicate duplicate
 
-    registration_time = datetime.now()
+    registration_time = datetime.now(timezone.utc)
     patient_data["registration_time"] = registration_time
     patient_data["account_status"] = patient_data.get("account_status", "active")
     
@@ -430,7 +430,7 @@ def _map_aggregated_patient(patient):
     return patient
 
 def store_patient_otp(institute_id, otp):
-    expires_at = datetime.utcnow() + timedelta(minutes=5)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {"otp": otp, "otp_expires": expires_at}}
@@ -442,7 +442,7 @@ def verify_patient_otp(institute_id, otp):
     if not patient or "otp" not in patient:
         return False, "OTP not generated or patient not found."
     
-    if patient.get("otp_expires") and datetime.utcnow() > patient["otp_expires"]:
+    if patient.get("otp_expires") and datetime.now(timezone.utc) > patient["otp_expires"]:
         return False, "OTP has expired."
         
     if str(patient.get("otp")) == str(otp):
@@ -581,7 +581,7 @@ def _finalize_visit(institute_id, mark_as_completed=True):
             }
             if mark_as_completed:
                 update_data["status"] = "completed"
-                update_data["consultation_completed_time"] = datetime.now().isoformat()
+                update_data["consultation_completed_time"] = datetime.now(timezone.utc).isoformat()
             
             visits.update_one(
                 {"visit_id": visit_id},
@@ -593,7 +593,7 @@ def update_consultation_details(institute_id, doctor_username, prescriptions, pr
     visit_id = _get_active_visit_id(institute_id)
     if not visit_id: return False
     
-    timestamp = datetime.now().isoformat()
+    timestamp = datetime.now(timezone.utc).isoformat()
     
     # Structure natively to preserve expected db formats
     new_prescriptions = [{"doctor": doctor_username, "note": p, "timestamp": timestamp} for p in prescriptions]
@@ -625,7 +625,7 @@ def add_lab_report(institute_id, visit_id, report_details):
     # Push the report
     result = visits.update_one(
         {"visit_id": visit["visit_id"]},
-        {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now().isoformat()}}}
+        {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now(timezone.utc).isoformat()}}}
     )
     
     # Mark all tests in this visit as completed, since frontend submits them together as one master report
@@ -821,7 +821,7 @@ def get_active_pending_patients():
         # Calculate age
         if "date_of_birth" in patient and isinstance(patient["date_of_birth"], datetime):
             dob = patient["date_of_birth"]
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             patient["age"] = now.year - dob.year - ((now.month, now.day) < (dob.month, dob.day))
             patient["date_of_birth"] = dob.isoformat()
             
@@ -875,7 +875,7 @@ def get_lab_patients():
         # Calculate age
         if "date_of_birth" in patient and isinstance(patient["date_of_birth"], datetime):
             dob = patient["date_of_birth"]
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             patient["age"] = now.year - dob.year - ((now.month, now.day) < (dob.month, dob.day))
             patient["date_of_birth"] = dob.isoformat()
             
@@ -930,7 +930,7 @@ def _validate_and_parse_bulk_row(row):
                     except ValueError:
                         raise ValueError(f"Date '{dob_str}' does not match YYYY-MM-DD or DD-MM-YYYY")
 
-        if dob >= datetime.now():
+        if dob >= datetime.now(timezone.utc):
             raise ValueError("Date of birth cannot be in the future")
     except ValueError as e:
         raise ValueError(f"Invalid date_of_birth format: {str(e)}")
@@ -1140,7 +1140,7 @@ def pay_bill(institute_id, has_labs, visit_id=None):
             "amount": 0 # Assuming medicines are dispensed without extra charge here, or handled separately
         })
         
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     count = bills.count_documents({"payment_date": {"$gte": today_start}})
     invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"

@@ -12,9 +12,12 @@ export const calculateAge = (dob) => {
   return age;
 };
 
+
+
 export const formatDateTimeIST = (dateInput) => {
   if (!dateInput) return '';
   const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
   return date.toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     day: '2-digit',
@@ -30,12 +33,47 @@ export const formatDateTimeIST = (dateInput) => {
 export const formatDateIST = (dateInput) => {
   if (!dateInput) return '';
   const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
   return date.toLocaleDateString('en-IN', {
     timeZone: 'Asia/Kolkata',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric'
   });
+};
+
+export const getWeekdayIST = (dateInput) => {
+  if (!dateInput) return '';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
+    timeZone: 'Asia/Kolkata',
+    weekday: 'long'
+  });
+};
+
+export const getDateISTString = (dateInput) => {
+  const date = dateInput ? new Date(dateInput) : new Date();
+  if (isNaN(date.getTime())) return '';
+  // To get YYYY-MM-DD in IST, we can extract parts:
+  const formatter = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+  const parts = formatter.formatToParts(date);
+  const year = parts.find(p => p.type === 'year').value;
+  const month = parts.find(p => p.type === 'month').value;
+  const day = parts.find(p => p.type === 'day').value;
+  return `${year}-${month}-${day}`;
+};
+
+export const toTitleCase = (str) => {
+  if (!str) return '';
+  return str.split(' ').map(word => 
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
 };
 
 export const numberToWords = (num) => {

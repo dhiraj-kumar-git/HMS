@@ -50,7 +50,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
-import { formatDateTimeIST } from './utils';
+import { formatDateTimeIST, toTitleCase } from './utils';
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");
@@ -307,7 +307,7 @@ export default function LabTestDashboard() {
 
       toast({
         title: "Report saved successfully",
-        description: `${selectedPatient.name}'s lab report has been generated.`,
+        description: `${toTitleCase(selectedPatient.name)}'s lab report has been generated.`,
         status: "success",
       });
 
@@ -374,8 +374,8 @@ export default function LabTestDashboard() {
         })
         .join("\n");
 
-      const subject = `Lab Report for ${patientData.name} (ID ${selectedPatient.institute_id})`;
-      const body = `Dear ${patientData.name},
+      const subject = `Lab Report for ${toTitleCase(patientData.name)} (ID ${selectedPatient.institute_id})`;
+      const body = `Dear ${toTitleCase(patientData.name)},
 
 Your lab test report is now available.
 
@@ -498,7 +498,7 @@ BITS Pilani
           <div class="patient-info">
             <div class="patient-row">
               <div class="patient-left">
-                <div><span>Name</span><span>: ${selectedPatient?.name?.toUpperCase() || ""
+                <div><span>Name</span><span>: ${toTitleCase(selectedPatient?.name) || ""
       }</span></div>
                 <div><span>Sex & Age</span><span>: ${selectedPatient?.gender?.toUpperCase() || ""
       } / ${selectedPatient?.age || ""}Yr</span></div>
@@ -591,9 +591,9 @@ BITS Pilani
             <MenuButton
               as={Button}
               variant="ghost"
-              rightIcon={<Avatar size="sm" name={username} />}
+              rightIcon={<Avatar size="sm" name={toTitleCase(username)} />}
             >
-              <Text fontWeight="medium">Welcome, {username}</Text>
+              <Text fontWeight="medium">Welcome, {toTitleCase(username)}</Text>
             </MenuButton>
             <MenuList>
               <MenuItem
@@ -947,9 +947,9 @@ BITS Pilani
                       display="flex"
                       alignItems="center"
                     >
-                      <Avatar size="sm" name={p.name} mr="2" />
+                      <Avatar size="sm" name={toTitleCase(p.name)} mr="2" />
                       <Text fontSize="sm" color="gray.800">
-                        {p.name}
+                        {toTitleCase(p.name)}
                       </Text>
                     </Box>
                     <Box
@@ -1007,7 +1007,7 @@ BITS Pilani
         <ModalContent>
           <ModalHeader bg="blue.600" color="white">
             {selectedPatient
-              ? `${selectedPatient.name} (ID: ${selectedPatient.institute_id})`
+              ? `${toTitleCase(selectedPatient.name)} (ID: ${selectedPatient.institute_id})`
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton color="white" />

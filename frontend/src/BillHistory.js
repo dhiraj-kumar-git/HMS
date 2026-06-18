@@ -8,7 +8,7 @@ import {
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
-import { formatDateIST, formatDateTimeIST } from './utils';
+import { formatDateIST, formatDateTimeIST, toTitleCase } from './utils';
 
 function BillHistory() {
   const [billHistory, setBillHistory] = useState([]);
@@ -104,7 +104,7 @@ function BillHistory() {
         <Flex justify="space-between" mb={2} fontSize="sm">
           <Box>
             <Text><strong>Invoice No:</strong> {selectedPatient.invoice_no}</Text>
-            <Text><strong>Patient Name:</strong> {(selectedPatient.patient_name || '').toUpperCase()}</Text>
+            <Text><strong>Patient Name:</strong> {toTitleCase(selectedPatient.patient_name)}</Text>
           </Box>
           <Box textAlign="right">
             <Text><strong>Institute ID:</strong> {selectedPatient.institute_id}</Text>
@@ -209,7 +209,7 @@ function BillHistory() {
                       <Tr key={bill._id}>
                         <Td>{formatDateIST(bill.payment_date)}</Td>
                         <Td>{bill.invoice_no}</Td>
-                        <Td textTransform="capitalize">{(bill.patient_name || '').toLowerCase()}</Td>
+                        <Td>{toTitleCase(bill.patient_name)}</Td>
                         <Td>{bill.institute_id}</Td>
                         <Td isNumeric>{bill.items ? bill.items.length : 0}</Td>
                         <Td isNumeric>₹{bill.total_amount.toFixed(2)}</Td>

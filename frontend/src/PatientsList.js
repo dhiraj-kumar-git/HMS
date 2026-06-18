@@ -38,11 +38,11 @@ import {
   PopoverArrow,
   PopoverBody,
 } from '@chakra-ui/react';
-import { FiUploadCloud, FiDownload, FiAlertCircle, FiFile, FiRefreshCw, FiHelpCircle, FiInfo, FiChevronDown, FiChevronRight } from 'react-icons/fi';
+import { FiSearch, FiRefreshCw, FiTrash2, FiChevronDown, FiChevronUp, FiActivity, FiUploadCloud, FiFileText, FiDownload, FiAlertCircle, FiFile, FiHelpCircle, FiInfo, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
 import StatusGuideModal from './StatusGuideModal';
-import { formatDateTimeIST } from './utils';
+import { formatDateTimeIST, toTitleCase } from './utils';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
@@ -309,7 +309,7 @@ export default function PatientsList() {
                       )}
                     </Td>
                     <Td>{p.institute_id}</Td>
-                    <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
+                    <Td>{toTitleCase(p.name)}</Td>
                     <Td>{p.contact_no}</Td>
                     <Td>{p.age ?? '-'}</Td>
                     <Td>
@@ -369,7 +369,7 @@ export default function PatientsList() {
                               {p.appointments.map((appt, idx) => (
                                 <Tr key={idx} borderBottom="1px solid" borderColor="gray.100">
                                   <Td color="gray.600">{formatDateTimeIST(appt.booked_at)}</Td>
-                                  <Td color="gray.600">{appt.doctor_name}</Td>
+                                  <Td color="gray.600">{toTitleCase(appt.doctor_name)}</Td>
                                   <Td>
                                     <Badge
                                       variant="subtle"

@@ -43,7 +43,7 @@ import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, 
 import axios from 'axios';
 import BASE_URL from './Config';
 import StatusGuideModal from './StatusGuideModal';
-import { calculateAge, formatDateTimeIST, numberToWords } from './utils';
+import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase } from './utils';
 
 function MedicalCounterDashboard() {
   const [registrations, setRegistrations] = useState([]);
@@ -259,7 +259,7 @@ function MedicalCounterDashboard() {
                 <td>Age/Gender:</td><td>${calculateAge(selectedPatient.age)}/${selectedPatient.gender || 'N/A'}</td>
               </tr>
               <tr>
-                <td>Patient:</td><td>${selectedPatient.name || selectedPatient.patient_name || ''}</td>
+                <td>Patient:</td><td>${toTitleCase(selectedPatient.name || selectedPatient.patient_name || '')}</td>
                 <td>Payment No.:</td><td>${selectedPatient.payment_no || ''}</td>
               </tr>
             </table>
@@ -331,7 +331,7 @@ function MedicalCounterDashboard() {
             <Text>Institute ID: {selectedPatient.institute_id}</Text>
             <Text>UMR: {selectedPatient.umrn}</Text>
             <Text>Age/Gender: {calculateAge(selectedPatient.age)}/{selectedPatient.gender || 'N/A'}</Text>
-            <Text>Patient: {selectedPatient.name || selectedPatient.patient_name}</Text>
+            <Text>Patient: {toTitleCase(selectedPatient.name || selectedPatient.patient_name)}</Text>
             <Text>Payment No.: {selectedPatient.payment_no}</Text>
             <Text>Ref. Doctor: {selectedPatient.doctor_assigned}</Text>
           </Grid>
@@ -511,7 +511,7 @@ function MedicalCounterDashboard() {
                           onClick={() => handleSelectPatient(patient)}
                         >
                           <Td>{patient.institute_id}</Td>
-                          <Td textTransform="capitalize">{(patient.name || '').toLowerCase()}</Td>
+                          <Td>{toTitleCase(patient.name)}</Td>
                           <Td>{calculateAge(patient.age)}</Td>
                           <Td>
                             <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
@@ -583,8 +583,8 @@ function MedicalCounterDashboard() {
             <Box bg="blue.800" color="white" p={4}>
               {selectedPatient && (
                 <Flex direction="column" align="center">
-                  <Heading size="md" textTransform="capitalize">
-                    {(selectedPatient.name || selectedPatient.patient_name || '').toLowerCase()} (ID: {selectedPatient.institute_id})
+                  <Heading size="md">
+                    {toTitleCase(selectedPatient.name || selectedPatient.patient_name || '')} (ID: {selectedPatient.institute_id})
                   </Heading>
                   <Text fontSize="sm">Age: {calculateAge(selectedPatient.age)}</Text>
                   {selectedPatient.booked_at && (
