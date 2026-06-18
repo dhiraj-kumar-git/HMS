@@ -50,6 +50,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
+import { formatDateTimeIST } from './utils';
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");
@@ -83,14 +84,7 @@ export default function LabTestDashboard() {
     Completed: 8,
   });
 
-  const currentTime = new Date().toLocaleString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const currentTime = formatDateTimeIST(new Date());
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const {
@@ -161,15 +155,12 @@ export default function LabTestDashboard() {
   };
 
   // FETCH PATIENT DETAILS & PROCESS TESTS
-  const handlePatientSelect = async (instituteId) => {
+  const handlePatientSelect = async (patient) => {
     // ensure configTests is loaded
     if (!configTests.length) await fetchConfigTests();
     setTestsLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/get_patient/${instituteId}`, { headers: { Authorization: `Bearer ${token}` } });
-      const patient = response.data;
       setSelectedPatient(patient);
 
       const processed = patient.lab_tests.map((t) => {
@@ -229,7 +220,7 @@ export default function LabTestDashboard() {
   };
 
   const openPatientModal = async (p) => {
-    await handlePatientSelect(p.institute_id);
+    await handlePatientSelect(p);
     onOpen();
   };
 
@@ -279,6 +270,7 @@ export default function LabTestDashboard() {
         `${BASE_URL}/lab/save_report`,
         {
           institute_id: selectedPatient.institute_id,
+          visit_id: selectedPatient.visit_id,
           test_name: tests[0].lab_test,
           results: tests.reduce((acc, t) => {
             if (t.type === "individual") {
@@ -419,14 +411,7 @@ BITS Pilani
 
   // Print Report
   const handlePrint = () => {
-    const currentDateTime = new Date().toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const currentDateTime = formatDateTimeIST(new Date());
 
     let rows = "";
     tests.forEach((test) => {

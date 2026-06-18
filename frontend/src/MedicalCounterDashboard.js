@@ -92,9 +92,19 @@ function MedicalCounterDashboard() {
           (patient.institute_id && patient.institute_id.toLowerCase().includes(q)) ||
           (patient.age && String(patient.age).toLowerCase().includes(q))
       );
-      setFilteredRegistrations(filtered);
+      const sorted = filtered.sort((a, b) => {
+        const timeA = new Date(a.consultation_completed_time || a.booked_at || 0).getTime();
+        const timeB = new Date(b.consultation_completed_time || b.booked_at || 0).getTime();
+        return timeB - timeA;
+      });
+      setFilteredRegistrations(sorted);
     } else {
-      setFilteredRegistrations(registrations);
+      const sorted = [...registrations].sort((a, b) => {
+        const timeA = new Date(a.consultation_completed_time || a.booked_at || 0).getTime();
+        const timeB = new Date(b.consultation_completed_time || b.booked_at || 0).getTime();
+        return timeB - timeA;
+      });
+      setFilteredRegistrations(sorted);
     }
   }, [searchQuery, registrations]);
 
@@ -183,21 +193,31 @@ function MedicalCounterDashboard() {
         `${BASE_URL}/pay_bill`,
         {
           institute_id: selectedPatient.institute_id,
+          visit_id: selectedPatient.visit_id,
           has_labs: selectedPatient.lab_tests && selectedPatient.lab_tests.length > 0,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       finalInvoiceNo = response.data.invoice_no || finalInvoiceNo;
       // Generate active patient items HTML
-      const printItemsHtml = (selectedPatient.lab_tests || []).map((t,i) => {
+      let itemIndex = 1;
+      let printItemsHtml = '';
+      
+      // Map Medicines
+      (selectedPatient.prescriptions || []).forEach(med => {
+        printItemsHtml += `<tr><td>${itemIndex++}</td><td>${med.note || med}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
+      });
+      
+      // Map Lab Tests
+      (selectedPatient.lab_tests || []).forEach(t => {
         const gross = getTestPrice(t.lab_test);
         const discPerc = t.discount || 0;
         const discAmt = (gross * discPerc / 100).toFixed(2);
         const rembPerc = t.rembPerc || 0;
         const rembAmt = (gross * rembPerc / 100).toFixed(2);
         const amt = (gross - discAmt - rembAmt).toFixed(2);
-        return `<tr><td>${i+1}</td><td>${t.lab_test}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt}</td><td>${rembPerc}</td><td>${rembAmt}</td><td>${amt}</td></tr>`;
-      }).join('');
+        printItemsHtml += `<tr><td>${itemIndex++}</td><td>${t.lab_test}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt}</td><td>${rembPerc}</td><td>${rembAmt}</td><td>${amt}</td></tr>`;
+      });
 
       // Build HTML for printing
       const html = `
@@ -325,9 +345,9 @@ function MedicalCounterDashboard() {
               </Tr>
             </Thead>
             <Tbody>
-              {(selectedPatient.prescription_details || []).map((med, i) => (
+              {(selectedPatient.prescriptions || []).map((med, i) => (
                 <Tr key={`med-${i}`}>
-                  <Td>{i+1}</Td><Td>{med}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
+                  <Td>{i+1}</Td><Td>{med.note || med}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
                 </Tr>
               ))}
               {(selectedPatient.lab_tests || []).map((t,i) => {
@@ -339,7 +359,7 @@ function MedicalCounterDashboard() {
                 const amt = (gross - discAmt - rembAmt).toFixed(2);
                 return (
                   <Tr key={i}>
-                    <Td>{(selectedPatient.prescription_details || []).length + i + 1}</Td>
+                    <Td>{(selectedPatient.prescriptions || []).length + i + 1}</Td>
                     <Td>{t.lab_test}</Td>
                     <Td>{gross.toFixed(2)}</Td>
                     <Td>{discPerc}</Td>
@@ -480,6 +500,7 @@ function MedicalCounterDashboard() {
                         <Th>Status</Th>
                         <Th>Bill</Th>
                         <Th>Lab</Th>
+                        <Th>Completed Time</Th>
                       </Tr>
                     </Thead>
                     <Tbody>
@@ -529,11 +550,14 @@ function MedicalCounterDashboard() {
                               {patient.lab_status}
                             </Badge>
                           </Td>
+                          <Td fontSize="xs">
+                            {patient.consultation_completed_time ? formatDateTimeIST(patient.consultation_completed_time) : formatDateTimeIST(patient.booked_at || Date.now())}
+                          </Td>
                         </Tr>
                       ))}
                       {filteredRegistrations.length === 0 && (
                         <Tr>
-                          <Td colSpan={7} textAlign="center">
+                          <Td colSpan={8} textAlign="center">
                             No active patients found.
                           </Td>
                         </Tr>
@@ -563,6 +587,9 @@ function MedicalCounterDashboard() {
                     {(selectedPatient.name || selectedPatient.patient_name || '').toLowerCase()} (ID: {selectedPatient.institute_id})
                   </Heading>
                   <Text fontSize="sm">Age: {calculateAge(selectedPatient.age)}</Text>
+                  {selectedPatient.booked_at && (
+                    <Text fontSize="xs" mt={1}>Order Date: {formatDateTimeIST(selectedPatient.booked_at)}</Text>
+                  )}
                 </Flex>
               )}
             </Box>

@@ -207,6 +207,7 @@ def save_lab_report():
 
     data = request.json
     institute_id = data.get("institute_id")
+    visit_id = data.get("visit_id")
     test_name = data.get("test_name")
     results = data.get("results")
     remarks = data.get("remarks")
@@ -215,7 +216,7 @@ def save_lab_report():
         return jsonify({"error": "Missing required fields"}), 400
 
     from database import add_lab_report
-    success = add_lab_report(institute_id, {
+    success = add_lab_report(institute_id, visit_id, {
         "test_name": test_name,
         "results": results,
         "remarks": remarks,
@@ -518,11 +519,12 @@ def pay_bill_route():
 
     data = request.json
     institute_id = data.get("institute_id")
+    visit_id = data.get("visit_id")
     has_labs = data.get("has_labs", False)
     if not institute_id:
         return jsonify({"error": "Missing institute_id"}), 400
 
-    result = database.pay_bill(institute_id, has_labs)
+    result = database.pay_bill(institute_id, has_labs, visit_id)
     if result and result.get("success"):
         return jsonify({"message": "Bill paid successfully", "invoice_no": result.get("invoice_no")}), 200
     else:
@@ -1245,7 +1247,7 @@ def save_s3_metadata():
     }
 
     try:
-        if database.add_lab_report(institute_id,report_data):
+        if database.add_lab_report(institute_id, None, report_data):
             return jsonify({"message": "Metadata saved"}), 200
         else:
             return jsonify({"error": "Patient not found"}), 404

@@ -38,10 +38,11 @@ import {
   PopoverArrow,
   PopoverBody,
 } from '@chakra-ui/react';
-import { FiUploadCloud, FiDownload, FiAlertCircle, FiFile, FiRefreshCw, FiHelpCircle, FiInfo } from 'react-icons/fi';
+import { FiUploadCloud, FiDownload, FiAlertCircle, FiFile, FiRefreshCw, FiHelpCircle, FiInfo, FiChevronDown, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from './Config';
 import StatusGuideModal from './StatusGuideModal';
+import { formatDateTimeIST } from './utils';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
@@ -62,6 +63,16 @@ export default function PatientsList() {
   // --- Pagination state ---
   const [currentPage, setCurrentPage] = useState(1);
   const patientsPerPage = 10;
+
+  // --- Expandable rows state ---
+  const [expandedRows, setExpandedRows] = useState(new Set());
+
+  const toggleRow = (id) => {
+    const newSet = new Set(expandedRows);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setExpandedRows(newSet);
+  };
 
   useEffect(() => { fetchPatients(); }, []);
 
@@ -271,6 +282,7 @@ export default function PatientsList() {
         <Table variant="simple" size="sm" fontSize="sm">
           <Thead bg="gray.100">
             <Tr>
+              <Th w="40px"></Th>
               <Th>Institute ID</Th>
               <Th>Name</Th>
               <Th>Contact No</Th>
@@ -282,54 +294,128 @@ export default function PatientsList() {
             </Tr>
           </Thead>
           <Tbody>
-            {currentPatients.map((p) => (
-              <Tr key={p.institute_id} _hover={{ bg: 'gray.50' }}>
-                <Td>{p.institute_id}</Td>
-                <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
-                <Td>{p.contact_no}</Td>
-                <Td>{p.age ?? '-'}</Td>
-                <Td>
-                  <Badge fontSize="10px" colorScheme={p.patient_type === 'Student' ? 'blue' : p.patient_type === 'Faculty' ? 'purple' : 'gray'}>
-                    {p.patient_type}
-                  </Badge>
-                </Td>
-                <Td>
-                  <Badge
-                    variant="subtle"
-                    fontSize="10px"
-                    colorScheme={
-                      p.workflow_status === 'active' ? 'green' :
-                        p.workflow_status === 'consultation' ? 'orange' :
-                          p.workflow_status === 'consultation completed' ? 'blue' :
-                            p.workflow_status === 'lab test pending' ? 'purple' : 'gray'
-                    }
+            {currentPatients.map((p) => {
+              const isExpanded = expandedRows.has(p.institute_id);
+              const hasAppointments = p.appointments && p.appointments.length > 0;
+              return (
+                <React.Fragment key={p.institute_id}>
+                  <Tr
+                    _hover={{ bg: 'gray.50', cursor: hasAppointments ? 'pointer' : 'default' }}
+                    onClick={() => hasAppointments && toggleRow(p.institute_id)}
                   >
-                    {p.workflow_status}
-                  </Badge>
-                </Td>
-                <Td>
-                  <Badge
-                    variant="outline"
-                    fontSize="10px"
-                    colorScheme={p.bill_status === 'paid' ? 'green' : p.bill_status === 'pending' ? 'red' : 'gray'}
-                  >
-                    {p.bill_status}
-                  </Badge>
-                </Td>
-                <Td>
-                  <Badge
-                    variant="outline"
-                    fontSize="10px"
-                    colorScheme={p.lab_status === 'completed' ? 'green' : p.lab_status === 'pending' ? 'blue' : p.lab_status === 'active' ? 'orange' : 'gray'}
-                  >
-                    {p.lab_status}
-                  </Badge>
-                </Td>
-              </Tr>
-            ))}
+                    <Td>
+                      {hasAppointments && (
+                        <Icon as={isExpanded ? FiChevronDown : FiChevronRight} />
+                      )}
+                    </Td>
+                    <Td>{p.institute_id}</Td>
+                    <Td textTransform="capitalize">{(p.name || '').toLowerCase()}</Td>
+                    <Td>{p.contact_no}</Td>
+                    <Td>{p.age ?? '-'}</Td>
+                    <Td>
+                      <Badge fontSize="10px" colorScheme={p.patient_type === 'Student' ? 'blue' : p.patient_type === 'Faculty' ? 'purple' : 'gray'}>
+                        {p.patient_type}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant="subtle"
+                        fontSize="10px"
+                        colorScheme={
+                          p.workflow_status === 'active' ? 'green' :
+                            p.workflow_status === 'consultation' ? 'orange' :
+                              p.workflow_status === 'consultation completed' ? 'blue' :
+                                p.workflow_status === 'lab test pending' ? 'purple' : 'gray'
+                        }
+                      >
+                        {p.workflow_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={p.bill_status === 'paid' ? 'green' : p.bill_status === 'pending' ? 'red' : 'gray'}
+                      >
+                        {p.bill_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={p.lab_status === 'completed' ? 'green' : p.lab_status === 'pending' ? 'blue' : p.lab_status === 'active' ? 'orange' : 'gray'}
+                      >
+                        {p.lab_status}
+                      </Badge>
+                    </Td>
+                  </Tr>
+                  {isExpanded && hasAppointments && (
+                    <Tr>
+                      <Td colSpan={9} p={0} borderBottom="1px solid" borderColor="gray.200">
+                        <Box bg="gray.50" py={3} px={6} boxShadow="inner">
+                          <Text fontWeight="semibold" fontSize="sm" mb={2} color="gray.700">Visit History</Text>
+                          <Table variant="unstyled" size="sm" fontSize="xs">
+                            <Thead borderBottom="1px solid" borderColor="gray.300">
+                              <Tr>
+                                <Th color="gray.600">Date & Time</Th>
+                                <Th color="gray.600">Doctor</Th>
+                                <Th color="gray.600">Status</Th>
+                                <Th color="gray.600">Bill</Th>
+                                <Th color="gray.600">Lab</Th>
+                              </Tr>
+                            </Thead>
+                            <Tbody>
+                              {p.appointments.map((appt, idx) => (
+                                <Tr key={idx} borderBottom="1px solid" borderColor="gray.100">
+                                  <Td color="gray.600">{formatDateTimeIST(appt.booked_at)}</Td>
+                                  <Td color="gray.600">{appt.doctor_name}</Td>
+                                  <Td>
+                                    <Badge
+                                      variant="subtle"
+                                      fontSize="9px"
+                                      colorScheme={
+                                        appt.v_workflow_status === 'active' ? 'green' :
+                                          appt.v_workflow_status === 'consultation' ? 'orange' :
+                                            appt.v_workflow_status === 'consultation completed' ? 'blue' :
+                                              appt.v_workflow_status === 'lab test pending' ? 'purple' : 'gray'
+                                      }
+                                    >
+                                      {appt.v_workflow_status}
+                                    </Badge>
+                                  </Td>
+                                  <Td>
+                                    <Badge
+                                      variant="outline"
+                                      fontSize="9px"
+                                      colorScheme={appt.v_bill_status === 'paid' ? 'green' : appt.v_bill_status === 'pending' ? 'red' : 'gray'}
+                                    >
+                                      {appt.v_bill_status}
+                                    </Badge>
+                                  </Td>
+                                  <Td>
+                                    <Badge
+                                      variant="outline"
+                                      fontSize="9px"
+                                      colorScheme={appt.v_lab_status === 'completed' ? 'green' : appt.v_lab_status === 'pending' ? 'blue' : appt.v_lab_status === 'active' ? 'orange' : 'gray'}
+                                    >
+                                      {appt.v_lab_status}
+                                    </Badge>
+                                  </Td>
+                                </Tr>
+                              ))}
+                            </Tbody>
+                          </Table>
+                        </Box>
+                      </Td>
+                    </Tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
             {currentPatients.length === 0 && (
               <Tr>
-                <Td colSpan={8} textAlign="center" py="6" color="gray.400">
+                <Td colSpan={9} textAlign="center" py="6" color="gray.400">
                   No patients found.
                 </Td>
               </Tr>
