@@ -466,9 +466,10 @@ def save_consultation_route(institute_id):
     data = request.json
     has_labs = data.get("has_labs", False)
     has_meds = data.get("has_meds", False)
+    doctor_username = get_jwt_identity()
 
     # Move to 'consultation' status (patient stays in doctor list)
-    if database.consultation_patient(institute_id, has_labs, has_meds):
+    if database.consultation_patient(institute_id, doctor_username, has_labs, has_meds):
         return jsonify({"message": "Consultation details saved"}), 200
     return jsonify({"error": "Failed to save consultation"}), 400
 
@@ -479,7 +480,9 @@ def complete_consultation_route(institute_id):
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
-    if database.complete_consultation(institute_id):
+    doctor_username = get_jwt_identity()
+
+    if database.complete_consultation(institute_id, doctor_username):
         return jsonify({"message": "Consultation marked as completed"}), 200
     return jsonify({"error": "Failed to complete consultation"}), 400
 
@@ -520,15 +523,36 @@ def pay_bill_route():
     data = request.json
     institute_id = data.get("institute_id")
     visit_id = data.get("visit_id")
-    has_labs = data.get("has_labs", False)
+    payment_mode = data.get("payment_mode", "UPI")
+    selected_labs = data.get("selected_labs")
+    selected_medicines = data.get("selected_medicines")
     if not institute_id:
         return jsonify({"error": "Missing institute_id"}), 400
 
-    result = database.pay_bill(institute_id, has_labs, visit_id)
+    result = database.pay_bill(institute_id, visit_id, payment_mode, selected_labs, selected_medicines)
     if result and result.get("success"):
         return jsonify({"message": "Bill paid successfully", "invoice_no": result.get("invoice_no")}), 200
     else:
         return jsonify({"error": "Failed to pay bill"}), 400
+
+@app.route('/cancel_bill', methods=['POST'])
+@jwt_required()
+def cancel_bill_route():
+    claims = get_jwt()
+    if claims.get("role") != "medical_store":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    institute_id = data.get("institute_id")
+    visit_id = data.get("visit_id")
+    if not institute_id:
+        return jsonify({"error": "Missing institute_id"}), 400
+
+    result = database.cancel_bill(institute_id, visit_id)
+    if result and result.get("success"):
+        return jsonify({"message": "Bill cancelled successfully"}), 200
+    else:
+        return jsonify({"error": "Failed to cancel bill"}), 400
 
 @app.route('/medical_store/bills', methods=['GET'])
 @jwt_required()
@@ -1164,6 +1188,23 @@ def public_book_appointment():
         return jsonify({"message": "Appointment booked successfully"}), 200
     return jsonify({"error": "Failed to book appointment"}), 400
 
+@app.route('/api/public/check-active-appointments/<institute_id>', methods=['GET'])
+def check_active_appointments(institute_id):
+    patient = database.get_patient_by_id(institute_id)
+    if not patient:
+        return jsonify({"error": "Patient not found"}), 404
+        
+    active_appointments = []
+    # Fetch all upcoming/consultation visits from the visits collection
+    visits = list(database.visits.find({"institute_id": institute_id, "status": {"$in": ["upcoming", "consultation"]}}))
+    for v in visits:
+        active_appointments.append({
+            "doctor_username": v.get("doctor_username"),
+            "doctor_name": v.get("doctor_name", v.get("doctor_username")),
+            "time": v.get("time")
+        })
+    
+    return jsonify({"active_appointments": active_appointments}), 200
 
 # uploading lab reports to s3
 

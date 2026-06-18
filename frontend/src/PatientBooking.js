@@ -60,6 +60,10 @@ const PatientBooking = () => {
     date: '',
     timeSlot: '',
   });
+
+  // Warning Modal States
+  const [activeAppointments, setActiveAppointments] = useState([]);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [scheduleWarning, setScheduleWarning] = useState('');
@@ -373,10 +377,32 @@ const PatientBooking = () => {
       });
       return;
     }
+    
+    // Check for active appointments first
+    setBookingLoading(true);
+    try {
+      const activeRes = await axios.get(`${BASE_URL}/api/public/check-active-appointments/${verifiedPatient.institute_id}`);
+      const appointments = activeRes.data.activeAppointments || activeRes.data.active_appointments || [];
+      
+      if (appointments.length > 0) {
+        setActiveAppointments(appointments);
+        setShowWarningModal(true);
+        setBookingLoading(false);
+        return; // Pause booking to wait for confirmation
+      }
+    } catch (err) {
+      console.error("Failed to check active appointments", err);
+    }
+    
+    await proceedWithBooking();
+  };
 
+  const proceedWithBooking = async () => {
+    setShowWarningModal(false);
+    setBookingLoading(true);
+    
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
-    setBookingLoading(true);
     try {
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
@@ -938,6 +964,39 @@ const PatientBooking = () => {
             <Button variant="ghost" onClick={() => setShowFutureBookingWarning(false)}>Cancel</Button>
             <Button colorScheme="orange" ml={3} onClick={handleProceedWithFutureBooking}>
               Proceed
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Warning Modal for Active Appointments */}
+      <Modal isOpen={showWarningModal} onClose={() => setShowWarningModal(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(3px)" />
+        <ModalContent>
+          <ModalHeader color="orange.600">Active Appointments Detected</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Text>You already have an active appointment with the following doctor(s):</Text>
+              <VStack align="stretch" pl={4} spacing={2}>
+                {activeAppointments.map((appt, idx) => (
+                  <Text key={idx} fontWeight="bold" color="gray.700">
+                    • Dr. {toTitleCase(appt.doctor_name)} (Waiting)
+                  </Text>
+                ))}
+              </VStack>
+              <Text mt={2}>
+                Are you sure you want to proceed with booking another appointment with <b>Dr. {toTitleCase(doctors.find(d => d.username === bookingData.doctor_username)?.display_name || bookingData.doctor_username)}</b>?
+              </Text>
+            </VStack>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={() => setShowWarningModal(false)}>
+              Cancel
+            </Button>
+            <Button colorScheme="orange" onClick={proceedWithBooking} isLoading={bookingLoading}>
+              Yes, Proceed
             </Button>
           </ModalFooter>
         </ModalContent>

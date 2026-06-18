@@ -38,6 +38,8 @@ import {
   SimpleGrid,
   Badge,
   Icon,
+  Select,
+  Checkbox,
 } from '@chakra-ui/react';
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter } from 'react-icons/fi';
 import axios from 'axios';
@@ -52,7 +54,11 @@ function MedicalCounterDashboard() {
   const [billGenerated, setBillGenerated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [labTestsConfig, setLabTestsConfig] = useState([]); // New state for lab tests config
+  const [labTestsConfig, setLabTestsConfig] = useState([]);
+  const [paymentStatus, setPaymentStatus] = useState('pending');
+  const [paymentMode, setPaymentMode] = useState('UPI');
+  const [selectedLabs, setSelectedLabs] = useState([]);
+  const [selectedMedicines, setSelectedMedicines] = useState([]);
 
   // History state removed
 
@@ -149,7 +155,14 @@ function MedicalCounterDashboard() {
   // When a patient row is clicked, open the modal and reset preview flag
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient);
+    setPaymentStatus('pending');
+    setPaymentMode('UPI');
     setBillGenerated(false);
+    
+    // Initialize all items as selected by default
+    setSelectedLabs((patient.lab_tests || []).map((_, i) => i));
+    setSelectedMedicines((patient.prescriptions || []).map((_, i) => i));
+
     onOpen();
   };
 
@@ -168,55 +181,109 @@ function MedicalCounterDashboard() {
   const calculateTotal = () => {
     let total = 0;
     if (selectedPatient && selectedPatient.lab_tests) {
-      selectedPatient.lab_tests.forEach((testObj) => {
-        total += getTestPrice(testObj.lab_test);
+      selectedPatient.lab_tests.forEach((testObj, idx) => {
+        if (selectedLabs.includes(idx)) {
+          total += getTestPrice(testObj.lab_test);
+        }
       });
     }
     return total;
   };
 
-  // When generate receipt preview is clicked, only show the receipt preview.
-  const handleGenerateReceiptPreview = () => {
+  const handleConfirmPayment = async () => {
     if (!selectedPatient) return;
-    setBillGenerated(true);
-  };
-
-  // Only on Print is the API called to update status (which removes the patient from active list)
-  const handlePrintReceipt = async () => {
-    if (!selectedPatient) return;
+    setPaymentStatus('processing');
     try {
-      let finalInvoiceNo = selectedPatient.invoice_no || '';
-      let finalTotal = calculateTotal();
-      
       const token = localStorage.getItem('token');
       const response = await axios.post(
         `${BASE_URL}/pay_bill`,
         {
           institute_id: selectedPatient.institute_id,
           visit_id: selectedPatient.visit_id,
-          has_labs: selectedPatient.lab_tests && selectedPatient.lab_tests.length > 0,
+          payment_mode: paymentMode,
+          selected_labs: selectedLabs,
+          selected_medicines: selectedMedicines,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      finalInvoiceNo = response.data.invoice_no || finalInvoiceNo;
-      // Generate active patient items HTML
+      
+      setSelectedPatient(prev => ({ ...prev, invoice_no: response.data.invoice_no }));
+      setPaymentStatus('completed');
+      fetchRegistrations(); // Refresh list to remove from queue behind the modal
+    } catch (error) {
+      setPaymentStatus('pending');
+      toast({
+        title: 'Payment Error',
+        description: error.response?.data?.error || 'Failed to update bill status',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleCancelBill = async () => {
+    if (!selectedPatient) return;
+    setPaymentStatus('processing');
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(
+        `${BASE_URL}/cancel_bill`,
+        {
+          institute_id: selectedPatient.institute_id,
+          visit_id: selectedPatient.visit_id,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      
+      toast({
+        title: 'Bill Cancelled',
+        description: 'Patient has been removed from the billing queue.',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+      onClose();
+      fetchRegistrations();
+    } catch (error) {
+      setPaymentStatus('pending');
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || 'Failed to cancel bill',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handlePrintReceipt = () => {
+    if (!selectedPatient) return;
+    try {
+      let finalInvoiceNo = selectedPatient.invoice_no || '';
+      let finalTotal = calculateTotal();
+      
       let itemIndex = 1;
       let printItemsHtml = '';
       
       // Map Medicines
-      (selectedPatient.prescriptions || []).forEach(med => {
-        printItemsHtml += `<tr><td>${itemIndex++}</td><td>${med.note || med}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
+      (selectedPatient.prescriptions || []).forEach((med, i) => {
+        if (selectedMedicines.includes(i)) {
+          printItemsHtml += `<tr><td>${itemIndex++}</td><td>${med.note || med}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
+        }
       });
       
       // Map Lab Tests
-      (selectedPatient.lab_tests || []).forEach(t => {
-        const gross = getTestPrice(t.lab_test);
-        const discPerc = t.discount || 0;
-        const discAmt = (gross * discPerc / 100).toFixed(2);
-        const rembPerc = t.rembPerc || 0;
-        const rembAmt = (gross * rembPerc / 100).toFixed(2);
-        const amt = (gross - discAmt - rembAmt).toFixed(2);
-        printItemsHtml += `<tr><td>${itemIndex++}</td><td>${t.lab_test}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt}</td><td>${rembPerc}</td><td>${rembAmt}</td><td>${amt}</td></tr>`;
+      (selectedPatient.lab_tests || []).forEach((t, i) => {
+        if (selectedLabs.includes(i)) {
+          const gross = getTestPrice(t.lab_test);
+          const discPerc = t.discount || 0;
+          const discAmt = (gross * discPerc / 100).toFixed(2);
+          const rembPerc = t.rembPerc || 0;
+          const rembAmt = (gross * rembPerc / 100).toFixed(2);
+          const amt = (gross - discAmt - rembAmt).toFixed(2);
+          printItemsHtml += `<tr><td>${itemIndex++}</td><td>${t.lab_test}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt}</td><td>${rembPerc}</td><td>${rembAmt}</td><td>${amt}</td></tr>`;
+        }
       });
 
       // Build HTML for printing
@@ -277,7 +344,7 @@ function MedicalCounterDashboard() {
             </table>
             <table class="small-table" style="margin-top:10px;">
               <tr><td>Total :</td><td style="text-align:right;">${finalTotal.toFixed(2)}</td></tr>
-              <tr><td>Payment Mode:</td><td style="text-align:right;">${selectedPatient.payment_mode || 'Cash'}</td></tr>
+              <tr><td>Payment Mode:</td><td style="text-align:right;">${paymentMode}</td></tr>
             </table>
             <div class="amount-words">${numberToWords(Math.round(finalTotal))} Rupees Only</div>
             <div class="footer">
@@ -287,7 +354,7 @@ function MedicalCounterDashboard() {
             </div>
           </body>
           </html>
-`;
+      `;
 
       // Print
       const w = window.open('', '_blank');
@@ -297,14 +364,10 @@ function MedicalCounterDashboard() {
       w.print();
       w.close();
 
-      // Refresh list
-      fetchRegistrations();
-      // Close modal after printing
-      onClose();
     } catch (error) {
       toast({
         title: 'Print Error',
-        description: error.response?.data?.error || 'Failed to update bill status',
+        description: error.message || 'Failed to print receipt',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -596,74 +659,127 @@ function MedicalCounterDashboard() {
             <ModalCloseButton color="white" />
             {/* Panelled Modal Body */}
             <ModalBody p={4}>
-              {billGenerated ? (
-                // Only show receipt preview when preview is generated.
-                <ReceiptPreview />
+              {paymentStatus === 'completed' ? (
+                <Box textAlign="center" py={6}>
+                  <Icon as={FiPrinter} boxSize={12} color="green.500" mb={4} />
+                  <Heading size="md" color="green.600" mb={2}>Payment Received</Heading>
+                  <Text mb={4}>Invoice No: {selectedPatient?.invoice_no}</Text>
+                  <Button colorScheme="blue" onClick={handlePrintReceipt} leftIcon={<FiPrinter />} size="lg">
+                    Print Receipt
+                  </Button>
+                </Box>
               ) : (
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                  {/* Left Panel - Prescribed Medicines */}
-                  <Box p={3} borderWidth="1px" borderRadius="md" borderColor="blue.200">
-                    <Heading size="md" mb={2} color="blue.800">
-                      Prescribed Medicines
-                    </Heading>
-                    {selectedPatient && selectedPatient.prescriptions && selectedPatient.prescriptions.length > 0 ? (
-                      selectedPatient.prescriptions.map((pres, i) => (
-                        <Text key={i} fontSize="md">
-                          {pres.note}
-                        </Text>
-                      ))
-                    ) : (
-                      <Text fontSize="md">No medicines prescribed</Text>
-                    )}
+                <Box>
+                  <Table variant="simple" size="sm" mb={4}>
+                    <Thead>
+                      <Tr>
+                        <Th width="40px">Incl.</Th>
+                        <Th>Item</Th>
+                        <Th>Type</Th>
+                        <Th isNumeric>Amount (Rs)</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {(selectedPatient?.prescriptions || []).map((pres, i) => (
+                        <Tr key={`pres-${i}`}>
+                          <Td>
+                            <Checkbox 
+                              isChecked={selectedMedicines.includes(i)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedMedicines(prev => [...prev, i]);
+                                else setSelectedMedicines(prev => prev.filter(idx => idx !== i));
+                              }}
+                            />
+                          </Td>
+                          <Td>{pres.note}</Td>
+                          <Td>Medicine</Td>
+                          <Td isNumeric>0.00</Td>
+                        </Tr>
+                      ))}
+                      {(selectedPatient?.lab_tests || []).map((test, i) => (
+                        <Tr key={`test-${i}`}>
+                          <Td>
+                            <Checkbox 
+                              isChecked={selectedLabs.includes(i)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedLabs(prev => [...prev, i]);
+                                else setSelectedLabs(prev => prev.filter(idx => idx !== i));
+                              }}
+                            />
+                          </Td>
+                          <Td>{test.lab_test || 'Unknown Test'}</Td>
+                          <Td>Lab Test</Td>
+                          <Td isNumeric>{getTestPrice(test.lab_test).toFixed(2)}</Td>
+                        </Tr>
+                      ))}
+                      {(!selectedPatient?.prescriptions?.length && !selectedPatient?.lab_tests?.length) && (
+                        <Tr>
+                          <Td colSpan={3} textAlign="center">No billable items</Td>
+                        </Tr>
+                      )}
+                      <Tr fontWeight="bold" bg="gray.100">
+                        <Td colSpan={3} textAlign="right">Total Due:</Td>
+                        <Td isNumeric>{calculateTotal().toFixed(2)}</Td>
+                      </Tr>
+                    </Tbody>
+                  </Table>
+
+                  <Box p={4} bg="blue.50" borderRadius="md" mt={4}>
+                    <Heading size="sm" mb={3} color="blue.800">Payment Collection</Heading>
+                    <Flex align="center" gap={4}>
+                      <Text fontWeight="bold" whiteSpace="nowrap">Payment Mode:</Text>
+                      <Select 
+                        value={paymentMode} 
+                        onChange={(e) => setPaymentMode(e.target.value)}
+                        bg="white"
+                        size="md"
+                        maxW="200px"
+                      >
+                        <option value="UPI">UPI</option>
+                        <option value="Cash">Cash</option>
+                        <option value="Card">Card</option>
+                      </Select>
+                    </Flex>
                   </Box>
-                  {/* Right Panel - Prescribed Lab Tests */}
-                  <Box p={3} borderWidth="1px" borderRadius="md" borderColor="blue.200">
-                    <Heading size="md" mb={2} color="blue.800">
-                      Prescribed Lab Tests
-                    </Heading>
-                    {selectedPatient && selectedPatient.lab_tests && selectedPatient.lab_tests.length > 0 ? (
-                      selectedPatient.lab_tests.map((test, index) => (
-                        <Text key={index} fontSize="md">
-                          {test.lab_test || 'Unknown Test'}: Rs. {getTestPrice(test.lab_test)}
-                        </Text>
-                      ))
-                    ) : (
-                      <Text fontSize="md">No lab tests prescribed</Text>
-                    )}
-                  </Box>
-                </SimpleGrid>
+                </Box>
               )}
             </ModalBody>
             {/* Footer with actions */}
             <ModalFooter p={4} borderTopWidth="1px" bg={modalFooterBg}>
-              {!billGenerated && (
+              {paymentStatus !== 'completed' && (
                 <>
                   <Button
                     colorScheme="green"
                     mr={3}
-                    onClick={handleGenerateReceiptPreview}
+                    onClick={handleConfirmPayment}
+                    isLoading={paymentStatus === 'processing'}
                     fontSize="md"
                     px={6}
                     py={2}
                   >
-                    Generate Receipt Preview
+                    Confirm Payment & Mark as Paid
+                  </Button>
+                  <Button 
+                    colorScheme="red" 
+                    onClick={handleCancelBill} 
+                    isLoading={paymentStatus === 'processing'}
+                    fontSize="md" 
+                    px={4} 
+                    py={2}
+                    mr={3}
+                  >
+                    Cancel Entire Bill
                   </Button>
                   <Button variant="ghost" onClick={onClose} fontSize="md" px={4} py={2}>
-                    Cancel
+                    Close
                   </Button>
                 </>
               )}
-              {billGenerated && (
-                <Button colorScheme="blue" onClick={handlePrintReceipt} leftIcon={<FiPrinter />} mr={3}>
-                  Print Receipt
+              {paymentStatus === 'completed' && (
+                <Button variant="ghost" onClick={onClose} colorScheme="blue">
+                  Close & Next Patient
                 </Button>
               )}
-              <Button variant="ghost" onClick={() => {
-                onClose();
-                setBillGenerated(false);
-              }}>
-                Close
-              </Button>
             </ModalFooter>
           </ModalContent>
         </Modal>

@@ -74,6 +74,10 @@ const StatusGuideModal = ({ isOpen, onClose }) => {
                   <Badge variant="outline" mb={1} fontSize="10px" colorScheme="red">pending</Badge>
                   <Text fontSize="sm">There are pending dues to be paid at the medical counter.</Text>
                 </Box>
+                <Box>
+                  <Badge variant="outline" mb={1} fontSize="10px" colorScheme="gray">cancelled</Badge>
+                  <Text fontSize="sm">The bill has been explicitly cancelled without payment.</Text>
+                </Box>
               </Stack>
             </Box>
             <Divider />
@@ -91,6 +95,10 @@ const StatusGuideModal = ({ isOpen, onClose }) => {
                 <Box>
                   <Badge variant="outline" mb={1} fontSize="10px" colorScheme="green">completed</Badge>
                   <Text fontSize="sm">Lab results are uploaded and ready for doctor/patient review.</Text>
+                </Box>
+                <Box>
+                  <Badge variant="outline" mb={1} fontSize="10px" colorScheme="gray">cancelled</Badge>
+                  <Text fontSize="sm">The lab tests have been cancelled and no longer require processing.</Text>
                 </Box>
               </Stack>
             </Box>

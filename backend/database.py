@@ -323,22 +323,20 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
     visit_dict["doctor_name"] = doctor_name
     visits.insert_one(visit_dict)
     
-    # Update active status
+    # Update active status (Legacy fallback, now visits collection is the source of truth)
+    # We do NOT overwrite workflow_status here to allow multiple concurrent appointments.
     result = patients.update_one(
         {"institute_id": institute_id},
         {
             "$set": {
                 "doctor_assigned": doctor_username,
-                "workflow_status": "active",
-                "bill_status": "none",
-                "lab_status": "none",
                 "doctor_finalized": False
             }
         }
     )
     return result.modified_count > 0
 
-def _map_aggregated_patient(patient):
+def _map_aggregated_patient(patient, active_doctor_username=None):
     if not patient:
         return None
     if "_id" in patient:
@@ -420,12 +418,63 @@ def _map_aggregated_patient(patient):
 
     # The root properties should ONLY reflect the most recent/active visit
     if patient_visits:
-        latest_visit = patient_visits[-1]
+        if active_doctor_username:
+            doctor_visits = [v for v in patient_visits if v.get("doctor_username") == active_doctor_username]
+            latest_visit = doctor_visits[-1] if doctor_visits else patient_visits[-1]
+        else:
+            latest_visit = patient_visits[-1]
+            
         patient["prescriptions"] = latest_visit.get("prescriptions", [])
         patient["prescription_details"] = latest_visit.get("prescription_details", [])
         patient["lab_tests"] = latest_visit.get("lab_tests", [])
         patient["lab_reports"] = latest_visit.get("lab_reports", [])
         patient["remarks"] = latest_visit.get("remarks", [])
+        
+        # Override root statuses with the calculated statuses of the active visit
+        # We need to recalculate them for the specific latest_visit since they were local variables in the loop above
+        has_labs = len(latest_visit.get("lab_tests", [])) > 0
+        has_prescriptions = len(latest_visit.get("prescriptions", [])) > 0
+        has_invoice = bool(latest_visit.get("invoice_no"))
+        visit_status = latest_visit.get("status", "upcoming")
+        
+        if has_invoice:
+            v_bill = "paid"
+        elif visit_status == "completed" and (has_labs or has_prescriptions):
+            v_bill = "pending"
+        else:
+            v_bill = "none"
+            
+        if has_labs:
+            labs_pending = any(lt.get("status") == "pending" for lt in latest_visit.get("lab_tests", []))
+            v_lab = "pending" if labs_pending else "completed"
+        else:
+            v_lab = "none"
+            
+        if visit_status == "upcoming":
+            v_workflow = "active"
+        elif visit_status == "consultation":
+            if has_labs and v_lab == "pending":
+                v_workflow = "lab test pending"
+            else:
+                v_workflow = "consultation"
+        elif visit_status == "completed":
+            if has_invoice:
+                if has_labs and v_lab == "pending":
+                    v_workflow = "lab test pending"
+                else:
+                    v_workflow = "completed"
+            else:
+                if has_labs or has_prescriptions:
+                    v_workflow = "consultation completed"
+                else:
+                    v_workflow = "completed"
+        else:
+            v_workflow = visit_status
+            
+        patient["workflow_status"] = v_workflow
+        patient["bill_status"] = v_bill
+        patient["lab_status"] = v_lab
+        patient["doctor_assigned"] = latest_visit.get("doctor_username")
         
     return patient
 
@@ -495,25 +544,42 @@ def get_family_by_psrn(psrn_id):
 # Get patients assigned to a specific doctor
 def get_patients_by_doctor(doctor_username):
     pipeline = [
-        {"$match": {
-            "doctor_assigned": doctor_username, 
-            "workflow_status": {"$in": ["active", "consultation", "lab test pending"]},
-            "doctor_finalized": {"$ne": True}
+        {"$lookup": {
+            "from": "visits",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_visits"
         }},
-        {
-            "$lookup": {
-                "from": "visits",
-                "localField": "institute_id",
-                "foreignField": "institute_id",
-                "as": "patient_visits"
+        {"$match": {
+            "patient_visits": {
+                "$elemMatch": {
+                    "doctor_username": doctor_username,
+                    "status": {"$in": ["upcoming", "consultation"]}
+                }
             }
-        },
+        }},
         COMPUTE_AGE_STAGE  # Derive age from date_of_birth at query time
     ]
     pts = list(patients.aggregate(pipeline))
-    return [_map_aggregated_patient(p) for p in pts]
+    result = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p, active_doctor_username=doctor_username)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
 
-# Get historical completed patients for a specific doctor
+# Helper to get the active visit ID for a patient
+def _get_active_visit_id(institute_id, doctor_username=None):
+    # Find the most recent active visit (can be upcoming or in consultation)
+    query = {"institute_id": institute_id, "status": {"$in": ["upcoming", "consultation"]}}
+    if doctor_username:
+        query["doctor_username"] = doctor_username
+        
+    visit = visits.find_one(query, sort=[("booked_at", -1)])
+    if visit:
+        return visit["visit_id"]
+    return None
 def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0, limit=0):
     pipeline = [
         {
@@ -555,16 +621,8 @@ def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0,
     return result
 
 
-# Helper to get the active visit ID for a patient
-def _get_active_visit_id(institute_id):
-    # Find the most recent active visit
-    visit = visits.find_one({"institute_id": institute_id, "status": "upcoming"}, sort=[("booked_at", -1)])
-    if visit:
-        return visit["visit_id"]
-    return None
-
-def _finalize_visit(institute_id, mark_as_completed=True):
-    visit_id = _get_active_visit_id(institute_id)
+def _finalize_visit(institute_id, doctor_username=None, mark_as_completed=True):
+    visit_id = _get_active_visit_id(institute_id, doctor_username)
     if visit_id:
         visit = visits.find_one({"visit_id": visit_id})
         if visit:
@@ -582,6 +640,12 @@ def _finalize_visit(institute_id, mark_as_completed=True):
             if mark_as_completed:
                 update_data["status"] = "completed"
                 update_data["consultation_completed_time"] = datetime.now(timezone.utc).isoformat()
+            elif hasattr(mark_as_completed, 'strip'): # Just in case it's a string like "consultation" passed incorrectly
+                pass
+                
+            # Allow explicitly setting the status to "consultation"
+            if not mark_as_completed and getattr(_finalize_visit, 'force_consultation', False):
+                update_data["status"] = "consultation"
             
             visits.update_one(
                 {"visit_id": visit_id},
@@ -590,7 +654,7 @@ def _finalize_visit(institute_id, mark_as_completed=True):
 
 # [NEW] Overwrite consultation details using $set to prevent duplicates
 def update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
-    visit_id = _get_active_visit_id(institute_id)
+    visit_id = _get_active_visit_id(institute_id, doctor_username)
     if not visit_id: return False
     
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -677,11 +741,11 @@ def get_lab_reports():
 
 # Mark a patient as complete (workflow_status "completed") when no meds/labs are given
 # (This is now largely replaced by the two-step consultation flow)
-def complete_patient(institute_id):
+def complete_patient(institute_id, doctor_username=None):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
-    _finalize_visit(institute_id, mark_as_completed=True)
+    _finalize_visit(institute_id, doctor_username, mark_as_completed=True)
 
     result = patients.update_one(
         {"institute_id": institute_id},
@@ -694,7 +758,7 @@ def complete_patient(institute_id):
     return result.modified_count > 0
 
 # Set patient status to 'consultation'
-def consultation_patient(institute_id, has_labs, has_meds):
+def consultation_patient(institute_id, doctor_username, has_labs, has_meds):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
@@ -702,7 +766,10 @@ def consultation_patient(institute_id, has_labs, has_meds):
     bill_status = "pending" if (has_labs or has_meds) else "none"
     
     # Update visit summary so patient can see it in history immediately
-    _finalize_visit(institute_id, mark_as_completed=False)
+    # We must explicitly set the visit status to 'consultation' so _map_aggregated_patient picks it up
+    setattr(_finalize_visit, 'force_consultation', True)
+    _finalize_visit(institute_id, doctor_username, mark_as_completed=False)
+    setattr(_finalize_visit, 'force_consultation', False)
 
     # If labs are assigned, move to 'lab test pending' so they show up for billing/labs
     # Otherwise, move to 'consultation'
@@ -720,12 +787,12 @@ def consultation_patient(institute_id, has_labs, has_meds):
     return result.matched_count > 0
 
 # Move patient to 'consultation completed' or 'completed'
-def complete_consultation(institute_id):
+def complete_consultation(institute_id, doctor_username=None):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
     # Finalize the visit status to "completed" in the visits collection
-    _finalize_visit(institute_id, mark_as_completed=True)
+    _finalize_visit(institute_id, doctor_username, mark_as_completed=True)
     
     # Check if we can move straight to "completed" in the patients collection
     # If bill is already paid (or none) and labs are already completed (or none)
@@ -930,6 +997,8 @@ def _validate_and_parse_bulk_row(row):
                     except ValueError:
                         raise ValueError(f"Date '{dob_str}' does not match YYYY-MM-DD or DD-MM-YYYY")
 
+        if dob.tzinfo is None:
+            dob = dob.replace(tzinfo=timezone.utc)
         if dob >= datetime.now(timezone.utc):
             raise ValueError("Date of birth cannot be in the future")
     except ValueError as e:
@@ -964,7 +1033,7 @@ def _validate_and_parse_bulk_row(row):
         "institute_id":   institute_id,
         "name":           name,
         "email":          email,
-        "date_of_birth":  dob,         # datetime object — stored as ISODate by MongoDB
+        "date_of_birth":  dob.isoformat(),         # Store consistently as ISO string
         "gender":         gender,
         "contact_no":     contact_no_clean,
         "patient_type":   patient_type,
@@ -1080,25 +1149,11 @@ def get_test_price(test_name, config_list):
                 return rates[-1]
     return 0
 
-def pay_bill(institute_id, has_labs, visit_id=None):
+def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None, selected_medicines=None):
     patient = patients.find_one({"institute_id": institute_id})
     if not patient:
         return {"success": False, "error": "Patient not found"}
         
-    # Logic: if doctor is already done (consultation completed), move to labs or complete
-    # If doctor is still working (consultation), stay in consultation but mark bill as paid
-    
-    current_workflow = patient.get("workflow_status", "active")
-    
-    if current_workflow == "consultation":
-        # Doctor still hasn't clicked "Complete", stay in consultation
-        new_workflow = "consultation"
-    else:
-        # Doctor is done, or it was active. Move to next logical step.
-        new_workflow = "lab test pending" if has_labs else "completed"
-    
-    lab_status = "pending" if has_labs else patient.get("lab_status", "none")
-    
     # Compute totals for snapshot
     config_list = load_lab_tests_from_config()
     total_amount = 0
@@ -1111,35 +1166,49 @@ def pay_bill(institute_id, has_labs, visit_id=None):
         visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
     
     lab_tests = visit.get("lab_tests", []) if visit else []
-    for t in lab_tests:
-        test_name = t.get("lab_test", "")
-        gross = get_test_price(test_name, config_list)
-        discPerc = t.get("discount", 0)
-        discAmt = gross * discPerc / 100
-        rembPerc = t.get("rembPerc", 0)
-        rembAmt = gross * rembPerc / 100
-        amt = gross - discAmt - rembAmt
+    medicines = visit.get("prescriptions", []) if visit else []
+
+    if selected_labs is None:
+        selected_labs = list(range(len(lab_tests)))
+    if selected_medicines is None:
+        selected_medicines = list(range(len(medicines)))
         
-        billed_items.append({
-            "type": "lab_test",
-            "name": test_name,
-            "gross": gross,
-            "discount": discPerc,
-            "discount_amount": discAmt,
-            "rembursement": rembPerc,
-            "rembursement_amount": rembAmt,
-            "amount": amt
-        })
-        total_amount += amt
+    # We will update the patient and visit with ONLY the selected lab tests.
+    final_lab_tests = []
+    
+    for i, t in enumerate(lab_tests):
+        if i in selected_labs:
+            test_name = t.get("lab_test", "")
+            gross = get_test_price(test_name, config_list)
+            discPerc = t.get("discount", 0)
+            discAmt = gross * discPerc / 100
+            rembPerc = t.get("rembPerc", 0)
+            rembAmt = gross * rembPerc / 100
+            amt = gross - discAmt - rembAmt
+            
+            billed_items.append({
+                "type": "lab_test",
+                "name": test_name,
+                "gross": gross,
+                "discount": discPerc,
+                "discount_amount": discAmt,
+                "rembursement": rembPerc,
+                "rembursement_amount": rembAmt,
+                "amount": amt
+            })
+            total_amount += amt
+            final_lab_tests.append(t)
         
-    medicines = visit.get("prescription_details", []) if visit else []
-    for p in medicines:
-        billed_items.append({
-            "type": "medicine",
-            "name": p.get("prescription_details", ""),
-            "amount": 0 # Assuming medicines are dispensed without extra charge here, or handled separately
-        })
-        
+    final_medicines = []
+    for i, p in enumerate(medicines):
+        if i in selected_medicines:
+            billed_items.append({
+                "type": "medicine",
+                "name": p.get("note", p) if isinstance(p, dict) else p,
+                "amount": 0 # Assuming medicines are dispensed without extra charge here, or handled separately
+            })
+            final_medicines.append(p)
+            
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     count = bills.count_documents({"payment_date": {"$gte": today_start}})
@@ -1155,9 +1224,21 @@ def pay_bill(institute_id, has_labs, visit_id=None):
         "gender": patient.get("gender"),
         "items": billed_items,
         "total_amount": round(total_amount, 2),
-        "payment_mode": "Cash"
+        "payment_mode": payment_mode
     }
     bills.insert_one(bill_doc)
+
+    has_labs = len(final_lab_tests) > 0
+    current_workflow = patient.get("workflow_status", "active")
+    
+    if current_workflow == "consultation":
+        # Doctor still hasn't clicked "Complete", stay in consultation
+        new_workflow = "consultation"
+    else:
+        # Doctor is done, or it was active. Move to next logical step.
+        new_workflow = "lab test pending" if has_labs else "completed"
+    
+    lab_status = "pending" if has_labs else patient.get("lab_status", "none")
 
     result = patients.update_one(
         {"institute_id": institute_id},
@@ -1166,17 +1247,38 @@ def pay_bill(institute_id, has_labs, visit_id=None):
             "workflow_status": new_workflow,
             "lab_status": lab_status,
             "invoice_no": invoice_no,
-            "payment_date": now
+            "payment_date": now,
+            "lab_tests": final_lab_tests,
+            "prescriptions": final_medicines
         }}
     )
     
     if visit:
         visits.update_one(
             {"visit_id": visit["visit_id"]},
-            {"$set": {"invoice_no": invoice_no}}
+            {"$set": {
+                "invoice_no": invoice_no,
+                "lab_tests": final_lab_tests,
+                "prescription_details": final_medicines
+            }}
         )
 
     return {"success": result.modified_count > 0, "invoice_no": invoice_no, "total_amount": total_amount, "bill": bill_doc}
+
+def cancel_bill(institute_id, visit_id=None):
+    patient = patients.find_one({"institute_id": institute_id})
+    if not patient:
+        return {"success": False, "error": "Patient not found"}
+        
+    result = patients.update_one(
+        {"institute_id": institute_id},
+        {"$set": {
+            "bill_status": "cancelled",
+            "workflow_status": "completed",
+            "lab_status": "cancelled",
+        }}
+    )
+    return {"success": result.modified_count > 0}
 
 # def add_lab_test(psr_no, lab_test, doctor_username):
 #     # Define reference ranges based on test type
