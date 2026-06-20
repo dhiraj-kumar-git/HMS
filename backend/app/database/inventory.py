@@ -1,4 +1,5 @@
 from app.database.core import *
+from app.database.lab import load_lab_tests_from_config, get_test_price
 
 def get_bill_history_patients(skip=0, limit=20, search_term="", start_date=None, end_date=None):
     query = {}
