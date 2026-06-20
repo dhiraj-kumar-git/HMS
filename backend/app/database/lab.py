@@ -1,4 +1,7 @@
 from app.database.core import *
+import json
+import os
+
 def add_lab_report(institute_id, visit_id, report_details):
     if visit_id:
         visit = visits.find_one({"visit_id": visit_id})
@@ -146,7 +149,8 @@ def load_lab_tests_from_config():
     try:
         with open(os.path.join(os.path.dirname(__file__), "data", "labtests_config.json"), "r") as f:
             return json.load(f)
-    except:
+    except Exception as e:
+        import traceback; traceback.print_exc()
         return []
 
 

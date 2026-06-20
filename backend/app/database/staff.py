@@ -1,4 +1,6 @@
 from app.database.core import *
+from app.database.auth import hash_password
+
 def create_user(username, password, role, display_name, department=None, schedule=None):
     existing_user = users.find_one({"username": username})
     if not existing_user:

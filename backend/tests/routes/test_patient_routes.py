@@ -1,0 +1,179 @@
+import pytest
+import json
+from unittest.mock import MagicMock
+from flask_jwt_extended import create_access_token
+
+def test_register_patient_unauthorized(client, app):
+    with app.app_context():
+        token = create_access_token(identity="user", additional_claims={"role": "patient"})
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json={})
+    assert res.status_code == 403
+
+def test_register_patient_success(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mock_db["register_patient"].return_value = "123"
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    
+    payload = {
+        "name": "Pat",
+        "date_of_birth": "1990-01-01",
+        "gender": "M",
+        "contact_no": "123",
+        "email": "a@b.com",
+        "address": "Addr",
+        "doctor_assigned": "doc1",
+        "patient_type": "Student",
+        "institute_id": "INST123"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 201
+
+def test_get_patient_success(client, mock_db, app):
+    with app.app_context():
+        token = create_access_token(identity="user", additional_claims={"role": "doctor"})
+    mock_db["get_patient_by_id"].return_value = {"institute_id": "123"}
+    res = client.get("/get_patient/123", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_get_patients_admin(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="admin1", additional_claims={"role": "admin"})
+    mocker.patch("database.get_all_patients", return_value=[{"institute_id": "123"}])
+    res = client.get("/patients", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_get_all_patients_for_doctor(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.users.find_one", return_value={"display_name": "Dr. One"})
+    mocker.patch("database.get_patient_history_for_doctor", return_value=[{"institute_id": "123"}])
+    res = client.get("/doctor/all_patients", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_get_doctor_patients(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.get_patients_by_doctor", return_value=[{"institute_id": "123"}])
+    res = client.get("/doctor/patients", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_save_consultation_details(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.update_consultation_details", return_value=True)
+    res = client.put("/doctor/save_consultation_details/123", headers={"Authorization": f"Bearer {token}"}, json={"prescriptions": []})
+    assert res.status_code == 200
+
+def test_save_consultation(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.consultation_patient", return_value=True)
+    res = client.post("/doctor/save_consultation/123", headers={"Authorization": f"Bearer {token}"}, json={"has_labs": False})
+    assert res.status_code == 200
+
+def test_complete_consultation(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.complete_consultation", return_value=True)
+    res = client.post("/doctor/complete_consultation/123", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_get_inactive_patients(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.get_inactive_patients_by_doctor", return_value=[])
+    res = client.get("/doctor/patients_inactive", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_add_dependant_later(client, mock_db, mocker):
+    mocker.patch("database.get_family_by_psrn", return_value=[{"institute_id": "P123", "email": "a@b.com"}])
+    mock_db["register_patient"].return_value = "P123-OTHER"
+    
+    payload = {"psrn_id": "P123", "dependant": {"name": "Dep1", "relation": "Son"}}
+    res = client.post("/api/public/add_dependant", json=payload)
+    assert res.status_code == 201
+
+def test_get_family(client, mocker):
+    mocker.patch("database.get_family_by_psrn", return_value=[{"institute_id": "P123"}])
+    res = client.get("/api/family/P123")
+    assert res.status_code == 200
+
+def test_edit_dependant(client, mocker):
+    mocker.patch("database.update_dependant", return_value=True)
+    res = client.put("/api/family/dependant/D123", json={"name": "Dep New"})
+    assert res.status_code == 200
+
+def test_remove_dependant(client, mocker):
+    mocker.patch("database.delete_dependant", return_value=True)
+    res = client.delete("/api/family/dependant/D123")
+    assert res.status_code == 200
+
+def test_admin_archive_patient(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="admin1", additional_claims={"role": "admin"})
+    mocker.patch("database.archive_patient", return_value=True)
+    res = client.put("/api/admin/archive_patient/123", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_download_bulk_template(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="admin1", additional_claims={"role": "admin"})
+    mocker.patch("flask.send_from_directory", return_value="file_content")
+    res = client.get("/admin/bulk_register/template", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_bulk_register_patients(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="admin1", additional_claims={"role": "admin"})
+    mocker.patch("database.bulk_register_patients", return_value={"success": 1, "failed": 0})
+    
+    import io
+    file_content = b"institute_id,name,email,date_of_birth,gender,contact_no,patient_type,address\n1,Pat,a@b.com,1990-01-01,M,123,Student,Addr"
+    data = {"file": (io.BytesIO(file_content), "test.csv")}
+    
+    res = client.post("/admin/bulk_register", headers={"Authorization": f"Bearer {token}"}, data=data, content_type="multipart/form-data")
+    assert res.status_code == 200
+
+def test_download_bulk_staff_template(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="admin1", additional_claims={"role": "admin"})
+    mocker.patch("flask.send_from_directory", return_value="file_content")
+    res = client.get("/admin/bulk_register_staff/template", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+
+def test_bulk_register_staff(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="admin1", additional_claims={"role": "admin"})
+    mocker.patch("database.bulk_register_staff_and_dependants", return_value={"success": 1, "failed": 0})
+    
+    import io
+    file_content = b"primary_psrn_id,name,date_of_birth,gender,patient_type\nPSRN1,Staff,1990-01-01,M,Faculty"
+    data = {"file": (io.BytesIO(file_content), "test.csv")}
+    
+    res = client.post("/admin/bulk_register_staff", headers={"Authorization": f"Bearer {token}"}, data=data, content_type="multipart/form-data")
+    assert res.status_code == 200
+
+def test_s3_upload_url(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+    mocker.patch("app.routes.patient_routes.s3.generate_presigned_url", return_value="http://url")
+    
+    res = client.post("/s3/upload-url", headers={"Authorization": f"Bearer {token}"}, json={"instituteId": "123", "filename": "test.pdf", "content_type": "application/pdf"})
+    assert res.status_code == 200
+
+def test_s3_save_metadata(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+    mocker.patch("database.add_lab_report", return_value=True)
+    
+    res = client.post("/s3/save-metadata", headers={"Authorization": f"Bearer {token}"}, json={"instituteId": "123", "key": "k", "filename": "test.pdf"})
+    assert res.status_code == 200
+
+def test_s3_view_url(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+    mocker.patch("app.routes.patient_routes.s3.generate_presigned_url", return_value="http://url")
+    
+    res = client.post("/s3/view-url", headers={"Authorization": f"Bearer {token}"}, json={"s3_key": "k"})
+    assert res.status_code == 200
