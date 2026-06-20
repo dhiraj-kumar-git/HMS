@@ -11,3 +11,4 @@ gunicorn
 setuptools
 redis
 boto3
+flask-swagger-ui
