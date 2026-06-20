@@ -49,8 +49,8 @@ import {
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import BASE_URL from './Config';
-import { formatDateTimeIST, toTitleCase } from './utils';
+import BASE_URL from '../../utils/Config';
+import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");

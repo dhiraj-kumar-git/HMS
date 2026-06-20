@@ -7,8 +7,8 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
-import { formatDateIST, formatDateTimeIST, toTitleCase, numberToWords } from './utils';
+import BASE_URL from '../../utils/Config';
+import { formatDateIST, formatDateTimeIST, toTitleCase, numberToWords } from '../../utils/utils';
 
 function BillHistory() {
   const [billHistory, setBillHistory] = useState([]);

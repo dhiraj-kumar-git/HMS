@@ -33,7 +33,7 @@ import {
 } from '@chakra-ui/react';
 import { FiDownload, FiUploadCloud, FiFile } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 
 function BulkUploader({ title, description, badgeText, templateRoute, uploadRoute, templateName }) {
   const toast = useToast();

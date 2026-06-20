@@ -33,10 +33,10 @@ import {
   ModalCloseButton
 } from '@chakra-ui/react';
 import { FiSearch, FiCalendar, FiClock, FiCheckCircle, FiPlus, FiAlertCircle, FiArrowLeft, FiAlertTriangle } from 'react-icons/fi';
-import { getWeekdayIST, formatDateTimeIST, toTitleCase } from './utils';
+import { getWeekdayIST, formatDateTimeIST, toTitleCase } from '../../utils/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 
 const PatientBooking = () => {
   const navigate = useNavigate();

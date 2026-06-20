@@ -14,8 +14,8 @@ import {
   Text,
 } from "@chakra-ui/react";
 import axios from "axios";
-import BASE_URL from './Config';
-import { formatDateTimeIST, toTitleCase } from './utils';
+import BASE_URL from '../../utils/Config';
+import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 
 function UploadLabReports() {
   const [instituteId, setInstituteId] = useState("");

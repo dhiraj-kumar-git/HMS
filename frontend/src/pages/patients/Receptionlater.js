@@ -14,8 +14,8 @@ import {
   HStack,
 } from '@chakra-ui/react';
 import axios from 'axios';
-import BASE_URL from './Config';
-import PrescriptionModal from './PrescriptionModal';
+import BASE_URL from '../../utils/Config';
+import PrescriptionModal from '../../components/PrescriptionModal';
 
 function ReceptionistDashboard() {
   const [patient, setPatient] = useState({

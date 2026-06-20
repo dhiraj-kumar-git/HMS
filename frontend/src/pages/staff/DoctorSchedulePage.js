@@ -10,7 +10,7 @@ import {
 } from "@chakra-ui/react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
-import BASE_URL from "./Config";
+import BASE_URL from "../../utils/Config";
 
 export default function DoctorSchedulePage() {
   const navigate = useNavigate();

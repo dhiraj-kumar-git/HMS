@@ -25,7 +25,7 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 
 function InventoryList() {
   const [inventory, setInventory] = useState([]);

@@ -18,8 +18,8 @@ import {
 import { FiArrowLeft, FiUserCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import BASE_URL from './Config';
-import { getDateISTString } from './utils';
+import BASE_URL from '../../utils/Config';
+import { getDateISTString } from '../../utils/utils';
 
 const PatientRegistration = () => {
   const navigate = useNavigate();

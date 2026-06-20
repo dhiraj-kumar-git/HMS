@@ -26,7 +26,7 @@ import {
 } from '@chakra-ui/react';
 import { FiTrash2, FiPlus, FiEdit, FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 import { useNavigate } from 'react-router-dom';
 
 export default function UsersList() {

@@ -40,9 +40,9 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiRefreshCw, FiTrash2, FiChevronDown, FiChevronUp, FiActivity, FiUploadCloud, FiFileText, FiDownload, FiAlertCircle, FiFile, FiHelpCircle, FiInfo, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
-import StatusGuideModal from './StatusGuideModal';
-import { formatDateTimeIST, toTitleCase } from './utils';
+import BASE_URL from '../../utils/Config';
+import StatusGuideModal from '../../components/StatusGuideModal';
+import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);

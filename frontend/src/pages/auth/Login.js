@@ -17,10 +17,10 @@ import {
 import { FaLock, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 
-import bitsLogo from "./assets/bits-logo.png";
-import medicalCenterBg from "./assets/medical-center.jpg";
+import bitsLogo from "../../assets/bits-logo.png";
+import medicalCenterBg from "../../assets/medical-center.jpg";
 
 function Login({ onLogin }) {
   const [username, setUsername] = useState("");

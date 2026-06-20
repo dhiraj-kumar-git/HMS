@@ -11,7 +11,7 @@ import {
   useToast,
   Image,
 } from '@chakra-ui/react';
-import { calculateAge, formatDateTimeIST, toTitleCase } from './utils';
+import { calculateAge, formatDateTimeIST, toTitleCase } from '../utils/utils';
 
 function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
   const toast = useToast();

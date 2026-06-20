@@ -24,9 +24,9 @@ import {
 import { FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import BASE_URL from './Config';
-import PrescriptionModal from "./PrescriptionModal";
-import { getDateISTString } from './utils';
+import BASE_URL from '../../utils/Config';
+import PrescriptionModal from "../../components/PrescriptionModal";
+import { getDateISTString } from '../../utils/utils';
 
 const headerHeight = 64; // same header height as AdminDashboard
 

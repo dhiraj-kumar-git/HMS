@@ -64,15 +64,15 @@ import {
   Legend,
 } from 'recharts';
 import axios from 'axios';
-import BASE_URL from './Config';
-import { toTitleCase } from './utils';
+import BASE_URL from '../../utils/Config';
+import { toTitleCase } from '../../utils/utils';
 
-import CreateUser from './CreateUser';
-import UsersList from './UsersList';
-import PatientsList from './PatientsList';
-import DoctorSchedulePage from "./DoctorSchedulePage";
-import ManageSchedule from "./ManageSchedule";
-import BulkRegistration from './BulkRegistration';
+import CreateUser from '../auth/CreateUser';
+import UsersList from '../staff/UsersList';
+import PatientsList from '../patients/PatientsList';
+import DoctorSchedulePage from "../staff/DoctorSchedulePage";
+import ManageSchedule from "../staff/ManageSchedule";
+import BulkRegistration from '../patients/BulkRegistration';
 
 // Reusable component for the sidebar nav items
 const SidebarItem = ({ icon, label, to }) => (

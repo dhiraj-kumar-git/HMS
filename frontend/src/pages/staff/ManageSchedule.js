@@ -23,7 +23,7 @@ import {
 } from "@chakra-ui/react";
 import { FiPlus, FiTrash2, FiSave } from "react-icons/fi";
 import axios from "axios";
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 
 const DEFAULT_SCHEDULE = { 
   duty_days: [], 

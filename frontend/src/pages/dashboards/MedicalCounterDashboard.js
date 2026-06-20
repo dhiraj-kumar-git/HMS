@@ -43,9 +43,9 @@ import {
 } from '@chakra-ui/react';
 import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
-import StatusGuideModal from './StatusGuideModal';
-import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase } from './utils';
+import BASE_URL from '../../utils/Config';
+import StatusGuideModal from '../../components/StatusGuideModal';
+import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase } from '../../utils/utils';
 
 function MedicalCounterDashboard() {
   const [registrations, setRegistrations] = useState([]);

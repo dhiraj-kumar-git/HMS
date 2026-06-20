@@ -23,7 +23,7 @@ import {
 } from '@chakra-ui/react';
 import { FiBell, FiMail, FiLogOut, FiUser } from 'react-icons/fi';
 import axios from 'axios';
-import BASE_URL from './Config';
+import BASE_URL from '../../utils/Config';
 
 function AddMedicine() {
   // Initial form state for adding medicine

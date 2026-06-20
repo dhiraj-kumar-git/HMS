@@ -32,8 +32,8 @@ import {
 import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2, FiEdit2 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import BASE_URL from './Config';
-import { getDateISTString } from './utils';
+import BASE_URL from '../../utils/Config';
+import { getDateISTString } from '../../utils/utils';
 
 const RELATION_OPTIONS = [
   "Spouse", "Son", "Daughter", "Father", "Mother",

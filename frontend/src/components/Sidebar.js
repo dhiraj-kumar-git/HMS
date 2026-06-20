@@ -12,7 +12,7 @@ import {
   FiFileText,
   FiUpload
 } from "react-icons/fi";
-import bitsLogo from "./assets/bits-logo.png";
+import bitsLogo from "../assets/bits-logo.png";
 
 const SidebarItem = ({ icon, label, to }) => (
   <NavLink to={to} end style={{ textDecoration: "none" }}>

@@ -71,8 +71,8 @@ import {
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import BASE_URL from './Config';
-import { formatDateTimeIST, getWeekdayIST, toTitleCase } from './utils';
+import BASE_URL from '../../utils/Config';
+import { formatDateTimeIST, getWeekdayIST, toTitleCase } from '../../utils/utils';
 import Multiselect from "multiselect-react-dropdown";
 
 export default function DoctorsDashboard() {
