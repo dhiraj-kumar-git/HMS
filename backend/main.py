@@ -56,6 +56,9 @@ from app.routes.public_routes import public_bp
 app.register_blueprint(public_bp)
 from app.routes.patient_routes import patient_bp
 app.register_blueprint(patient_bp)
+from app.routes.swagger_routes import swagger_bp, swaggerui_blueprint
+app.register_blueprint(swagger_bp)
+app.register_blueprint(swaggerui_blueprint)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)

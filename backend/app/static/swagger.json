@@ -1,0 +1,1859 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "HMS API Testing Sandbox",
+    "version": "1.0.0"
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/login": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auth - /login",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "username": "admin",
+                "password": "password123",
+                "role": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logout": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auth - /logout",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "session_id": 123,
+                "jti": "string_value",
+                "exp": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update_password/{username}": {
+      "put": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Auth - /update_password/{username}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "new_password": "password123"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pay_bill": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /pay_bill",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "institute_id": 123,
+                "visit_id": 123,
+                "selected_labs": "string_value",
+                "selected_medicines": "string_value",
+                "success": "string_value",
+                "invoice_no": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cancel_bill": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /cancel_bill",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "institute_id": 123,
+                "visit_id": 123,
+                "success": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/medical_store/bills": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /medical_store/bills",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/medical_store/bills/stats": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /medical_store/bills/stats",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/inventory/add": {
+      "post": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /inventory/add",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "item_name": "string_value",
+                "unit": "string_value",
+                "unit_detail": "string_value",
+                "item_no": "string_value",
+                "sale_rate": "string_value",
+                "hsn": "string_value",
+                "gst_rate": "string_value",
+                "cess": "string_value",
+                "gst_category": "string_value",
+                "nil_rated": "string_value",
+                "non_gst_item": "string_value",
+                "for_web": "string_value",
+                "manufacturer": "string_value",
+                "location": "string_value",
+                "schedule": "string_value",
+                "main_image1": 30,
+                "main_image2": 30,
+                "detail": "string_value",
+                "ean_bar_code": "string_value",
+                "no_med_rem": "string_value",
+                "linked_item_store": "string_value",
+                "qty": "string_value",
+                "medicine_type": "string_value",
+                "manufacture_date": "string_value",
+                "expiry_date": "string_value",
+                "batch_number": "string_value",
+                "storage_conditions": 30
+              }
+            }
+          }
+        }
+      }
+    },
+    "/inventory": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /inventory",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/dropdown/medicines": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /dropdown/medicines",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/lab/save_report": {
+      "post": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Lab - /lab/save_report",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "institute_id": 123,
+                "visit_id": 123,
+                "test_name": "string_value",
+                "results": "string_value",
+                "remarks": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lab/reports": {
+      "get": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Lab - /lab/reports",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/lab/send_email": {
+      "post": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Lab - /lab/send_email",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "recipient_email": "string_value",
+                "subject": "string_value",
+                "body": "string_value",
+                "pdf_base64": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lab/patients": {
+      "get": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Lab - /lab/patients",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/lab/submit_results": {
+      "post": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Lab - /lab/submit_results",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "institute_id": 123,
+                "results": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dropdown/labtests": {
+      "get": {
+        "tags": [
+          "Lab"
+        ],
+        "summary": "Lab - /dropdown/labtests",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/register_patient": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /register_patient",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "doctor_assigned": "string_value",
+                "name": "string_value",
+                "date_of_birth": "string_value",
+                "gender": "string_value",
+                "contact_no": "string_value",
+                "email": "string_value",
+                "address": "string_value",
+                "patient_type": "string_value",
+                "institute_id": 123,
+                "doctor_name": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/get_patient/{institute_id}": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /get_patient/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/patients": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /patients",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/doctor/all_patients": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/all_patients",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/doctor/patients": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/patients",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/doctor/save_consultation_details/{institute_id}": {
+      "put": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/save_consultation_details/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/doctor/save_consultation/{institute_id}": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/save_consultation/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/doctor/complete_consultation/{institute_id}": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/complete_consultation/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/doctor/patients_inactive": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/patients_inactive",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/public/add_dependant": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/public/add_dependant",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "psrn_id": 123,
+                "dependant": "string_value",
+                "institute_id": 123,
+                "email": "string_value",
+                "contact_no": "string_value",
+                "address": "string_value",
+                "name": "string_value",
+                "date_of_birth": "string_value",
+                "gender": "string_value",
+                "relation": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/family/{psrn_id}": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/family/{psrn_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "psrn_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/family/dependant/{institute_id}": {
+      "put": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/family/dependant/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {}
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/family/dependant/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/admin/archive_patient/{institute_id}": {
+      "put": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/admin/archive_patient/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/bulk_register/template": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /admin/bulk_register/template",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/bulk_register": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /admin/bulk_register",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "file": "string_value",
+                "total": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/bulk_register_staff/template": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /admin/bulk_register_staff/template",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/admin/bulk_register_staff": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /admin/bulk_register_staff",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "file": "string_value",
+                "total": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/s3": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /debug/s3",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/s3/upload-url": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /s3/upload-url",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "instituteId": "string_value",
+                "filename": "string_value",
+                "content_type": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/s3/save-metadata": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /s3/save-metadata",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "instituteId": "string_value",
+                "key": "string_value",
+                "filename": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/s3/view-url": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /s3/view-url",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "s3_key": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/doctors": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/doctors",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/public/register": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/register",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "name": "string_value",
+                "date_of_birth": "string_value",
+                "gender": "string_value",
+                "contact_no": "string_value",
+                "institute_id": 123,
+                "address": "string_value",
+                "email": "string_value",
+                "patient_type": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/register_staff": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/register_staff",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "primary": "string_value",
+                "psrn_id": 123,
+                "name": "string_value",
+                "date_of_birth": "string_value",
+                "gender": "string_value",
+                "contact_no": "string_value",
+                "email": "string_value",
+                "address": "string_value",
+                "relation": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/send_registration_otp": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/send_registration_otp",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "email": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/verify_registration_otp": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/verify_registration_otp",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "email": "string_value",
+                "otp": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/verify": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/verify",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "institute_id": 123,
+                "account_status": "string_value",
+                "email": "string_value",
+                "name": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/verify-otp": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/verify-otp",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "institute_id": 123,
+                "otp": "string_value",
+                "name": "string_value",
+                "psrn_id": 123,
+                "doctor_assigned": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/book-appointment": {
+      "post": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/book-appointment",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "institute_id": 123,
+                "doctor_username": "admin",
+                "time": "string_value",
+                "account_status": "string_value",
+                "display_name": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/public/check-active-appointments/{institute_id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/check-active-appointments/{institute_id}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "institute_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /users",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/users/{username}": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /users/{username}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/doctors": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /doctors",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/create_user": {
+      "post": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /create_user",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "username": "admin",
+                "password": "password123",
+                "display_name": "string_value",
+                "department": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update_doctor/{username}": {
+      "put": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /api/update_doctor/{username}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "schedule": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/delete_user/{username}": {
+      "delete": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /delete_user/{username}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/active_registrations": {
+      "get": {
+        "tags": [
+          "Staff"
+        ],
+        "summary": "Staff - /active_registrations",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/static/swagger.json": {
+      "get": {
+        "tags": [
+          "Swagger"
+        ],
+        "summary": "Swagger - /static/swagger.json",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    }
+  }
+}
