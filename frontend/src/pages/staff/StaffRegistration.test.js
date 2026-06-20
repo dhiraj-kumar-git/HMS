@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import StaffRegistration from './StaffRegistration';
 
+jest.setTimeout(20000); // Prevent timeouts during full suite run
 jest.mock('axios');
 const mockNavigate = jest.fn();
 
@@ -154,6 +155,112 @@ describe('StaffRegistration Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/New Dependant Details/i)).toBeInTheDocument();
+    });
+  });
+
+  it('handles completing new registration with OTP', async () => {
+    renderComponent();
+
+    // Fill primary
+    fireEvent.change(screen.getByPlaceholderText('e.g. P1999'), { target: { value: 'P1234' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { value: 'John Staff' } });
+    fireEvent.change(screen.getByLabelText(/Email/i, { selector: 'input[name="email"]' }), { target: { value: 'john@example.com' } });
+    fireEvent.change(screen.getByLabelText(/Patient Type/i), { target: { value: 'Faculty' } });
+
+    // Click submit
+    fireEvent.click(screen.getByRole('button', { name: /Register Staff & Dependants/i }));
+    
+    // Confirm Modal
+    await waitFor(() => expect(screen.getByText(/Confirm Registration Details/i)).toBeInTheDocument());
+    
+    // Mock send OTP
+    axios.post.mockResolvedValueOnce({ data: { message: 'OTP Sent' } });
+    
+    // Confirm & Send OTP
+    fireEvent.click(screen.getByRole('button', { name: /Confirm & Send OTP/i }));
+    
+    await waitFor(() => expect(screen.getByText(/Verify Your Identity/i)).toBeInTheDocument());
+    
+    // Mock verify registration OTP & final register
+    axios.post.mockResolvedValueOnce({ data: { success: true } }); // verify OTP
+    axios.post.mockResolvedValueOnce({ data: { success: true } }); // register
+    
+    // Fill OTP
+    const otpInput = screen.getAllByPlaceholderText('----')[1] || screen.getAllByPlaceholderText('----')[0]; 
+    fireEvent.change(otpInput, { target: { value: '1234' } });
+    
+    // Wait for the keydown event simulation instead of button click, since OTP modal uses a button or Enter
+    // Actually wait, there is no button "Verify OTP" in the Registration OTP modal? Ah! In the code: 
+    // Registration OTP Modal doesn't have a verify button, it relies on Enter key!
+    fireEvent.keyDown(otpInput, { key: 'Enter', code: 'Enter' });
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(expect.stringContaining('/api/public/verify_registration_otp'), expect.any(Object));
+      expect(axios.post).toHaveBeenCalledWith(expect.stringContaining('/api/public/register_staff'), expect.any(Object));
+    });
+  });
+
+  it('handles dependant edit and delete', async () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole('tab', { name: /Add New Dependant/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter the PSRN ID/i), { target: { value: 'P9999' } });
+    
+    axios.post.mockResolvedValueOnce({ data: { requires_otp: false } });
+    axios.get.mockResolvedValueOnce({ 
+      data: [{ institute_id: 'DEP1', name: 'Child', patient_type: 'Dependant', relation: 'Son' }] 
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Verify PSRN/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Child')).toBeInTheDocument();
+    });
+
+    // Delete
+    axios.delete.mockResolvedValueOnce({ data: { success: true } });
+    axios.get.mockResolvedValueOnce({ data: [] }); // re-fetch
+
+    const deleteBtn = screen.getByLabelText('Delete');
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() => expect(screen.getByText(/Delete Dependant Details/i)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => {
+      expect(axios.delete).toHaveBeenCalledWith(expect.stringContaining('/api/family/dependant/DEP1'));
+    });
+  });
+
+  it('handles adding new dependant with Custom relation', async () => {
+    renderComponent();
+    fireEvent.click(screen.getByRole('tab', { name: /Add New Dependant/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter the PSRN ID/i), { target: { value: 'P9999' } });
+    
+    axios.post.mockResolvedValueOnce({ data: { requires_otp: false } });
+    axios.get.mockResolvedValueOnce({ data: [] });
+
+    fireEvent.click(screen.getByRole('button', { name: /Verify PSRN/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/New Dependant Details/i)).toBeInTheDocument();
+    });
+
+    // Fill form
+    fireEvent.change(screen.getAllByLabelText(/Full Name/i)[0], { target: { value: 'Custom Dep' } });
+    fireEvent.change(screen.getAllByLabelText(/Relation/i)[0], { target: { value: 'Other' } });
+    
+    await waitFor(() => expect(screen.getByLabelText(/Specify Relation/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/Specify Relation/i), { target: { value: 'Cousin' } });
+
+    axios.post.mockResolvedValueOnce({ data: { institute_id: 'DEP2' } });
+    axios.get.mockResolvedValueOnce({ data: [] }); // refetch
+
+    fireEvent.click(screen.getByRole('button', { name: /Add Dependant/i }));
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(expect.stringContaining('/api/public/add_dependant'), expect.objectContaining({
+        dependant: expect.objectContaining({ relation: 'Cousin' })
+      }));
     });
   });
 });

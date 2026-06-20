@@ -5,6 +5,7 @@ import { ChakraProvider } from '@chakra-ui/react';
 import axios from 'axios';
 import DoctorsDashboard from './DoctorsDashboard';
 
+jest.setTimeout(20000); // Prevent timeouts during full suite run
 // Mock axios
 jest.mock('axios');
 
@@ -165,5 +166,123 @@ describe('DoctorsDashboard Component', () => {
 
     expect(screen.getByText('• Rest for 2 days')).toBeInTheDocument();
   });
+
+  it('triggers confirmation modal when saving with no meds or labs', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    
+    axios.put.mockResolvedValueOnce({ data: { message: 'success' } });
+    axios.post.mockResolvedValueOnce({ data: { message: 'success' } }); // for save_consultation
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+    fireEvent.click(screen.getByText('John Doe'));
+
+    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+    
+    // Click Save all Details & Complete
+    fireEvent.click(screen.getByText('Save all Details & Complete'));
+    
+    // Expect confirmation modal to open
+    await waitFor(() => {
+      expect(screen.getByText('Confirm Status Update')).toBeInTheDocument();
+    });
+    
+    // Confirm and Save
+    fireEvent.click(screen.getByText('Confirm & Save'));
+    
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/doctor/save_consultation/101'),
+        expect.objectContaining({ has_labs: false, has_meds: false }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('warns about unsaved changes when closing the modal', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+    fireEvent.click(screen.getByText('John Doe'));
+
+    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+
+    // Type in a prescription without adding it
+    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
+    fireEvent.change(prescriptionInput, { target: { value: 'Unsaved prescription' } });
+
+    // Click Cancel
+    fireEvent.click(screen.getByText('Cancel'));
+
+    // Expect unsaved changes modal
+    await waitFor(() => {
+      expect(screen.getByText('Unsaved Changes')).toBeInTheDocument();
+    });
+
+    // Discard and Close
+    fireEvent.click(screen.getByText('Discard and Close'));
+
+    await waitFor(() => {
+      expect(screen.queryByText('Unsaved Changes')).not.toBeInTheDocument();
+      expect(screen.queryByText('John Doe (ID: 101)')).not.toBeInTheDocument(); // main modal closed
+    });
+  }, 10000);
+
+  it('handles viewing lab reports', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{ 
+            institute_id: '101', 
+            name: 'John Doe', 
+            age: 30, 
+            workflow_status: 'consultation',
+            lab_reports: [{ s3_key: 'test_report.pdf', file_name: 'report.pdf' }]
+          }]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    
+    axios.post.mockResolvedValueOnce({ data: { url: 'http://fake-s3-url.com/report.pdf' } });
+    
+    // Mock fetch for Blob
+    global.fetch = jest.fn(() =>
+      Promise.resolve({
+        blob: () => Promise.resolve(new Blob(['mock data'], { type: 'application/pdf' })),
+      })
+    );
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+    
+    // Find View button
+    const viewBtn = screen.getByRole('button', { name: /View/i });
+    fireEvent.click(viewBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/s3/view-url'),
+        { s3_key: 'test_report.pdf' },
+        expect.any(Object)
+      );
+    });
+  }, 10000);
+
 
 });

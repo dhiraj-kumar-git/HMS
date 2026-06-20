@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import AddMedicine from './AddMedicine';
 
+jest.setTimeout(20000); // Prevent timeouts during full suite run
 jest.mock('axios');
 
 describe('AddMedicine Component', () => {
@@ -113,6 +114,32 @@ describe('AddMedicine Component', () => {
       // Form should NOT be reset after failure
       expect(itemNameInput.value).toBe('Error Med');
     });
+  });
+
+  it('handles header interactions and logout', async () => {
+    await act(async () => {
+      renderComponent();
+    });
+
+    const notifBtn = screen.getByRole('button', { name: 'Notifications' });
+    const msgBtn = screen.getByRole('button', { name: 'Messages' });
+    
+    fireEvent.click(notifBtn);
+    expect(window.alert).toHaveBeenCalledWith('Notifications');
+    
+    fireEvent.click(msgBtn);
+    expect(window.alert).toHaveBeenCalledWith('Messages');
+
+    const profileBtn = screen.getByText('Profile');
+    fireEvent.click(profileBtn);
+    expect(window.alert).toHaveBeenCalledWith('Profile clicked');
+
+    const logoutBtn = screen.getByText('Logout');
+    fireEvent.click(logoutBtn);
+    
+    expect(Storage.prototype.removeItem).toHaveBeenCalledWith('token');
+    expect(Storage.prototype.removeItem).toHaveBeenCalledWith('username');
+    expect(window.location.href).toBe('/login');
   });
 
 });

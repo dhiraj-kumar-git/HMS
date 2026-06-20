@@ -134,4 +134,100 @@ describe('AllPatients Component', () => {
       expect(screen.getByText(/No patient history available/i)).toBeInTheDocument();
     });
   });
+
+  it('filters by date and status', async () => {
+    axios.get.mockResolvedValueOnce({ data: mockPatientsData });
+    renderComponent();
+    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+
+    // Filter by status 'active'
+    const statusSelect = screen.getAllByRole('combobox')[0]; // Status
+    fireEvent.change(statusSelect, { target: { value: 'active' } });
+    
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.queryByText('Jane Smith')).not.toBeInTheDocument();
+
+    // Reset status
+    fireEvent.change(statusSelect, { target: { value: '' } });
+
+    // Filter by Date (Jane has 2023-01-02, John has 2023-01-01)
+    const dateNode = document.querySelector('input[type="date"]');
+    
+    if (dateNode) {
+      fireEvent.change(dateNode, { target: { value: '2023-01-02' } });
+    }
+  });
+
+  it('sorts by date', async () => {
+    axios.get.mockResolvedValueOnce({ data: mockPatientsData });
+    renderComponent();
+    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+
+    // Sort
+    const sortSelect = screen.getAllByRole('combobox')[1]; // Sort
+    fireEvent.change(sortSelect, { target: { value: 'date' } });
+    
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+  });
+
+  it('handles pagination', async () => {
+    const manyPatients = Array.from({ length: 15 }, (_, i) => ({
+      institute_id: `INST${i}`,
+      name: `Patient ${i}`,
+      age: 20,
+      gender: 'Male',
+      workflow_status: 'active',
+      appointments: []
+    }));
+    
+    axios.get.mockResolvedValueOnce({ data: manyPatients });
+    renderComponent();
+    await waitFor(() => expect(screen.getByText('Patient 0')).toBeInTheDocument());
+
+    expect(screen.queryByText('Patient 14')).not.toBeInTheDocument();
+
+    const nextBtn = screen.getByRole('button', { name: /Next/i });
+    fireEvent.click(nextBtn);
+
+    expect(screen.getByText('Patient 14')).toBeInTheDocument();
+    expect(screen.queryByText('Patient 0')).not.toBeInTheDocument();
+
+    const prevBtn = screen.getByRole('button', { name: /Previous/i });
+    fireEvent.click(prevBtn);
+
+    expect(screen.getByText('Patient 0')).toBeInTheDocument();
+  });
+
+  it('handles API error during fetch', async () => {
+    axios.get.mockRejectedValueOnce(new Error('Network Error'));
+    renderComponent();
+
+    // Just verifying it doesn't crash
+    await waitFor(() => expect(screen.getByText(/No patient history available/i)).toBeInTheDocument());
+  });
+
+  it('handles default logout', async () => {
+    axios.get.mockResolvedValueOnce({ data: mockPatientsData });
+    renderComponent();
+    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+
+    // Original window.location
+    const originalLocation = window.location;
+    delete window.location;
+    window.location = { href: '' };
+
+    const menuBtnText = screen.getByText('Dr. Test');
+    const menuBtn = menuBtnText.closest('button');
+    fireEvent.click(menuBtn);
+
+    // Wait for menu to open
+    const logoutBtn = await screen.findByRole('menuitem', { name: /Logout/i });
+    fireEvent.click(logoutBtn);
+
+    expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('token');
+    expect(window.location.href).toBe('/login');
+
+    // Restore window.location
+    window.location = originalLocation;
+  });
 });

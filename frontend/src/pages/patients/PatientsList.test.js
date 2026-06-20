@@ -126,4 +126,115 @@ describe('PatientsList Component', () => {
       expect(screen.getByText('No patients found.')).toBeInTheDocument();
     });
   });
+  it('does not expand row if patient has no appointments', async () => {
+    axios.get.mockResolvedValueOnce({ data: mockPatientsData });
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('Jane Smith')).toBeInTheDocument();
+    });
+
+    // Row for Jane Smith has no appointments
+    const janeSmithRow = screen.getByText('Jane Smith').closest('tr');
+    fireEvent.click(janeSmithRow);
+
+    // Visit History should NOT appear
+    expect(screen.queryByText('Visit History')).not.toBeInTheDocument();
+  });
+
+  it('handles pagination correctly', async () => {
+    const manyPatients = Array.from({ length: 12 }, (_, i) => ({
+      institute_id: `INST${(i + 1).toString().padStart(3, '0')}`,
+      name: `Patient Number ${i + 1}`,
+      contact_no: `123456789${i}`,
+      appointments: []
+    }));
+    axios.get.mockResolvedValueOnce({ data: manyPatients });
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('Patient Number 1')).toBeInTheDocument();
+    });
+
+    // Should not see Patient 12 initially (since page size is 10)
+    expect(screen.queryByText('Patient Number 12')).not.toBeInTheDocument();
+
+    // Click Next
+    const nextButton = screen.getByRole('button', { name: /Next/i });
+    fireEvent.click(nextButton);
+
+    // Should see Patient 12
+    expect(screen.getByText('Patient Number 12')).toBeInTheDocument();
+    // Should not see Patient 1
+    expect(screen.queryByText('Patient Number 1')).not.toBeInTheDocument();
+
+    // Click Previous
+    const prevButton = screen.getByRole('button', { name: /Previous/i });
+    fireEvent.click(prevButton);
+
+    // Should see Patient 1 again
+    expect(screen.getByText('Patient Number 1')).toBeInTheDocument();
+  });
+
+  it('handles sorting when institute_id is missing', async () => {
+    const edgeCasePatients = [
+      { name: 'No ID Patient', appointments: [] }, // nullish/undefined ID
+      { institute_id: 'A123', name: 'With ID Patient', appointments: [] }
+    ];
+    axios.get.mockResolvedValueOnce({ data: edgeCasePatients });
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText(/No ID Patient/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/With ID Patient/i)).toBeInTheDocument();
+  });
+
+  it('handles fetch error and shows toast', async () => {
+    // Chakra UI toast runs in DOM
+    axios.get.mockRejectedValueOnce(new Error('Network Error'));
+    renderComponent();
+
+    // Since Chakra toast might not instantly show up in RTL without a proper container,
+    // we can just wait for it to be called or check if the table renders empty.
+    await waitFor(() => {
+      expect(screen.getByText('No patients found.')).toBeInTheDocument();
+    });
+  });
+
+  it('handles row toggling', async () => {
+    axios.get.mockResolvedValueOnce({ data: mockPatientsData });
+    renderComponent();
+    
+    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+
+    const johnDoeRow = screen.getByText('John Doe').closest('tr');
+    
+    // Expand
+    fireEvent.click(johnDoeRow);
+    expect(screen.getByText('Visit History')).toBeInTheDocument();
+    
+    // Collapse
+    fireEvent.click(johnDoeRow);
+    expect(screen.queryByText('Visit History')).not.toBeInTheDocument();
+  });
+
+  it('sorts alphabetically by institute_id', async () => {
+    const unsortedPatients = [
+      { institute_id: 'Z100', name: 'Zeta', appointments: [] },
+      { institute_id: 'A100', name: 'Alpha', appointments: [] },
+      { institute_id: 'M100', name: 'Mid', appointments: [] }
+    ];
+    axios.get.mockResolvedValueOnce({ data: unsortedPatients });
+    renderComponent();
+
+    await waitFor(() => expect(screen.getByText('Zeta')).toBeInTheDocument());
+    
+    const rows = screen.getAllByRole('row');
+    // First row is header. Data rows start at 1.
+    // So row 1 = Alpha, 2 = Mid, 3 = Zeta
+    expect(rows[1]).toHaveTextContent('A100');
+    expect(rows[2]).toHaveTextContent('M100');
+    expect(rows[3]).toHaveTextContent('Z100');
+  });
 });

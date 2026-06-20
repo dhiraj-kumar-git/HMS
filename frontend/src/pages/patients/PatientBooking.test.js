@@ -190,4 +190,127 @@ describe('PatientBooking Component', () => {
       expect(screen.getByText(/Advanced Booking/i)).toBeInTheDocument();
     });
   });
+
+  it('handles family member selection', async () => {
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: '12345', name: 'John Doe', psrn_id: 'P-123', appointments: [] }
+    });
+    // Mock family members
+    axios.get.mockResolvedValueOnce({
+      data: [
+        { institute_id: '12345', name: 'John Doe', relation: 'Self' },
+        { institute_id: '12346', name: 'Jane Doe', relation: 'Spouse' }
+      ]
+    });
+    // Mock doctors
+    axios.get.mockResolvedValueOnce({ data: [] });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+    });
+
+    // Select family member
+    const familySelect = screen.getByRole('combobox', { name: /Who is this appointment for\?/i });
+    fireEvent.change(familySelect, { target: { value: '12346' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    });
+  });
+
+  it('handles pending bills warning and active appointments warning', async () => {
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: '12345', name: 'John Doe', bill_status: 'pending', appointments: [] }
+    });
+    axios.get.mockResolvedValue({
+      data: [
+        {
+          username: 'doc1',
+          display_name: 'Dr. Smith',
+          department: 'General',
+          schedule: [{ duty_days: ['Monday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+        }
+      ]
+    });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // Click Book Now for Quick Book
+    fireEvent.click(screen.getByRole('button', { name: /Book Now/i }));
+
+    // Should show billing warning
+    await waitFor(() => {
+      expect(screen.getByText(/Pending Bill Notice/i)).toBeInTheDocument();
+    });
+
+    // Acknowledge billing warning
+    fireEvent.click(screen.getByRole('button', { name: /Proceed to Book/i }));
+
+    // Should proceed to Quick Confirm
+    await waitFor(() => {
+      expect(screen.getByText(/Immediate Booking Confirmation/i)).toBeInTheDocument();
+    });
+
+    // Now Mock active appointments and submit
+    axios.get.mockResolvedValue({
+      data: { activeAppointments: [{ id: 1, time: '2025-01-01T10:00:00', doctor_name: 'Dr. Smith' }] }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirm & Book/i }));
+
+    // Should show active appointment warning
+    await waitFor(() => {
+      expect(screen.getAllByText(/Active Appointment/i)[0]).toBeInTheDocument();
+    });
+
+    // Proceed anyway
+    axios.post.mockResolvedValueOnce({ data: { success: true } });
+    fireEvent.click(screen.getByRole('button', { name: /Yes, Proceed/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/portal');
+    }, { timeout: 3000 });
+  }, 10000);
+
+  it('handles verification error and OTP error', async () => {
+    // 1. Invalid Institute ID
+    axios.post.mockRejectedValueOnce({ response: { data: { error: 'Not found' } } });
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: 'invalid' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+    
+    await waitFor(() => {
+      expect(screen.getByText(/Not found/i)).toBeInTheDocument();
+    });
+
+    // 2. Invalid OTP
+    axios.post.mockResolvedValueOnce({
+      data: { requires_otp: true, email: 'j***@bits.edu' }
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/We've sent a 4-digit OTP/i)).toBeInTheDocument();
+    });
+
+    axios.post.mockRejectedValueOnce({ response: { data: { error: 'Invalid OTP' } } });
+    const otpInput = screen.getByPlaceholderText('----');
+    fireEvent.change(otpInput, { target: { value: 'wrong' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify OTP/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Verification Failed/i)).toBeInTheDocument();
+    });
+  });
 });
