@@ -48,18 +48,7 @@ export default function PatientsList() {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
   const toast = useToast();
-  const { isOpen, onOpen, onClose: closeModal } = useDisclosure();
   const { isOpen: isGuideOpen, onOpen: onGuideOpen, onClose: onGuideClose } = useDisclosure();
-  const fileInputRef = useRef(null);
-
-  // --- Upload flow state ---
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [clientRowCount, setClientRowCount] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null); // { total, success, failed, errors[] }
-  const [fileError, setFileError] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
-
   // --- Pagination state ---
   const [currentPage, setCurrentPage] = useState(1);
   const patientsPerPage = 10;
@@ -113,115 +102,6 @@ export default function PatientsList() {
   const indexOfLast = currentPage * patientsPerPage;
   const indexOfFirst = indexOfLast - patientsPerPage;
   const currentPatients = filtered.slice(indexOfFirst, indexOfLast);
-
-  // ---- Template Download ----
-  const handleDownloadTemplate = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`${BASE_URL}/admin/bulk_register/template`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(new Blob([res.data]));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'student_bulk_registration_template.xlsx';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      toast({ title: 'Failed to download template', status: 'error', duration: 3000, isClosable: true });
-    }
-  };
-
-  // ---- File Selection & Client-side Validation ----
-  const handleFileSelect = async (file) => {
-    setFileError('');
-    setUploadResult(null);
-
-    if (!file) { setSelectedFile(null); return; }
-
-    // Extension check
-    if (!file.name.toLowerCase().endsWith('.csv')) {
-      setFileError('Only .csv files are accepted.');
-      setSelectedFile(null);
-      return;
-    }
-
-    // Size check (5 MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setFileError('File size exceeds the 5 MB limit.');
-      setSelectedFile(null);
-      return;
-    }
-
-    // Count data rows (client-side, ignoring comment lines)
-    const text = await file.text();
-    const lines = text
-      .split('\n')
-      .filter(l => l.trim() !== '' && !l.trim().startsWith('#'));
-    const dataRows = Math.max(0, lines.length - 1); // subtract header
-
-    // Check required headers
-    const header = lines[0]?.toLowerCase() || '';
-    const requiredHeaders = ['institute_id', 'name', 'email', 'date_of_birth', 'gender', 'contact_no', 'patient_type', 'address'];
-    const missingHeaders = requiredHeaders.filter(h => !header.includes(h));
-    if (missingHeaders.length > 0) {
-      setFileError(`Missing required columns: ${missingHeaders.join(', ')}`);
-      setSelectedFile(null);
-      return;
-    }
-
-    setSelectedFile(file);
-    setClientRowCount(dataRows);
-  };
-
-  // ---- Upload Handler ----
-  const handleUpload = async () => {
-    if (!selectedFile) return;
-    setUploading(true);
-    setUploadResult(null);
-    try {
-      const token = localStorage.getItem('token');
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      const { data } = await axios.post(`${BASE_URL}/admin/bulk_register`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-      setUploadResult(data);
-      if (data.success > 0) fetchPatients(); // auto-refresh table
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Upload failed. Please try again.';
-      toast({ title: 'Upload Error', description: msg, status: 'error', duration: 5000, isClosable: true });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  // ---- Download Error Report (client-side) ----
-  const handleDownloadErrors = () => {
-    if (!uploadResult?.errors?.length) return;
-    const csv = [
-      'Row,Institute ID,Reason',
-      ...uploadResult.errors.map(e => `${e.row},${e.institute_id},"${e.reason}"`)
-    ].join('\n');
-    const a = document.createElement('a');
-    a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
-    a.download = 'upload_errors.csv';
-    a.click();
-  };
-
-  // ---- Reset modal state on close ----
-  const handleModalClose = () => {
-    setSelectedFile(null);
-    setClientRowCount(0);
-    setUploadResult(null);
-    setFileError('');
-    if (fileInputRef.current) fileInputRef.current.value = '';
-    closeModal();
-  };
 
   return (
     <Box bg="white" p="8" borderRadius="lg" boxShadow="md" maxW="1000px" w="full" mx="auto">
