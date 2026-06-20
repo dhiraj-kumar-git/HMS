@@ -49,6 +49,7 @@ import {
   FiMail as FiMailbox,
   FiLogOut,
   FiUser,
+  FiUploadCloud,
 } from 'react-icons/fi';
 import {
   AreaChart,
@@ -71,6 +72,7 @@ import UsersList from './UsersList';
 import PatientsList from './PatientsList';
 import DoctorSchedulePage from "./DoctorSchedulePage";
 import ManageSchedule from "./ManageSchedule";
+import BulkRegistration from './BulkRegistration';
 
 // Reusable component for the sidebar nav items
 const SidebarItem = ({ icon, label, to }) => (
@@ -171,6 +173,7 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
         <SidebarItem icon={FiUserPlus} label="Create User" to="/admin/create-user" />
         <SidebarItem icon={FiUsers} label="Users List" to="/admin/users-list" />
         <SidebarItem icon={FiUsers} label="Patients List" to="/admin/patients-list" />
+        <SidebarItem icon={FiUploadCloud} label="Bulk Registration" to="/admin/bulk-registration" />
         <SidebarItem icon={FiCalendar} label="Manage Schedules" to="/admin/manage-schedule" />
         <SidebarItem icon={FiCalendar} label="Visiting Doctor Schedule" to="/admin/schedule" />
         <SidebarItem icon={FiCalendar} label="Appointments" to="/admin/appointments" />
@@ -241,6 +244,7 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
             <Route path="create-user" element={<CreateUser />} />
             <Route path="users-list" element={<UsersList />} />
             <Route path="patients-list" element={<PatientsList />} />
+            <Route path="bulk-registration" element={<BulkRegistration />} />
             <Route path="manage-schedule" element={<ManageSchedule />} />
             <Route path="schedule" element={<DoctorSchedulePage />} />
             <Route path="*" element={<Navigate to="" />} />

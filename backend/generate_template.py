@@ -49,7 +49,7 @@ def generate_excel_template():
     gender_dv.add('E2:E1000') # Gender is Col E
 
     # Patient Type Validation
-    type_dv = DataValidation(type="list", formula1='"Student,Faculty,Staff,Dependant,Other"', allow_blank=True)
+    type_dv = DataValidation(type="list", formula1='"Student,Other"', allow_blank=True)
     type_dv.error = 'Your entry is not in the list'
     type_dv.errorTitle = 'Invalid Entry'
     ws.add_data_validation(type_dv)
@@ -73,29 +73,30 @@ def generate_excel_template():
     # 7. Add Instruction Text on Sheet 2
     ws2 = wb.create_sheet("Instructions")
     instructions = [
-        ["BITS MED-C Bulk Registration Guide"],
-        [""],
-        ["1. DO NOT change the header names in the first row."],
-        ["2. Fill student details starting from the second row."],
-        ["3. Date of Birth must be in YYYY-MM-DD format."],
-        ["4. Gender and Patient Type have drop-down selections for accuracy."],
-        ["5. Contact Number should be 10 digits without any spaces or country code."],
-        ["6. IMPORTANT: When finished, go to File -> Save As -> Choose CSV (.csv) before uploading."],
-        [""],
+        ["BITS MED-C Bulk Registration Guide", ""],
+        ["", ""],
+        ["1. DO NOT change the header names in the first row.", ""],
+        ["2. Sample details have been provided in the first 2 rows. Fill student details starting from the third row.", ""],
+        ["3. Date of Birth must be in YYYY-MM-DD or DD-MM-YYYY format.", ""],
+        ["4. Gender and Patient Type have drop-down selections for accuracy.", ""],
+        ["5. Contact Number should be 10 digits without any spaces or country code.", ""],
+        ["6. IMPORTANT: When finished, go to File -> Save As -> Choose CSV (.csv) before uploading.", ""],
+        ["", ""],
         ["Column Guide:"],
-        ["institute_id", "Bits ID / Institute ID (e.g., 2025H1120147P)"],
-        ["name", "Full Name of the student"],
-        ["email", "Official bits-pilani.ac.in email"],
-        ["date_of_birth", "Format: YYYY-MM-DD"],
-        ["gender", "Select from drop-down or use M, F, O"],
-        ["contact_no", "10-digit mobile number"],
-        ["patient_type", "Select from drop-down"],
-        ["address", "Hostel name or local address"]
+        ["institute_id *", "Bits ID / Institute ID (e.g., 2025H1120147P) (Mandatory)"],
+        ["name *", "Full Name of the student (Mandatory)"],
+        ["email *", "Official bits-pilani.ac.in email (Mandatory)"],
+        ["date_of_birth *", "Format: YYYY-MM-DD or DD-MM-YYYY (Mandatory)"],
+        ["gender *", "Select from drop-down or use M, F, O (Mandatory)"],
+        ["contact_no *", "10-digit mobile number (Mandatory)"],
+        ["patient_type *", "Select from drop-down (Mandatory)"],
+        ["address *", "Hostel name or local address (Mandatory)"]
     ]
     for row in instructions:
         ws2.append(row)
     
     ws2.column_dimensions['A'].width = 80
+    ws2.column_dimensions['B'].width = 80
     ws2['A1'].font = Font(size=14, bold=True)
 
     wb.save(file_path)
