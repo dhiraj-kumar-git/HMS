@@ -1048,7 +1048,7 @@ def download_bulk_template():
         return jsonify({"error": "Unauthorized"}), 403
     from flask import send_from_directory
     return send_from_directory(
-        directory=os.path.dirname(os.path.abspath(__file__)),
+        directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"),
         path="student_bulk_registration_template.xlsx",
         as_attachment=True,
         download_name="student_bulk_registration_template.xlsx"
@@ -1114,7 +1114,7 @@ def download_bulk_staff_template():
         return jsonify({"error": "Unauthorized"}), 403
     from flask import send_from_directory
     return send_from_directory(
-        directory=os.path.dirname(os.path.abspath(__file__)),
+        directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "data"),
         path="staff_bulk_registration_template.xlsx",
         as_attachment=True,
         download_name="staff_bulk_registration_template.xlsx"

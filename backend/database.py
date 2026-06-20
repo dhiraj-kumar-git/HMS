@@ -5,7 +5,7 @@ import os
 import uuid
 import bcrypt
 import redis
-from collection_format import Patient, Visit, User, Medicine
+from scripts.collection_format import Patient, Visit, User, Medicine
 
 load_dotenv()
 
@@ -1281,7 +1281,7 @@ import json
 
 def load_lab_tests_from_config():
     try:
-        with open("labtests_config.json", "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "data", "labtests_config.json"), "r") as f:
             return json.load(f)
     except:
         return []
