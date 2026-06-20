@@ -20,7 +20,7 @@ def test_add_lab_report(mocker):
 def test_get_lab_reports(mocker):
     mock_patients = mocker.patch.object(lab_db, 'patients')
     mock_patients.aggregate.return_value = [{"institute_id": "123"}]
-    mocker.patch("app.database.lab._map_aggregated_patient", return_value={"institute_id": "123"}, create=True)
+    mocker.patch("app.database.lab._map_aggregated_patient", return_value={"institute_id": "123"})
     res = get_lab_reports()
     assert len(res) == 1
 
@@ -33,7 +33,7 @@ def test_get_lab_patients(mocker):
 def test_submit_lab_results(mocker):
     mock_patients = mocker.patch.object(lab_db, 'patients')
     mock_visits = mocker.patch.object(lab_db, 'visits')
-    mocker.patch("app.database.lab._get_active_visit_id", return_value="v123", create=True)
+    mocker.patch("app.database.lab._get_active_visit_id", return_value="v123")
     
     mock_patients.find_one.return_value = {"institute_id": "123"}
     mock_patients.update_one.return_value.modified_count = 1

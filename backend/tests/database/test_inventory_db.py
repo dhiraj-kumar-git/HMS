@@ -51,8 +51,8 @@ def test_pay_bill_success(mocker):
         "prescriptions": [{"note": "Paracetamol"}]
     }
     
-    mocker.patch("app.database.inventory.load_lab_tests_from_config", return_value=[], create=True)
-    mocker.patch("app.database.inventory.get_test_price", return_value=100.0, create=True)
+    mocker.patch("app.database.inventory.load_lab_tests_from_config", return_value=[])
+    mocker.patch("app.database.inventory.get_test_price", return_value=100.0)
     mock_bills.count_documents.return_value = 0
     mock_patients.update_one.return_value.modified_count = 1
     
@@ -70,8 +70,8 @@ def test_pay_bill_no_visit(mocker):
     mock_patients.find_one.return_value = {"institute_id": "I123", "workflow_status": "consultation"}
     mock_visits.find_one.return_value = None
     
-    mocker.patch("app.database.inventory.load_lab_tests_from_config", return_value=[], create=True)
-    mocker.patch("app.database.inventory.get_test_price", return_value=100.0, create=True)
+    mocker.patch("app.database.inventory.load_lab_tests_from_config", return_value=[])
+    mocker.patch("app.database.inventory.get_test_price", return_value=100.0)
     mock_bills.count_documents.return_value = 0
     mock_patients.update_one.return_value.modified_count = 1
     

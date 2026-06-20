@@ -1,4 +1,5 @@
 from app.database.core import *
+from app.database.patients import _map_aggregated_patient, _get_active_visit_id
 import json
 import os
 
