@@ -19,6 +19,7 @@ import { FiArrowLeft, FiUserCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from './Config';
+import { getDateISTString } from './utils';
 
 const PatientRegistration = () => {
   const navigate = useNavigate();
@@ -59,15 +60,15 @@ const PatientRegistration = () => {
       const response = await axios.post(`${BASE_URL}/api/public/register`, submissionData);
       toast({
         title: "Registration Successful",
-        description: `Your Institute ID is ${response.data.institute_id}. Directing to booking...`,
+        description: `Your Institute ID is ${response.data.institute_id}. Directing to portal...`,
         status: "success",
         duration: 3000,
         isClosable: true,
         position: 'top'
       });
-      // Transition automatically to Booking
+      // Transition automatically to Portal
       setTimeout(() => {
-        navigate('/portal/book-appointment', { state: { autoFillInstituteId: formData.institute_id } });
+        navigate('/portal');
       }, 1500);
     } catch (err) {
       toast({
@@ -163,7 +164,7 @@ const PatientRegistration = () => {
                 <Input
                   name="date_of_birth"
                   type="date"
-                  max={new Date().toISOString().split('T')[0]}
+                  max={getDateISTString()}
                   value={formData.date_of_birth}
                   onChange={handleChange}
                   focusBorderColor="blue.500"

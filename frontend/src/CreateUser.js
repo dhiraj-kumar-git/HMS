@@ -158,7 +158,7 @@ export default function CreateUser() {
 
       const finalDisplayName =
         role === "doctor"
-          ? `${cleanName}`
+          ? `Dr. ${cleanName}`
           : cleanName;
 
       await axios.post(`${BASE_URL}/create_user`, {

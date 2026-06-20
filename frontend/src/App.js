@@ -17,6 +17,7 @@ import ReceptionistDashboard from './ReceptionistDashboard';
 import DoctorSchedulePage from "./DoctorSchedulePage";
 import AdminDashboard from './AdminDashboard';
 import MedicalCounterDashboard from './MedicalCounterDashboard';
+import BillHistory from './BillHistory';
 import DoctorsDashboard from './DoctorsDashboard';
 import AddMedicine from './AddMedicine';
 import InventoryList from './InventoryList';
@@ -146,6 +147,16 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             element={
               isLoggedIn && role === 'medical_store' ? (
                 <MedicalCounterDashboard />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/bill_history"
+            element={
+              isLoggedIn && role === 'medical_store' ? (
+                <BillHistory />
               ) : (
                 <Navigate to="/login" />
               )

@@ -13,6 +13,9 @@ import {
   Select,
   Text,
 } from "@chakra-ui/react";
+import axios from "axios";
+import BASE_URL from './Config';
+import { formatDateTimeIST, toTitleCase } from './utils';
 
 function UploadLabReports() {
   const [instituteId, setInstituteId] = useState("");
@@ -129,7 +132,7 @@ function UploadLabReports() {
         doctorName,
         previewUrl,
         fileName: file.name,
-        uploadedAt: new Date().toLocaleString(),
+        uploadedAt: formatDateTimeIST(new Date()),
         s3Key: key, // Adding S3 key
       };
 
@@ -235,7 +238,7 @@ function UploadLabReports() {
                   shadow="sm"
                 >
                   <Text fontWeight="bold" mb={2}>
-                    ID: {report.instituteId} | Doctor: {report.doctorName}
+                    ID: {report.instituteId} | Doctor: {toTitleCase(report.doctorName)}
                   </Text>
                   <Text fontSize="sm" color="gray.500" mb={2}>
                     Uploaded at: {report.uploadedAt}

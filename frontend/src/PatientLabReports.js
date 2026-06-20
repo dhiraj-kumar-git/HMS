@@ -28,6 +28,9 @@ import {
 import { FiMail, FiCopy, FiRefreshCw, FiEye } from "react-icons/fi";
 import axios from "axios";
 import BASE_URL from './Config';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import { formatDateTimeIST, toTitleCase } from './utils';
 
 export default function PatientLabReports() {
   const toast = useToast();
@@ -112,17 +115,11 @@ export default function PatientLabReports() {
       // Patient Info
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(`Name: ${patient.name}`, 14, 40);
+      doc.text(`Name: ${toTitleCase(patient.name)}`, 14, 40);
       doc.text(`Institute ID: ${patient.institute_id}`, 14, 46);
       doc.text(`Age / Gender: ${patient.age} / ${patient.gender}`, 14, 52);
       doc.text(
-        `Date: ${new Date(latest.timestamp).toLocaleString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`,
+        `Date: ${formatDateTimeIST(latest.timestamp)}`,
         14,
         58
       );
@@ -166,7 +163,7 @@ export default function PatientLabReports() {
 
       const token = localStorage.getItem("token");
 
-      await axios.post(`${BASE_URL}/lab/send_email`, { recipient_email: patient.email, subject: `Lab Report for ${patient.name} - ${latest.test_name}`, body: `Dear ${patient.name},\n\nPlease find attached your latest lab test report.\n\nRegards,\nBITS Pilani Medical Centre`, pdf_base64: pdfBase64, filename: `${patient.name}_LabReport.pdf` }, { headers: { Authorization: `Bearer ${token}` } });
+      await axios.post(`${BASE_URL}/lab/send_email`, { recipient_email: patient.email, subject: `Lab Report for ${toTitleCase(patient.name)} - ${latest.test_name}`, body: `Dear ${toTitleCase(patient.name)},\n\nPlease find attached your latest lab test report.\n\nRegards,\nBITS Pilani Medical Centre`, pdf_base64: pdfBase64, filename: `${patient.name}_LabReport.pdf` }, { headers: { Authorization: `Bearer ${token}` } });
 
       toast({
         title: "Email sent successfully!",
@@ -275,13 +272,12 @@ export default function PatientLabReports() {
                 }}
               >
                 <Box flex="1.5" display="flex" alignItems="center" gap="2">
-                  <Avatar
-                    size="sm"
-                    name={patient.name}
+                  <Avatar size="sm" mr={3} 
+                    name={toTitleCase(patient.name)}
                     bg="blue.100"
                     color="blue.800"
                   />
-                  <Text fontWeight="medium">{patient.name}</Text>
+                  <Text fontWeight="medium">{toTitleCase(patient.name)}</Text>
                 </Box>
 
                 <Box flex="1.3" display="flex" alignItems="center">
@@ -316,13 +312,7 @@ export default function PatientLabReports() {
 
                 <Box flex="1.5">
                   {last?.timestamp
-                    ? new Date(last.timestamp).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })
+                    ? formatDateTimeIST(last.timestamp)
                     : "N/A"}
                 </Box>
 
@@ -367,7 +357,7 @@ export default function PatientLabReports() {
         <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
         <ModalContent borderRadius="2xl" overflow="hidden">
           <ModalHeader bg="blue.600" color="white">
-            {selectedPatient?.name} (ID: {selectedPatient?.institute_id})
+            {toTitleCase(selectedPatient?.name)} (ID: {selectedPatient?.institute_id})
           </ModalHeader>
           <ModalCloseButton color="white" />
           <ModalBody bg="gray.50" p={6}>
@@ -431,16 +421,7 @@ export default function PatientLabReports() {
                       textAlign="right"
                     >
                       Saved on:{" "}
-                      {new Date(latestReport.timestamp).toLocaleString(
-                        "en-IN",
-                        {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        }
-                      )}
+                      {formatDateTimeIST(latestReport.timestamp)}
                     </Text>
                   </Box>
                 );

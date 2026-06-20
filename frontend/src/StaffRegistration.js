@@ -33,6 +33,7 @@ import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2, FiEdit2 } from 'react-icons
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from './Config';
+import { getDateISTString } from './utils';
 
 const RELATION_OPTIONS = [
   "Spouse", "Son", "Daughter", "Father", "Mother",
@@ -298,7 +299,7 @@ const StaffRegistration = () => {
       });
       setShowRegisterOtpModal(false);
       setTimeout(() => {
-        navigate('/portal/book-appointment', { state: { autoFillInstituteId: primary.psrn_id } });
+        navigate('/portal');
       }, 1500);
     } catch (err) {
       toast({
@@ -413,7 +414,7 @@ const StaffRegistration = () => {
                   <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
                     <FormControl isRequired>
                       <FormLabel>Date of Birth</FormLabel>
-                      <Input name="date_of_birth" type="date" max={new Date().toISOString().split('T')[0]} value={primary.date_of_birth} onChange={handlePrimaryChange} focusBorderColor="blue.500" />
+                      <Input name="date_of_birth" type="date" max={getDateISTString()} value={primary.date_of_birth} onChange={handlePrimaryChange} focusBorderColor="blue.500" />
                     </FormControl>
                     <FormControl isRequired>
                       <FormLabel>Gender</FormLabel>
@@ -467,7 +468,7 @@ const StaffRegistration = () => {
                         </FormControl>
                         <FormControl isRequired>
                           <FormLabel>Date of Birth</FormLabel>
-                          <Input type="date" max={new Date().toISOString().split('T')[0]} value={dep.date_of_birth} onChange={(e) => handleDependantChange(index, 'date_of_birth', e.target.value)} />
+                          <Input type="date" max={getDateISTString()} value={dep.date_of_birth} onChange={(e) => handleDependantChange(index, 'date_of_birth', e.target.value)} />
                         </FormControl>
                         <FormControl isRequired>
                           <FormLabel>Gender</FormLabel>
@@ -561,7 +562,7 @@ const StaffRegistration = () => {
                         </FormControl>
                         <FormControl isRequired>
                           <FormLabel>Date of Birth</FormLabel>
-                          <Input type="date" max={new Date().toISOString().split('T')[0]} value={singleDependant.date_of_birth} onChange={(e) => setSingleDependant({ ...singleDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
+                          <Input type="date" max={getDateISTString()} value={singleDependant.date_of_birth} onChange={(e) => setSingleDependant({ ...singleDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
                         </FormControl>
                       </SimpleGrid>
 
@@ -672,7 +673,7 @@ const StaffRegistration = () => {
                   </FormControl>
                   <FormControl isRequired>
                     <FormLabel>Date of Birth</FormLabel>
-                    <Input type="date" max={new Date().toISOString().split('T')[0]} value={editingDependant.date_of_birth || ''} onChange={(e) => setEditingDependant({ ...editingDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
+                    <Input type="date" max={getDateISTString()} value={editingDependant.date_of_birth || ''} onChange={(e) => setEditingDependant({ ...editingDependant, date_of_birth: e.target.value })} focusBorderColor="blue.500" />
                   </FormControl>
                   <SimpleGrid columns={2} spacing={4}>
                     <FormControl isRequired>

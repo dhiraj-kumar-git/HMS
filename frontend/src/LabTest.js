@@ -50,6 +50,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
+import { formatDateTimeIST, toTitleCase } from './utils';
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");
@@ -83,14 +84,7 @@ export default function LabTestDashboard() {
     Completed: 8,
   });
 
-  const currentTime = new Date().toLocaleString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
+  const currentTime = formatDateTimeIST(new Date());
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const {
@@ -161,15 +155,12 @@ export default function LabTestDashboard() {
   };
 
   // FETCH PATIENT DETAILS & PROCESS TESTS
-  const handlePatientSelect = async (instituteId) => {
+  const handlePatientSelect = async (patient) => {
     // ensure configTests is loaded
     if (!configTests.length) await fetchConfigTests();
     setTestsLoading(true);
 
     try {
-      const token = localStorage.getItem("token");
-      const response = await axios.get(`${BASE_URL}/get_patient/${instituteId}`, { headers: { Authorization: `Bearer ${token}` } });
-      const patient = response.data;
       setSelectedPatient(patient);
 
       const processed = patient.lab_tests.map((t) => {
@@ -229,7 +220,7 @@ export default function LabTestDashboard() {
   };
 
   const openPatientModal = async (p) => {
-    await handlePatientSelect(p.institute_id);
+    await handlePatientSelect(p);
     onOpen();
   };
 
@@ -279,6 +270,7 @@ export default function LabTestDashboard() {
         `${BASE_URL}/lab/save_report`,
         {
           institute_id: selectedPatient.institute_id,
+          visit_id: selectedPatient.visit_id,
           test_name: tests[0].lab_test,
           results: tests.reduce((acc, t) => {
             if (t.type === "individual") {
@@ -315,7 +307,7 @@ export default function LabTestDashboard() {
 
       toast({
         title: "Report saved successfully",
-        description: `${selectedPatient.name}'s lab report has been generated.`,
+        description: `${toTitleCase(selectedPatient.name)}'s lab report has been generated.`,
         status: "success",
       });
 
@@ -382,8 +374,8 @@ export default function LabTestDashboard() {
         })
         .join("\n");
 
-      const subject = `Lab Report for ${patientData.name} (ID ${selectedPatient.institute_id})`;
-      const body = `Dear ${patientData.name},
+      const subject = `Lab Report for ${toTitleCase(patientData.name)} (ID ${selectedPatient.institute_id})`;
+      const body = `Dear ${toTitleCase(patientData.name)},
 
 Your lab test report is now available.
 
@@ -419,14 +411,7 @@ BITS Pilani
 
   // Print Report
   const handlePrint = () => {
-    const currentDateTime = new Date().toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const currentDateTime = formatDateTimeIST(new Date());
 
     let rows = "";
     tests.forEach((test) => {
@@ -513,7 +498,7 @@ BITS Pilani
           <div class="patient-info">
             <div class="patient-row">
               <div class="patient-left">
-                <div><span>Name</span><span>: ${selectedPatient?.name?.toUpperCase() || ""
+                <div><span>Name</span><span>: ${toTitleCase(selectedPatient?.name) || ""
       }</span></div>
                 <div><span>Sex & Age</span><span>: ${selectedPatient?.gender?.toUpperCase() || ""
       } / ${selectedPatient?.age || ""}Yr</span></div>
@@ -606,9 +591,9 @@ BITS Pilani
             <MenuButton
               as={Button}
               variant="ghost"
-              rightIcon={<Avatar size="sm" name={username} />}
+              rightIcon={<Avatar size="sm" name={toTitleCase(username)} />}
             >
-              <Text fontWeight="medium">Welcome, {username}</Text>
+              <Text fontWeight="medium">Welcome, {toTitleCase(username)}</Text>
             </MenuButton>
             <MenuList>
               <MenuItem
@@ -962,9 +947,9 @@ BITS Pilani
                       display="flex"
                       alignItems="center"
                     >
-                      <Avatar size="sm" name={p.name} mr="2" />
+                      <Avatar size="sm" name={toTitleCase(p.name)} mr="2" />
                       <Text fontSize="sm" color="gray.800">
-                        {p.name}
+                        {toTitleCase(p.name)}
                       </Text>
                     </Box>
                     <Box
@@ -1022,7 +1007,7 @@ BITS Pilani
         <ModalContent>
           <ModalHeader bg="blue.600" color="white">
             {selectedPatient
-              ? `${selectedPatient.name} (ID: ${selectedPatient.institute_id})`
+              ? `${toTitleCase(selectedPatient.name)} (ID: ${selectedPatient.institute_id})`
               : "Patient Details"}
           </ModalHeader>
           <ModalCloseButton color="white" />
