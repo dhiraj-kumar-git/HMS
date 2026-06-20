@@ -1046,6 +1046,40 @@ def _validate_and_parse_bulk_row(row):
     }
 
 
+def generate_relation_id(psrn_id, relation, existing_family):
+    rel = str(relation).strip().upper()
+    prefix = "OTHER"
+    if "SON" in rel: prefix = "SON"
+    elif "DAUGHTER" in rel: prefix = "DAUGHTER"
+    elif "SPOUSE" in rel or "WIFE" in rel or "HUSBAND" in rel: prefix = "SPOUSE"
+    elif "FATHER-IN-LAW" in rel: prefix = "FIL"
+    elif "MOTHER-IN-LAW" in rel: prefix = "MIL"
+    elif "FATHER" in rel: prefix = "FATHER"
+    elif "MOTHER" in rel: prefix = "MOTHER"
+    
+    always_number = prefix in ["SON", "DAUGHTER", "OTHER"]
+    
+    existing_ids = [f.get("institute_id", "") for f in existing_family if f.get("institute_id", "").startswith(f"{psrn_id}-{prefix}")]
+    
+    if not existing_ids:
+        return f"{psrn_id}-{prefix}1" if always_number else f"{psrn_id}-{prefix}"
+        
+    max_idx = 0
+    unnumbered_exists = False
+    
+    for eid in existing_ids:
+        suffix = eid[len(f"{psrn_id}-{prefix}"):]
+        if suffix == "":
+            unnumbered_exists = True
+        elif suffix.isdigit():
+            max_idx = max(max_idx, int(suffix))
+            
+    if max_idx == 0 and unnumbered_exists:
+        max_idx = 1
+        
+    next_idx = max_idx + 1
+    return f"{psrn_id}-{prefix}{next_idx}"
+
 def bulk_register_patients(rows, admin_username):
     """
     Bulk-register patients from a list of CSV row dicts.
@@ -1079,6 +1113,118 @@ def bulk_register_patients(rows, admin_username):
                 "institute_id": raw_id or "(empty)",
                 "reason": str(e)
             })
+
+    return results
+
+def bulk_register_staff_and_dependants(rows, admin_username):
+    """
+    Bulk-register Faculty/Staff and their Dependants in a two-pass approach.
+    Pass 1: Register primary members (Faculty/Staff).
+    Pass 2: Register dependants and generate their institute_id based on the primary member.
+    """
+    results = {"success": 0, "failed": 0, "errors": []}
+    
+    # 1. Separate the rows
+    primary_rows = []
+    dependant_rows = []
+    
+    for i, row in enumerate(rows, start=2):
+        ptype = str(row.get("patient_type", "")).strip().capitalize()
+        if ptype in ["Faculty", "Staff"]:
+            primary_rows.append((i, row))
+        elif ptype == "Dependant":
+            dependant_rows.append((i, row))
+        else:
+            results["failed"] += 1
+            results["errors"].append({
+                "row": i,
+                "institute_id": str(row.get("primary_psrn_id", "")).strip(),
+                "reason": f"Invalid patient_type '{ptype}'. Must be Faculty, Staff, or Dependant."
+            })
+
+    # Cache for newly inserted or existing primary members to fallback data
+    primary_cache = {}
+
+    # PASS 1: Register Primary Members
+    for i, row in primary_rows:
+        raw_id = str(row.get("primary_psrn_id", "")).strip()
+        if not raw_id:
+            results["failed"] += 1
+            results["errors"].append({"row": i, "institute_id": "(empty)", "reason": "Missing primary_psrn_id"})
+            continue
+            
+        try:
+            # Map primary_psrn_id to institute_id so _validate_and_parse_bulk_row can process it
+            row_mapped = dict(row)
+            row_mapped["institute_id"] = raw_id
+            
+            patient_data = _validate_and_parse_bulk_row(row_mapped)
+            patient_data["relation"] = "Self"
+            patient_data["imported_by"] = admin_username
+            
+            result_id = register_patient(patient_data)
+            if result_id is None:
+                # Already exists, just cache it
+                existing_p = patients.find_one({"institute_id": raw_id})
+                if existing_p:
+                    primary_cache[raw_id] = existing_p
+            else:
+                primary_cache[raw_id] = patient_data
+                results["success"] += 1
+
+        except ValueError as e:
+            results["failed"] += 1
+            results["errors"].append({"row": i, "institute_id": raw_id, "reason": str(e)})
+
+    # PASS 2: Register Dependants
+    for i, row in dependant_rows:
+        raw_psrn = str(row.get("primary_psrn_id", "")).strip()
+        if not raw_psrn:
+            results["failed"] += 1
+            results["errors"].append({"row": i, "institute_id": "(empty)", "reason": "Missing primary_psrn_id"})
+            continue
+
+        try:
+            # Fetch primary member data for fallbacks
+            primary = primary_cache.get(raw_psrn) or patients.find_one({"institute_id": raw_psrn})
+            if not primary:
+                raise ValueError(f"Primary member with PSRN {raw_psrn} not found in database or this CSV.")
+
+            # Fallbacks
+            row_mapped = dict(row)
+            if not str(row_mapped.get("email", "")).strip():
+                row_mapped["email"] = primary.get("email", "")
+            if not str(row_mapped.get("contact_no", "")).strip():
+                row_mapped["contact_no"] = primary.get("contact_no", "")
+            if not str(row_mapped.get("address", "")).strip():
+                row_mapped["address"] = primary.get("address", "")
+
+            relation = str(row_mapped.get("relation", "")).strip()
+            if not relation:
+                raise ValueError("Dependant is missing 'relation'")
+            if relation.lower() == "self":
+                raise ValueError("Dependant cannot have relation 'Self'")
+
+            # Generate ID
+            existing_family = get_family_by_psrn(raw_psrn)
+            dep_id = generate_relation_id(raw_psrn, relation, existing_family)
+            
+            row_mapped["institute_id"] = dep_id
+            patient_data = _validate_and_parse_bulk_row(row_mapped)
+            patient_data["imported_by"] = admin_username
+            patient_data["primary_member_id"] = raw_psrn
+            patient_data["relation"] = relation
+            
+            # Additional validation specific to dependants can go here
+            result_id = register_patient(patient_data)
+            if result_id is None:
+                raise ValueError("Dependant with this exact ID already exists")
+
+            results["success"] += 1
+
+        except ValueError as e:
+            results["failed"] += 1
+            results["errors"].append({"row": i, "institute_id": raw_psrn, "reason": str(e)})
 
     return results
 

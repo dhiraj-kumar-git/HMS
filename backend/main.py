@@ -1070,8 +1070,8 @@ def bulk_register_patients_route():
         return jsonify({"error": "No file uploaded. Form field must be named 'file'"}), 400
 
     file = request.files['file']
-    if not file.filename.lower().endswith('.csv'):
-        return jsonify({"error": "Only .csv files are accepted"}), 400
+    if not (file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.xlsx')):
+        return jsonify({"error": "Only .csv or .xlsx files are accepted"}), 400
 
     # Enforce 5 MB cap
     file.seek(0, 2)
@@ -1081,12 +1081,16 @@ def bulk_register_patients_route():
         return jsonify({"error": "File size exceeds the 5 MB limit"}), 400
 
     try:
-        stream = io.StringIO(file.stream.read().decode("utf-8"))
         import pandas as pd
-        df = pd.read_csv(stream, comment='#')  # Skip comment rows starting with #
+        if file.filename.lower().endswith('.csv'):
+            stream = io.StringIO(file.stream.read().decode("utf-8"))
+            df = pd.read_csv(stream, comment='#', dtype=str, keep_default_na=False)
+        else:
+            df = pd.read_excel(file.stream, dtype=str, keep_default_na=False)
+            
         df.columns = df.columns.str.strip().str.lower()
     except Exception as e:
-        return jsonify({"error": f"Failed to parse CSV: {str(e)}"}), 400
+        return jsonify({"error": f"Failed to parse file: {str(e)}"}), 400
 
     # Verify all required columns are present before touching the DB
     required_cols = {"institute_id", "name", "email", "date_of_birth", "gender", "contact_no", "patient_type", "address"}
@@ -1097,6 +1101,73 @@ def bulk_register_patients_route():
     rows = df.to_dict(orient="records")
     admin_username = get_jwt_identity()
     results = database.bulk_register_patients(rows, admin_username)
+    results["total"] = len(rows)
+
+    return jsonify(results), 200
+
+@app.route('/admin/bulk_register_staff/template', methods=['GET'])
+@jwt_required()
+def download_bulk_staff_template():
+    """Serve the CSV/Excel template file for bulk staff and dependant registration."""
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+    from flask import send_from_directory
+    return send_from_directory(
+        directory=os.path.dirname(os.path.abspath(__file__)),
+        path="staff_bulk_registration_template.xlsx",
+        as_attachment=True,
+        download_name="staff_bulk_registration_template.xlsx"
+    )
+
+@app.route('/admin/bulk_register_staff', methods=['POST'])
+@jwt_required()
+def bulk_register_staff_route():
+    """
+    Bulk-register staff and dependants from an Excel/CSV file upload.
+    Admin role only.
+    """
+    claims = get_jwt()
+    if claims.get("role") != "admin":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No file uploaded. Form field must be named 'file'"}), 400
+
+    file = request.files['file']
+    if not (file.filename.lower().endswith('.csv') or file.filename.lower().endswith('.xlsx')):
+        return jsonify({"error": "Only .csv or .xlsx files are accepted"}), 400
+
+    # Enforce 5 MB cap
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    if file_size > 5 * 1024 * 1024:
+        return jsonify({"error": "File size exceeds the 5 MB limit"}), 400
+
+    try:
+        import pandas as pd
+        if file.filename.lower().endswith('.csv'):
+            stream = io.StringIO(file.stream.read().decode("utf-8"))
+            df = pd.read_csv(stream, comment='#', dtype=str, keep_default_na=False)
+        else:
+            df = pd.read_excel(file.stream, dtype=str, keep_default_na=False)
+            
+        df.columns = df.columns.str.strip().str.lower()
+    except Exception as e:
+        return jsonify({"error": f"Failed to parse file: {str(e)}"}), 400
+
+    # Verify all required columns are present
+    required_cols = {"primary_psrn_id", "name", "date_of_birth", "gender", "patient_type"}
+    missing_cols = required_cols - set(df.columns)
+    if missing_cols:
+        return jsonify({"error": f"Missing required columns: {', '.join(sorted(missing_cols))}"}), 400
+
+    # Fill NaNs with empty string for cleaner processing
+    df.fillna("", inplace=True)
+    rows = df.to_dict(orient="records")
+    admin_username = get_jwt_identity()
+    results = database.bulk_register_staff_and_dependants(rows, admin_username)
     results["total"] = len(rows)
 
     return jsonify(results), 200
