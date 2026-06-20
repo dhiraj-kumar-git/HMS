@@ -35,3 +35,8 @@ Object.defineProperty(window, 'crypto', {
     })
   }
 });
+
+Element.prototype.scrollTo = () => {};
+Element.prototype.scrollIntoView = () => {};
+window.HTMLElement.prototype.scrollTo = () => {};
+window.HTMLElement.prototype.scrollIntoView = () => {};
