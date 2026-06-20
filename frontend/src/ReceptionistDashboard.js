@@ -26,6 +26,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from './Config';
 import PrescriptionModal from "./PrescriptionModal";
+import { getDateISTString } from './utils';
 
 const headerHeight = 64; // same header height as AdminDashboard
 
@@ -227,7 +228,7 @@ export default function ReceptionistDashboard() {
                   <Input
                     type="date"
                     name="date_of_birth"
-                    max={new Date().toISOString().split('T')[0]}
+                    max={getDateISTString()}
                     value={patient.date_of_birth}
                     onChange={handleChange}
                   />

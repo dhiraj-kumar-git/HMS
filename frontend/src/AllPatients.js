@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from './Config';
+import { formatDateIST, getDateISTString, toTitleCase } from './utils';
 import {
   Box,
   Flex,
@@ -206,7 +207,7 @@ export default function AllPatients({ onLogout }) {
         if (lastTime === 0) return false;
 
         // Convert timestamp back to YYYY-MM-DD for comparison with HTML input
-        const lastVisitDateStr = new Date(lastTime).toISOString().split('T')[0];
+        const lastVisitDateStr = getDateISTString(lastTime);
         return lastVisitDateStr === dateFilter;
       });
     }
@@ -406,7 +407,7 @@ export default function AllPatients({ onLogout }) {
                       if (completedAppts.length > 0) {
                         const latest = completedAppts[completedAppts.length - 1];
                         if (latest.time) {
-                          lastVisit = new Date(latest.time.split('T')[0]).toLocaleDateString('en-GB');
+                          lastVisit = formatDateIST(latest.time);
                         }
                       }
 
@@ -418,7 +419,7 @@ export default function AllPatients({ onLogout }) {
                           <Td textAlign="center" fontWeight="medium">{patient.institute_id}</Td>
                           <Td textAlign="center">
                             <Box>
-                              <Text fontWeight="bold" textTransform="capitalize">{(patient.name || '').toLowerCase()}</Text>
+                              <Text fontWeight="bold">{toTitleCase(patient.name)}</Text>
                               <Text fontSize="sm" color="gray.500">{patient.age} yrs • {patient.gender}</Text>
                             </Box>
                           </Td>

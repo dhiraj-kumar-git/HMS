@@ -32,7 +32,8 @@ import {
   ModalBody,
   ModalCloseButton
 } from '@chakra-ui/react';
-import { FiArrowLeft, FiCheckCircle, FiCalendar, FiAlertTriangle } from 'react-icons/fi';
+import { FiSearch, FiCalendar, FiClock, FiCheckCircle, FiPlus, FiAlertCircle, FiArrowLeft, FiAlertTriangle } from 'react-icons/fi';
+import { getWeekdayIST, formatDateTimeIST, toTitleCase } from './utils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from './Config';
@@ -59,6 +60,10 @@ const PatientBooking = () => {
     date: '',
     timeSlot: '',
   });
+
+  // Warning Modal States
+  const [activeAppointments, setActiveAppointments] = useState([]);
+  const [showWarningModal, setShowWarningModal] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [scheduleWarning, setScheduleWarning] = useState('');
@@ -112,7 +117,7 @@ const PatientBooking = () => {
   };
 
   const getTodayName = () => {
-    return new Date().toLocaleDateString('en-US', { weekday: 'long' });
+    return getWeekdayIST(new Date());
   };
 
   const generateTimeSlots = (start, end) => {
@@ -313,7 +318,7 @@ const PatientBooking = () => {
         // Adding timezone trick to prevent date skew:
         const [year, month, day] = bookingData.date.split('-');
         const dateObj = new Date(year, month - 1, day);
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        const dayName = getWeekdayIST(dateObj);
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
           warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s. Please check with the Hospital Receptionist before proceeding to confirm the appointment.`;
@@ -341,7 +346,7 @@ const PatientBooking = () => {
       if (doc) {
         const [year, month, day] = newDate.split('-');
         const dateObj = new Date(year, month - 1, day);
-        const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+        const dayName = getWeekdayIST(dateObj);
         const shift = doc.schedule.find(s => s.duty_days.includes(dayName));
         if (!shift) {
           warning = `Warning: ${doc.display_name} is not typically scheduled on ${dayName}s. Please check with the Hospital Receptionist before proceeding to confirm the appointment.`;
@@ -372,10 +377,32 @@ const PatientBooking = () => {
       });
       return;
     }
+    
+    // Check for active appointments first
+    setBookingLoading(true);
+    try {
+      const activeRes = await axios.get(`${BASE_URL}/api/public/check-active-appointments/${verifiedPatient.institute_id}`);
+      const appointments = activeRes.data.activeAppointments || activeRes.data.active_appointments || [];
+      
+      if (appointments.length > 0) {
+        setActiveAppointments(appointments);
+        setShowWarningModal(true);
+        setBookingLoading(false);
+        return; // Pause booking to wait for confirmation
+      }
+    } catch (err) {
+      console.error("Failed to check active appointments", err);
+    }
+    
+    await proceedWithBooking();
+  };
 
+  const proceedWithBooking = async () => {
+    setShowWarningModal(false);
+    setBookingLoading(true);
+    
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
-    setBookingLoading(true);
     try {
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
@@ -427,7 +454,7 @@ const PatientBooking = () => {
     const doc = doctors.find(d => d.username === bookingData.doctor_username);
     const [year, month, day] = bookingData.date.split('-');
     const dateObj = new Date(year, month - 1, day);
-    const dayName = dateObj.toLocaleDateString('en-US', { weekday: 'long' });
+    const dayName = getWeekdayIST(dateObj);
     const shift = doc?.schedule?.find(s => s.duty_days.includes(dayName));
 
     if (shift) {
@@ -511,7 +538,7 @@ const PatientBooking = () => {
               <Icon as={FiCheckCircle} w={6} h={6} color="teal.500" mr={3} />
               <Box>
                 <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Patient</Text>
-                <Text fontSize="lg" color="teal.900">{verifiedPatient.name}</Text>
+                <Text fontSize="lg" color="teal.900">{toTitleCase(verifiedPatient.name)}</Text>
                 <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
               </Box>
             </Flex>
@@ -531,7 +558,7 @@ const PatientBooking = () => {
                   >
                     {familyMembers.map(member => (
                       <option key={member.institute_id} value={member.institute_id}>
-                        {member.name} ({member.relation || 'Self'})
+                        {toTitleCase(member.name)} ({member.relation || 'Self'})
                       </option>
                     ))}
                   </Select>
@@ -545,14 +572,14 @@ const PatientBooking = () => {
                 {prevDoc && (
                   <Box p={4} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200">
                     <Text fontSize="sm" color="blue.800" mb={3}>
-                      You previously visited <strong>{prevDoc.display_name}</strong> ({prevDoc.department}).
+                      You previously visited <strong>{toTitleCase(prevDoc.display_name)}</strong> ({prevDoc.department}).
                     </Text>
                     <Button
                       size="sm"
                       colorScheme="blue"
                       onClick={() => handleQuickBookClick(prevDoc.username)}
                     >
-                      Book with {prevDoc.display_name} Again
+                      Book with {toTitleCase(prevDoc.display_name)} Again
                     </Button>
                   </Box>
                 )}
@@ -570,7 +597,7 @@ const PatientBooking = () => {
                           <GridItem key={idx}>
                             <Flex direction="column" justify="space-between" h="100%" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
                               <Box mb={4}>
-                                <Text fontWeight="bold" color="gray.700">{doc.display_name} ({doc.department})</Text>
+                                <Text fontWeight="bold" color="gray.700">{toTitleCase(doc.display_name)} ({doc.department})</Text>
                                 <Badge colorScheme="green" mt={2} borderRadius="md" textTransform="none">
                                   Today: {shift.start_time} - {shift.end_time}
                                 </Badge>
@@ -624,7 +651,7 @@ const PatientBooking = () => {
                             <h2>
                               <AccordionButton _expanded={{ bg: "gray.50" }}>
                                 <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
-                                  {new Date(app.time.split('T')[0]).toLocaleDateString()} at {app.time.split('T')[1]} - {app.doctor_name}
+                                  {formatDateTimeIST(app.time)} - {toTitleCase(app.doctor_name)}
                                 </Box>
                                 <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
                                   {app.status === 'completed' ? "Completed" : "In Progress"}
@@ -685,7 +712,7 @@ const PatientBooking = () => {
                       <Text fontSize="sm" color="gray.500">Selected Doctor</Text>
                       {(() => {
                         const d = doctors.find(doc => doc.username === bookingData.doctor_username);
-                        return <Text fontSize="lg" fontWeight="bold" color="gray.800">{d?.display_name} ({d?.department})</Text>;
+                        return <Text fontSize="lg" fontWeight="bold" color="gray.800">{toTitleCase(d?.display_name)} ({d?.department})</Text>;
                       })()}
                     </Box>
                     <Box bg="gray.50" p={4} borderRadius="md" border="1px solid" borderColor="gray.200">
@@ -754,7 +781,7 @@ const PatientBooking = () => {
                           >
                             {doctors.map((doc, idx) => (
                               <option key={idx} value={doc.username}>
-                                {doc.display_name} ({doc.department})
+                                {toTitleCase(doc.display_name)} ({doc.department})
                               </option>
                             ))}
                           </Select>
@@ -802,10 +829,10 @@ const PatientBooking = () => {
                             {alternativeDoctor && (
                               <Box mt={3} ml={7}>
                                 <Text fontSize="sm" mb={2} color="orange.800">
-                                  However, <strong>{alternativeDoctor.display_name}</strong> is available in the {alternativeDoctor.department} department today.
+                                  However, <strong>{toTitleCase(alternativeDoctor.display_name)}</strong> is available in the {alternativeDoctor.department} department today.
                                 </Text>
                                 <Button size="sm" colorScheme="orange" onClick={handleSwitchAlternative}>
-                                  Switch to {alternativeDoctor.display_name}
+                                  Switch to {toTitleCase(alternativeDoctor.display_name)}
                                 </Button>
                               </Box>
                             )}
@@ -863,7 +890,7 @@ const PatientBooking = () => {
                             <VStack align="stretch" spacing={4}>
                               {doctors.map((doc, idx) => (
                                 <Box key={idx} borderBottom="1px solid" borderColor="gray.100" pb={3}>
-                                  <Text fontWeight="bold" color="gray.700">{doc.display_name} ({doc.department})</Text>
+                                  <Text fontWeight="bold" color="gray.700">{toTitleCase(doc.display_name)} ({doc.department})</Text>
                                   {doc.schedule && doc.schedule.length > 0 ? (
                                     doc.schedule.map((shift, s_idx) => (
                                       <Text key={s_idx} fontSize="sm" color="gray.600">
@@ -937,6 +964,39 @@ const PatientBooking = () => {
             <Button variant="ghost" onClick={() => setShowFutureBookingWarning(false)}>Cancel</Button>
             <Button colorScheme="orange" ml={3} onClick={handleProceedWithFutureBooking}>
               Proceed
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Warning Modal for Active Appointments */}
+      <Modal isOpen={showWarningModal} onClose={() => setShowWarningModal(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(3px)" />
+        <ModalContent>
+          <ModalHeader color="orange.600">Active Appointments Detected</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack spacing={4} align="stretch">
+              <Text>You already have an active appointment with the following doctor(s):</Text>
+              <VStack align="stretch" pl={4} spacing={2}>
+                {activeAppointments.map((appt, idx) => (
+                  <Text key={idx} fontWeight="bold" color="gray.700">
+                    • Dr. {toTitleCase(appt.doctor_name)} (Waiting)
+                  </Text>
+                ))}
+              </VStack>
+              <Text mt={2}>
+                Are you sure you want to proceed with booking another appointment with <b>Dr. {toTitleCase(doctors.find(d => d.username === bookingData.doctor_username)?.display_name || bookingData.doctor_username)}</b>?
+              </Text>
+            </VStack>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={() => setShowWarningModal(false)}>
+              Cancel
+            </Button>
+            <Button colorScheme="orange" onClick={proceedWithBooking} isLoading={bookingLoading}>
+              Yes, Proceed
             </Button>
           </ModalFooter>
         </ModalContent>

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, asdict, field
 from typing import Optional
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 
 @dataclass
 class Patient:
@@ -34,7 +34,7 @@ class Visit:
     doctor_username: str
     status: str = "upcoming"
     time: Optional[str] = None
-    booked_at: datetime = field(default_factory=datetime.now)
+    booked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     prescriptions: list = field(default_factory=list)
     lab_tests: list = field(default_factory=list)
     lab_reports: list = field(default_factory=list)
@@ -113,7 +113,7 @@ class Medicine:
     expiry_date: Optional[datetime] = None       # Expiry date of the medicine
     batch_number: Optional[str] = None           # Batch or lot number for tracking
     storage_conditions: Optional[str] = None     # Storage conditions (e.g., room temperature, refrigerated)
-    date_added: datetime = field(default_factory=datetime.now)
+    date_added: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict:
         med_dict = asdict(self)
