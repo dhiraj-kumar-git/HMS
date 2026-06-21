@@ -148,7 +148,7 @@ def submit_lab_results(institute_id, results):
 
 def load_lab_tests_from_config():
     try:
-        with open(os.path.join(os.path.dirname(__file__), "data", "labtests_config.json"), "r") as f:
+        with open(os.path.join(os.path.dirname(__file__), "..", "..", "data", "labtests_config.json"), "r") as f:
             return json.load(f)
     except Exception as e:
         import traceback; traceback.print_exc()

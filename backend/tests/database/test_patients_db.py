@@ -141,6 +141,12 @@ def test_get_active_pending_patients(mocker):
     mock_visits.aggregate.return_value = [{"patient_info": {"institute_id": "123", "_id": "1", "patient_visits": []}}]
     res = get_active_pending_patients()
     assert len(res) == 1
+    
+    # Verify that the pipeline filters for "status": "completed"
+    pipeline = mock_visits.aggregate.call_args[0][0]
+    match_stage = pipeline[0]["$match"]
+    assert match_stage.get("status") == "completed"
+    assert match_stage.get("invoice_no") == {"$exists": False}
 
 def test_bulk_register_patients(mocker):
     mocker.patch("app.database.patients.register_patient", return_value="123")

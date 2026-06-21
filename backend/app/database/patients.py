@@ -313,7 +313,12 @@ def get_patient_by_id(institute_id):
 # Retrieve family members by PSRN ID
 def get_family_by_psrn(psrn_id):
     pipeline = [
-        {"$match": {"psrn_id": psrn_id}},
+        {"$match": {
+            "$or": [
+                {"institute_id": psrn_id},
+                {"psrn_id": psrn_id}
+            ]
+        }},
         {
             "$lookup": {
                 "from": "visits",
@@ -565,6 +570,7 @@ def get_active_pending_patients():
     """
     pipeline = [
         {"$match": {
+            "status": "completed",
             "invoice_no": {"$exists": False},
             "$or": [
                 {"prescriptions.0": {"$exists": True}},
@@ -838,6 +844,7 @@ def bulk_register_staff_and_dependants(rows, admin_username):
             patient_data = _validate_and_parse_bulk_row(row_mapped)
             patient_data["relation"] = "Self"
             patient_data["imported_by"] = admin_username
+            patient_data["psrn_id"] = raw_id
             
             result_id = register_patient(patient_data)
             if result_id is None:
@@ -889,7 +896,7 @@ def bulk_register_staff_and_dependants(rows, admin_username):
             row_mapped["institute_id"] = dep_id
             patient_data = _validate_and_parse_bulk_row(row_mapped)
             patient_data["imported_by"] = admin_username
-            patient_data["primary_member_id"] = raw_psrn
+            patient_data["psrn_id"] = raw_psrn
             patient_data["relation"] = relation
             
             # Additional validation specific to dependants can go here

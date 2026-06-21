@@ -182,7 +182,7 @@ def load_lab_tests_from_config():
     try:
         # Get absolute path to the current file's directory
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(base_dir, "data", "labtests_config.json")
+        config_path = os.path.join(base_dir, "..", "..", "data", "labtests_config.json")
         with open(config_path, "r", encoding="utf-8") as f:
             lab_tests = json.load(f)
         return lab_tests
@@ -193,7 +193,7 @@ def load_lab_tests_from_config():
 def load_medicines_from_config():
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
-        config_path = os.path.join(base_dir, "data", "medicines_config.json")
+        config_path = os.path.join(base_dir, "..", "..", "data", "medicines_config.json")
         with open(config_path, "r", encoding="utf-8") as f:
             medicines = json.load(f)
         return medicines

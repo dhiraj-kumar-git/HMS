@@ -191,7 +191,7 @@ describe('PatientBooking Component', () => {
     });
   });
 
-  it('handles family member selection', async () => {
+  it('handles family member selection for dependant', async () => {
     axios.post.mockResolvedValueOnce({
       data: { institute_id: '12345', name: 'John Doe', psrn_id: 'P-123', appointments: [] }
     });
@@ -219,6 +219,40 @@ describe('PatientBooking Component', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    });
+  });
+
+  it('handles family member selection for faculty', async () => {
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: 'F-9999', name: 'Faculty Member', patient_type: 'Faculty', appointments: [] }
+    });
+    // Mock family members
+    axios.get.mockResolvedValueOnce({
+      data: [
+        { institute_id: 'F-9999', name: 'Faculty Member', relation: 'Self' },
+        { institute_id: 'F-9999-SPOUSE', name: 'Faculty Spouse', relation: 'Spouse' }
+      ]
+    });
+    // Mock doctors
+    axios.get.mockResolvedValueOnce({ data: [] });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: 'F-9999' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Faculty Member')).toBeInTheDocument();
+    });
+
+    // Verify API call used institute_id
+    expect(axios.get).toHaveBeenCalledWith(expect.stringContaining('/api/family/F-9999'));
+
+    // Select family member
+    const familySelect = screen.getByRole('combobox', { name: /Who is this appointment for\?/i });
+    fireEvent.change(familySelect, { target: { value: 'F-9999-SPOUSE' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Faculty Spouse')).toBeInTheDocument();
     });
   });
 
@@ -313,4 +347,110 @@ describe('PatientBooking Component', () => {
       expect(screen.getByText(/Verification Failed/i)).toBeInTheDocument();
     });
   });
+
+  it('disables full time slots', async () => {
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: '12345', name: 'John Doe', appointments: [] }
+    });
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/api/public/doctors')) {
+        return Promise.resolve({
+          data: [
+            {
+              username: 'doc1',
+              display_name: 'Dr. Smith',
+              department: 'General',
+              schedule: [{ duty_days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+            }
+          ]
+        });
+      }
+      if (url.includes('/api/public/doctor-availability')) {
+        return Promise.resolve({
+          data: { full_slots: ['09:10'] }
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // Go to future booking flow
+    fireEvent.click(screen.getByRole('button', { name: /Schedule for a Later Date/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Advanced Booking/i)).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Proceed/i, hidden: true }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Advanced Booking/i)).toBeInTheDocument();
+    });
+
+    // Select the doctor
+    fireEvent.change(screen.getByLabelText(/Select Doctor/i), { target: { value: 'doc1' } });
+    
+    // Choose date
+    fireEvent.change(screen.getByLabelText(/Appointment Date/i), { target: { value: '2026-06-22' } });
+
+    // "09:10 AM" option should be disabled and have (Full)
+    const fullOption = await screen.findByText(/9:10 AM \(Full\)/i);
+    expect(fullOption).toBeDisabled();
+    
+    const openOption = await screen.findByText(/^9:20 AM$/i);
+    expect(openOption).not.toBeDisabled();
+  });
+
+  it('blocks booking when patient has 3 or more active appointments', async () => {
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: '12345', name: 'John Doe', appointments: [] }
+    });
+    axios.get.mockResolvedValue({
+      data: [
+        {
+          username: 'doc1',
+          display_name: 'Dr. Smith',
+          department: 'General',
+          schedule: [{ duty_days: ['Monday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+        }
+      ]
+    });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // Quick Book
+    fireEvent.click(screen.getByRole('button', { name: /Book Now/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Immediate Booking Confirmation/i)).toBeInTheDocument();
+    });
+
+    // Mock 3 active appointments
+    axios.get.mockResolvedValue({
+      data: { activeAppointments: [
+        { id: 1, time: '2025-01-01T10:00:00', doctor_name: 'Dr. Smith' },
+        { id: 2, time: '2025-01-02T10:00:00', doctor_name: 'Dr. Smith' },
+        { id: 3, time: '2025-01-03T10:00:00', doctor_name: 'Dr. Smith' }
+      ] }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirm & Book/i }));
+
+    // Should show error toast directly
+    await waitFor(() => {
+      expect(screen.getByText(/Appointment Limit Reached/i)).toBeInTheDocument();
+      expect(screen.getByText(/You have reached the maximum limit of 3 active appointments/i)).toBeInTheDocument();
+    });
+  }, 10000);
 });
