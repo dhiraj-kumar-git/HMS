@@ -21,6 +21,7 @@ import {
 } from "@chakra-ui/react";
 import { FiPlus, FiTrash2 } from "react-icons/fi";
 import axios from "axios";
+import CryptoJS from "crypto-js";
 import BASE_URL from '../../utils/Config';
 
 const DEFAULT_SCHEDULE = {
@@ -41,10 +42,7 @@ export default function CreateUser() {
   const toast = useToast();
 
   const hashPassword = async (password) => {
-    const msgUint8 = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
   };
 
   const handleAddUser = async () => {

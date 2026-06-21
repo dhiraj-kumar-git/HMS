@@ -17,6 +17,7 @@ import {
 import { FaLock, FaUser } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import CryptoJS from "crypto-js";
 import BASE_URL from '../../utils/Config';
 
 import bitsLogo from "../../assets/bits-logo.png";
@@ -31,10 +32,7 @@ function Login({ onLogin }) {
   const navigate = useNavigate();
 
   const hashPassword = async (password) => {
-    const msgUint8 = new TextEncoder().encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    return CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
   };
 
   const handleLogin = async () => {
