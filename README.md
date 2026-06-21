@@ -64,16 +64,16 @@ npm run start
 
 ## Docker Deployment (Production / Standardized Setup)
 
-If you strictly want to run the application identical to a server schema without actively modifying the underlying code framework, utilize Docker Compose.
+The application utilizes an **Nginx Reverse Proxy** architecture. This means you do **not** need to configure any frontend environment variables for the API to connect. It is zero-config and works out-of-the-box anywhere.
 
-**Notice:** Ensure you have legally generated the `.env` file explicitly in `/backend` using the steps above.
+**Notice:** Ensure you have your `.env` file explicitly in `/backend` using the steps above.
 
 **Build and Run the Orchestrator:**
-Execute this command at the root folder of the workspace.
+Execute this command at the root folder of the workspace on your server or local machine:
 ```bash
-docker compose up -d --build
+docker compose up -d --build --force-recreate
 ```
-This efficiently mounts the python logic onto `gunicorn`, compiles the React bundles via `node` multi-staging, and physically deploys those assets live via `Nginx` onto `http://localhost:3000`.
+This efficiently mounts the python logic onto `gunicorn`, compiles the React bundles via `node` multi-staging, and physically deploys those assets live via `Nginx` onto port `3000`. All frontend API traffic is automatically proxy-routed internally over Docker's network.
 
 **Monitoring system logic:**
 Because the stack launches detached in the background, you can review live server hit logs (both Python and Nginx) instantly by typing:
