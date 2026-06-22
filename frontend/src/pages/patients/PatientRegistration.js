@@ -125,6 +125,7 @@ const PatientRegistration = () => {
                   placeholder="e.g. Dhiraj Kumar"
                   value={formData.name}
                   onChange={handleChange}
+                  textTransform="capitalize"
                   focusBorderColor="blue.500"
                 />
               </FormControl>

@@ -26,6 +26,9 @@ def get_all_patients(skip=0, limit=0):
     return result
 
 def register_patient(patient_data):
+    if "name" in patient_data and patient_data["name"]:
+        patient_data["name"] = patient_data["name"].title()
+        
     institute_id = patient_data.get("institute_id")
     if not institute_id:
         raise ValueError("Institute ID is required for registration")
@@ -94,13 +97,13 @@ def archive_patient(institute_id):
     return result.matched_count > 0
 
 
-def book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
+def book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status="booked"):
     # Create the Visit
     v = Visit(
         visit_id=str(uuid.uuid4()),
         institute_id=institute_id,
         doctor_username=doctor_username,
-        status="upcoming",
+        status=status,
         time=appointment_time
     )
     visit_dict = v.to_dict()
@@ -118,7 +121,7 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
             }
         }
     )
-    return result.modified_count > 0
+    return result.matched_count > 0
 
 
 def _map_aggregated_patient(patient, active_doctor_username=None):
@@ -235,8 +238,8 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
         else:
             v_lab = "none"
             
-        if visit_status == "upcoming":
-            v_workflow = "active"
+        if visit_status in ["upcoming", "booked", "confirmed", "checked_in"]:
+            v_workflow = visit_status
         elif visit_status == "consultation":
             if has_labs and v_lab == "pending":
                 v_workflow = "lab test pending"
@@ -271,6 +274,59 @@ def store_patient_otp(institute_id, otp):
         {"$set": {"otp": otp, "otp_expires": expires_at}}
     )
     return result.modified_count > 0
+
+def get_receptionist_queue(start_date=None, end_date=None, status_filter=None):
+    query = {}
+    
+    # Status filtering
+    if status_filter and status_filter.lower() != 'all':
+        if status_filter.lower() == 'active':
+            query["status"] = {"$in": ["booked", "confirmed"]}
+        else:
+            query["status"] = status_filter.lower()
+    elif not status_filter:
+        # Default to active statuses
+        query["status"] = {"$in": ["booked", "confirmed"]}
+
+    # Date filtering (time field)
+    if start_date or end_date:
+        time_query = {}
+        if start_date:
+            # Match dates greater than or equal to start_date
+            time_query["$gte"] = f"{start_date}T00:00:00"
+        if end_date:
+            # Match dates less than or equal to end_date
+            time_query["$lte"] = f"{end_date}T23:59:59"
+        if time_query:
+            query["time"] = time_query
+
+    pipeline = [
+        {"$match": query},
+        {"$lookup": {
+            "from": "patients",
+            "localField": "institute_id",
+            "foreignField": "institute_id",
+            "as": "patient_info"
+        }},
+        {"$unwind": {"path": "$patient_info", "preserveNullAndEmptyArrays": True}},
+        {"$project": {
+            "_id": 0,
+            "visit_id": 1,
+            "institute_id": 1,
+            "doctor_username": 1,
+            "doctor_name": 1,
+            "time": 1,
+            "status": 1,
+            "name": "$patient_info.name",
+            "contact_no": "$patient_info.contact_no"
+        }},
+        {"$sort": {"time": 1}}
+    ]
+    return list(visits.aggregate(pipeline))
+
+def update_appointment_status(visit_id, status):
+    res = visits.update_one({"visit_id": visit_id}, {"$set": {"status": status}})
+    return res.modified_count > 0
 
 
 def verify_patient_otp(institute_id, otp):
@@ -346,7 +402,7 @@ def get_patients_by_doctor(doctor_username):
             "patient_visits": {
                 "$elemMatch": {
                     "doctor_username": doctor_username,
-                    "status": {"$in": ["upcoming", "consultation"]}
+                    "status": {"$in": ["confirmed", "checked_in", "consultation"]}
                 }
             }
         }},
@@ -361,10 +417,9 @@ def get_patients_by_doctor(doctor_username):
             result.append(assembled)
     return result
 
-# Helper to get the active visit ID for a patient
 def _get_active_visit_id(institute_id, doctor_username=None):
-    # Find the most recent active visit (can be upcoming or in consultation)
-    query = {"institute_id": institute_id, "status": {"$in": ["upcoming", "consultation"]}}
+    # Find the most recent active visit (can be upcoming, booked, confirmed, checked_in, or in consultation)
+    query = {"institute_id": institute_id, "status": {"$in": ["upcoming", "booked", "confirmed", "checked_in", "consultation"]}}
     if doctor_username:
         query["doctor_username"] = doctor_username
         

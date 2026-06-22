@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Heading,
@@ -39,16 +40,25 @@ import {
   PopoverBody,
 } from '@chakra-ui/react';
 import { FiSearch, FiRefreshCw, FiTrash2, FiChevronDown, FiChevronUp, FiActivity, FiUploadCloud, FiFileText, FiDownload, FiAlertCircle, FiFile, FiHelpCircle, FiInfo, FiChevronRight } from 'react-icons/fi';
+import { Select } from '@chakra-ui/react';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import BookAppointmentModal from '../../components/BookAppointmentModal';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
+  const [doctorFilter, setDoctorFilter] = useState('');
+  const navigate = useNavigate();
+  const userRole = localStorage.getItem('role');
   const toast = useToast();
   const { isOpen: isGuideOpen, onOpen: onGuideOpen, onClose: onGuideClose } = useDisclosure();
+  
+  const [selectedPatientForBooking, setSelectedPatientForBooking] = useState(null);
+  const { isOpen: isBookingOpen, onOpen: onBookingOpen, onClose: onBookingClose } = useDisclosure();
+  
   // --- Pagination state ---
   const [currentPage, setCurrentPage] = useState(1);
   const patientsPerPage = 10;
@@ -86,12 +96,16 @@ export default function PatientsList() {
     }
   };
 
-  // Filter by institute_id, name, or contact_no
-  const filtered = patients.filter(p =>
-    (p.institute_id && p.institute_id.toString().toLowerCase().includes(search.toLowerCase())) ||
-    (p.name && p.name.toLowerCase().includes(search.toLowerCase())) ||
-    (p.contact_no && p.contact_no.includes(search))
-  );
+  const uniqueDoctors = Array.from(new Set(patients.map(p => p.doctor_name).filter(Boolean))).sort();
+
+  // Filter by institute_id, name, or contact_no, and doctor
+  const filtered = patients.filter(p => {
+    const matchesSearch = (p.institute_id && p.institute_id.toString().toLowerCase().includes(search.toLowerCase())) ||
+      (p.name && p.name.toLowerCase().includes(search.toLowerCase())) ||
+      (p.contact_no && p.contact_no.includes(search));
+    const matchesDoctor = doctorFilter ? p.doctor_name === doctorFilter : true;
+    return matchesSearch && matchesDoctor;
+  });
 
   // Pagination logic
   useEffect(() => {
@@ -131,13 +145,25 @@ export default function PatientsList() {
       </Flex>
 
       {/* Search Bar */}
-      <Flex mb="4">
+      <Flex mb="4" gap="4">
         <Input
           placeholder="Search by Institute ID, name, or contact..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           bg="gray.50"
+          flex="1"
         />
+        <Select 
+          placeholder="All Doctors" 
+          w="250px" 
+          bg="gray.50"
+          value={doctorFilter}
+          onChange={(e) => setDoctorFilter(e.target.value)}
+        >
+          {uniqueDoctors.map(doc => (
+            <option key={doc} value={doc}>{doc}</option>
+          ))}
+        </Select>
       </Flex>
 
       {/* Patients Table */}
@@ -149,11 +175,11 @@ export default function PatientsList() {
               <Th>Institute ID</Th>
               <Th>Name</Th>
               <Th>Contact No</Th>
+              <Th>Doctor</Th>
               <Th>Age</Th>
               <Th>Patient Type</Th>
               <Th>Status</Th>
-              <Th>Bill</Th>
-              <Th>Lab</Th>
+              <Th>Action</Th>
             </Tr>
           </Thead>
           <Tbody>
@@ -174,6 +200,7 @@ export default function PatientsList() {
                     <Td>{p.institute_id}</Td>
                     <Td>{toTitleCase(p.name)}</Td>
                     <Td>{p.contact_no}</Td>
+                    <Td>{p.doctor_name ? toTitleCase(p.doctor_name) : 'Unassigned'}</Td>
                     <Td>{p.age ?? '-'}</Td>
                     <Td>
                       <Badge fontSize="10px" colorScheme={p.patient_type === 'Student' ? 'blue' : p.patient_type === 'Faculty' ? 'purple' : 'gray'}>
@@ -195,22 +222,37 @@ export default function PatientsList() {
                       </Badge>
                     </Td>
                     <Td>
-                      <Badge
+                      <Button
+                        size="xs"
+                        colorScheme="brand"
                         variant="outline"
-                        fontSize="10px"
-                        colorScheme={p.bill_status === 'paid' ? 'green' : p.bill_status === 'pending' ? 'red' : 'gray'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (userRole === 'doctor') {
+                            navigate(`/doctor/patient-history/${p.institute_id}`);
+                          } else if (userRole === 'receptionist') {
+                            navigate(`/receptionist/patient-history/${p.institute_id}`);
+                          } else {
+                            toast({ title: 'Feature only available for doctors and receptionists.', status: 'info' });
+                          }
+                        }}
                       >
-                        {p.bill_status}
-                      </Badge>
-                    </Td>
-                    <Td>
-                      <Badge
-                        variant="outline"
-                        fontSize="10px"
-                        colorScheme={p.lab_status === 'completed' ? 'green' : p.lab_status === 'pending' ? 'blue' : p.lab_status === 'active' ? 'orange' : 'gray'}
-                      >
-                        {p.lab_status}
-                      </Badge>
+                        View Profile
+                      </Button>
+                      {userRole === 'receptionist' && (
+                        <Button
+                          size="xs"
+                          colorScheme="green"
+                          ml={2}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedPatientForBooking(p);
+                            onBookingOpen();
+                          }}
+                        >
+                          Book Appt
+                        </Button>
+                      )}
                     </Td>
                   </Tr>
                   {isExpanded && hasAppointments && (
@@ -318,6 +360,14 @@ export default function PatientsList() {
 
       {/* ===== Status Guide Modal ===== */}
       <StatusGuideModal isOpen={isGuideOpen} onClose={onGuideClose} />
+      
+      {/* ===== Book Appointment Modal ===== */}
+      <BookAppointmentModal 
+        isOpen={isBookingOpen} 
+        onClose={onBookingClose} 
+        patient={selectedPatientForBooking} 
+        onSuccess={fetchPatients} 
+      />
     </Box>
   );
 }

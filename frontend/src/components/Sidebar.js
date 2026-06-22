@@ -10,7 +10,9 @@ import {
   FiUsers,
   FiCalendar,
   FiFileText,
-  FiUpload
+  FiUpload,
+  FiList,
+  FiClock
 } from "react-icons/fi";
 import bitsLogo from "../assets/bits-logo.png";
 
@@ -135,6 +137,22 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
           <SidebarItem icon={FiHome} label="Lab Dashboard" to="/lab" />
           <SidebarItem icon={FiFileText} label="Patient Lab Reports" to="/lab/all-reports" />
           <SidebarItem icon={FiUpload} label="Upload Lab Reports" to="/lab/upload" />
+        </>
+      )}
+      {isLoggedIn && role === "receptionist" && (
+        <>
+          <SidebarItem icon={FiList} label="Today's Appointments" to="/receptionist" />
+          <SidebarItem icon={FiClock} label="Appointment History" to="/receptionist/history" />
+          <SidebarItem
+            icon={FiUserPlus}
+            label="Register Patient"
+            to="/receptionist/register-patient"
+          />
+          <SidebarItem
+            icon={FiUsers}
+            label="Patient Directory"
+            to="/receptionist/patient-directory"
+          />
         </>
       )}
     </Box>

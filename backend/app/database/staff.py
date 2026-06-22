@@ -5,6 +5,10 @@ def create_user(username, password, role, display_name, department=None, schedul
     existing_user = users.find_one({"username": username})
     if not existing_user:
         hashed_password = hash_password(password)
+        
+        if display_name:
+            display_name = display_name.title()
+            
         user = User(
             username=username,
             password=hashed_password.decode('utf-8'),

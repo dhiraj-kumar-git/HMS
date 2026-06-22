@@ -177,3 +177,48 @@ def test_s3_view_url(client, mocker, app):
     
     res = client.post("/s3/view-url", headers={"Authorization": f"Bearer {token}"}, json={"s3_key": "k"})
     assert res.status_code == 200
+
+def test_receptionist_get_queue(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    mock_get_queue = mocker.patch("database.get_receptionist_queue", return_value=[{"visit_id": "v1", "status": "booked"}])
+    res = client.get("/api/receptionist/queue?start_date=2026-06-20&end_date=2026-06-25&status=all", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert len(data) == 1
+    assert data[0]["status"] == "booked"
+    mock_get_queue.assert_called_once_with(start_date="2026-06-20", end_date="2026-06-25", status_filter="all")
+
+def test_receptionist_update_appointment_status(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    mocker.patch("database.update_appointment_status", return_value=True)
+    res = client.post("/api/receptionist/appointment/v1/status", headers={"Authorization": f"Bearer {token}"}, json={"status": "confirmed"})
+    assert res.status_code == 200
+    assert json.loads(res.data)["message"] == "Appointment status updated"
+
+def test_receptionist_book_appointment(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    
+    # Mock validate_appointment_slot to return True (is_valid) and None (error)
+    mocker.patch("app.routes.public_routes.validate_appointment_slot", return_value=(True, None))
+    # Mock get_patient_by_id to return a valid active patient
+    mocker.patch("database.get_patient_by_id", return_value={"institute_id": "f20250001", "account_status": "active"})
+    # Mock doctor user retrieval
+    mocker.patch("database.users.find_one", return_value={"username": "doc1", "display_name": "Dr. Smith", "role": "doctor"})
+    # Mock book_appointment to return True
+    mocker.patch("database.book_appointment", return_value=True)
+
+    data = {
+        "institute_id": "f20250001",
+        "doctor_username": "doc1",
+        "time": "2026-06-25T10:00"
+    }
+
+    res = client.post("/api/receptionist/book-appointment", headers={"Authorization": f"Bearer {token}"}, json=data)
+    assert res.status_code == 200
+    assert "Appointment booked and confirmed successfully" in res.json["message"]
+import json
+from unittest.mock import MagicMock
+from flask_jwt_extended import create_access_token

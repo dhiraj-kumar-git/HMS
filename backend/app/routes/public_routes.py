@@ -303,7 +303,7 @@ def public_doctor_availability(doctor_username):
     appointments_on_date = list(database.visits.find({
         "doctor_username": doctor_username,
         "time": {"$regex": f"^{date_str}[T ]"},
-        "status": {"$in": ["upcoming", "consultation", "Upcoming", "Consultation"]}
+        "status": {"$in": ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]}
     }))
     
     time_counts = {}
@@ -330,29 +330,17 @@ def public_doctor_availability(doctor_username):
                 
     return jsonify({"full_slots": full_slots}), 200
 
-@public_bp.route('/api/public/book-appointment', methods=['POST'])
-def public_book_appointment():
-    data = request.json
-    institute_id = data.get("institute_id")
-    doctor_username = data.get("doctor_username")
-    appointment_time = data.get("time") 
-    force = data.get("force", False)
+def validate_appointment_slot(institute_id, doctor_username, appointment_time, force):
+    active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
     
-    if not all([institute_id, doctor_username, appointment_time]):
-        return jsonify({"error": "Missing required fields"}), 400
-        
-    patient = database.get_patient_by_id(institute_id)
-    if not patient or patient.get("account_status") == "archived":
-        return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
-        
     # PATIENT LIMIT VALIDATION
     patient_active_count = database.visits.count_documents({
         "institute_id": institute_id,
-        "status": {"$in": ["upcoming", "consultation", "Upcoming", "Consultation"]}
+        "status": {"$in": active_statuses}
     })
     
     if patient_active_count >= 3:
-        return jsonify({"error": "You have reached the maximum limit of 3 active appointments. Please complete all previous appointments with the doctor before booking another appointment."}), 403
+        return False, (jsonify({"error": "You have reached the maximum limit of 3 active appointments. Please complete all previous appointments with the doctor before booking another appointment."}), 403)
 
     # CAPACITY VALIDATION
     try:
@@ -365,7 +353,7 @@ def public_book_appointment():
     active_count = database.visits.count_documents({
         "doctor_username": doctor_username,
         "time": appointment_time,
-        "status": {"$in": ["upcoming", "consultation", "Upcoming", "Consultation"]}
+        "status": {"$in": active_statuses}
     })
     
     if active_count >= 3:
@@ -376,7 +364,7 @@ def public_book_appointment():
         appointments_on_date = list(database.visits.find({
             "doctor_username": doctor_username,
             "time": {"$regex": f"^{date_str}[T ]"},
-            "status": {"$in": ["upcoming", "consultation", "Upcoming", "Consultation"]}
+            "status": {"$in": active_statuses}
         }))
         
         time_counts = {}
@@ -413,17 +401,38 @@ def public_book_appointment():
                 has_available_slot = True
                 
             if not has_available_slot:
-                return jsonify({"error": "Doctor is not available for appointments on the selected day as all appointment slots are fully booked."}), 409
+                return False, (jsonify({"error": "Doctor is not available for appointments on the selected day as all appointment slots are fully booked."}), 409)
         except Exception as e:
             print("Error calculating daily schedule availability:", str(e))
             
-        return jsonify({"error": "The selected appointment slot is fully booked and is no longer available."}), 409
+        return False, (jsonify({"error": "The selected appointment slot is fully booked and is no longer available."}), 409)
         
     elif active_count in [1, 2] and not force:
-        return jsonify({
+        return False, (jsonify({
             "warning": "This slot is already booked by another patient but still has remaining availability.",
             "requires_confirmation": True
-        }), 409
+        }), 409)
+
+    return True, None
+
+@public_bp.route('/api/public/book-appointment', methods=['POST'])
+def public_book_appointment():
+    data = request.json
+    institute_id = data.get("institute_id")
+    doctor_username = data.get("doctor_username")
+    appointment_time = data.get("time") 
+    force = data.get("force", False)
+    
+    if not all([institute_id, doctor_username, appointment_time]):
+        return jsonify({"error": "Missing required fields"}), 400
+        
+    patient = database.get_patient_by_id(institute_id)
+    if not patient or patient.get("account_status") == "archived":
+        return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
+        
+    is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force)
+    if not is_valid:
+        return error_response
 
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
     doctor_name = doctor.get("display_name") if doctor else doctor_username
