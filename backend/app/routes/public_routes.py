@@ -330,7 +330,7 @@ def public_doctor_availability(doctor_username):
                 
     return jsonify({"full_slots": full_slots}), 200
 
-def validate_appointment_slot(institute_id, doctor_username, appointment_time, force):
+def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
     active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
     
     # PATIENT LIMIT VALIDATION
@@ -408,10 +408,16 @@ def validate_appointment_slot(institute_id, doctor_username, appointment_time, f
         return False, (jsonify({"error": "The selected appointment slot is fully booked and is no longer available."}), 409)
         
     elif active_count in [1, 2] and not force:
-        return False, (jsonify({
-            "warning": "This slot is already booked by another patient but still has remaining availability.",
-            "requires_confirmation": True
-        }), 409)
+        if booked_by == "receptionist":
+            return False, (jsonify({
+                "warning": "Note: This slot already has another patient booked, but there is availability. Continue?",
+                "requires_confirmation": True
+            }), 409)
+        else:
+            return False, (jsonify({
+                "warning": "This slot is already booked by another patient but still has remaining availability.",
+                "requires_confirmation": True
+            }), 409)
 
     return True, None
 
@@ -422,6 +428,7 @@ def public_book_appointment():
     doctor_username = data.get("doctor_username")
     appointment_time = data.get("time") 
     force = data.get("force", False)
+    booked_by = data.get("booked_by", "patient")
     
     if not all([institute_id, doctor_username, appointment_time]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -430,14 +437,16 @@ def public_book_appointment():
     if not patient or patient.get("account_status") == "archived":
         return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
         
-    is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force)
+    is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by)
     if not is_valid:
         return error_response
 
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
     doctor_name = doctor.get("display_name") if doctor else doctor_username
     
-    if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
+    initial_status = "confirmed" if booked_by == "receptionist" else "booked"
+    
+    if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status=initial_status, booked_by=booked_by):
         return jsonify({"message": "Appointment booked successfully"}), 200
     return jsonify({"error": "Failed to book appointment"}), 400
 

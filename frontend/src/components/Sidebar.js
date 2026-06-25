@@ -141,7 +141,7 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
       )}
       {isLoggedIn && role === "receptionist" && (
         <>
-          <SidebarItem icon={FiList} label="Today's Appointments" to="/receptionist" />
+          <SidebarItem icon={FiList} label="Booked Appointments" to="/receptionist" />
           <SidebarItem icon={FiClock} label="Appointment History" to="/receptionist/history" />
           <SidebarItem
             icon={FiUserPlus}

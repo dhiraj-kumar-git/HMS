@@ -97,13 +97,14 @@ def archive_patient(institute_id):
     return result.matched_count > 0
 
 
-def book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status="booked"):
+def book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status="booked", booked_by="patient"):
     # Create the Visit
     v = Visit(
         visit_id=str(uuid.uuid4()),
         institute_id=institute_id,
         doctor_username=doctor_username,
         status=status,
+        booked_by=booked_by,
         time=appointment_time
     )
     visit_dict = v.to_dict()
@@ -318,8 +319,11 @@ def get_receptionist_queue(start_date=None, end_date=None, status_filter=None):
             "time": 1,
             "status": 1,
             "name": "$patient_info.name",
-            "contact_no": "$patient_info.contact_no"
+            "contact_no": "$patient_info.contact_no",
+            "gender": "$patient_info.gender",
+            "date_of_birth": "$patient_info.date_of_birth"
         }},
+        COMPUTE_AGE_STAGE,
         {"$sort": {"time": 1}}
     ]
     return list(visits.aggregate(pipeline))

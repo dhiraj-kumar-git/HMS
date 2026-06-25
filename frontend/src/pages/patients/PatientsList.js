@@ -38,6 +38,7 @@ import {
   PopoverContent,
   PopoverArrow,
   PopoverBody,
+  Avatar
 } from '@chakra-ui/react';
 import { FiSearch, FiRefreshCw, FiTrash2, FiChevronDown, FiChevronUp, FiActivity, FiUploadCloud, FiFileText, FiDownload, FiAlertCircle, FiFile, FiHelpCircle, FiInfo, FiChevronRight } from 'react-icons/fi';
 import { Select } from '@chakra-ui/react';
@@ -45,7 +46,6 @@ import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
-import BookAppointmentModal from '../../components/BookAppointmentModal';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
@@ -56,9 +56,7 @@ export default function PatientsList() {
   const toast = useToast();
   const { isOpen: isGuideOpen, onOpen: onGuideOpen, onClose: onGuideClose } = useDisclosure();
   
-  const [selectedPatientForBooking, setSelectedPatientForBooking] = useState(null);
-  const { isOpen: isBookingOpen, onOpen: onBookingOpen, onClose: onBookingClose } = useDisclosure();
-  
+
   // --- Pagination state ---
   const [currentPage, setCurrentPage] = useState(1);
   const patientsPerPage = 10;
@@ -173,10 +171,8 @@ export default function PatientsList() {
             <Tr>
               <Th w="40px"></Th>
               <Th>Institute ID</Th>
-              <Th>Name</Th>
+              <Th>Patient Info</Th>
               <Th>Contact No</Th>
-              <Th>Doctor</Th>
-              <Th>Age</Th>
               <Th>Patient Type</Th>
               <Th>Status</Th>
               <Th>Action</Th>
@@ -198,10 +194,19 @@ export default function PatientsList() {
                       )}
                     </Td>
                     <Td>{p.institute_id}</Td>
-                    <Td>{toTitleCase(p.name)}</Td>
+                    <Td>
+                      <Flex align="center" justify="flex-start">
+                        <Box textAlign="left">
+                          <Text fontWeight="bold">{toTitleCase(p.name)}</Text>
+                          {p.age && p.gender ? (
+                             <Text fontSize="sm" color="gray.500">{p.age} yrs • {p.gender}</Text>
+                          ) : (
+                             <Text fontSize="sm" color="gray.500">Info not available</Text>
+                          )}
+                        </Box>
+                      </Flex>
+                    </Td>
                     <Td>{p.contact_no}</Td>
-                    <Td>{p.doctor_name ? toTitleCase(p.doctor_name) : 'Unassigned'}</Td>
-                    <Td>{p.age ?? '-'}</Td>
                     <Td>
                       <Badge fontSize="10px" colorScheme={p.patient_type === 'Student' ? 'blue' : p.patient_type === 'Faculty' ? 'purple' : 'gray'}>
                         {p.patient_type}
@@ -222,23 +227,6 @@ export default function PatientsList() {
                       </Badge>
                     </Td>
                     <Td>
-                      <Button
-                        size="xs"
-                        colorScheme="brand"
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (userRole === 'doctor') {
-                            navigate(`/doctor/patient-history/${p.institute_id}`);
-                          } else if (userRole === 'receptionist') {
-                            navigate(`/receptionist/patient-history/${p.institute_id}`);
-                          } else {
-                            toast({ title: 'Feature only available for doctors and receptionists.', status: 'info' });
-                          }
-                        }}
-                      >
-                        View Profile
-                      </Button>
                       {userRole === 'receptionist' && (
                         <Button
                           size="xs"
@@ -246,11 +234,15 @@ export default function PatientsList() {
                           ml={2}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedPatientForBooking(p);
-                            onBookingOpen();
+                            navigate('/portal/book-appointment', {
+                              state: {
+                                skipOtp: true,
+                                verifiedPatientData: p
+                              }
+                            });
                           }}
                         >
-                          Book Appt
+                          Book
                         </Button>
                       )}
                     </Td>
@@ -360,14 +352,6 @@ export default function PatientsList() {
 
       {/* ===== Status Guide Modal ===== */}
       <StatusGuideModal isOpen={isGuideOpen} onClose={onGuideClose} />
-      
-      {/* ===== Book Appointment Modal ===== */}
-      <BookAppointmentModal 
-        isOpen={isBookingOpen} 
-        onClose={onBookingClose} 
-        patient={selectedPatientForBooking} 
-        onSuccess={fetchPatients} 
-      />
     </Box>
   );
 }

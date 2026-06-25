@@ -164,11 +164,16 @@ const PatientBooking = () => {
 
 
 
-  // Check if we came directly from registration
+  // Check if we came directly from registration or receptionist
   useEffect(() => {
-    if (location.state && location.state.autoFillInstituteId) {
-      setInstituteId(location.state.autoFillInstituteId);
-      handleVerify(location.state.autoFillInstituteId);
+    if (location.state) {
+      if (location.state.skipOtp && location.state.verifiedPatientData) {
+        setInstituteId(location.state.verifiedPatientData.institute_id);
+        setVerifiedAndCheckFamily(location.state.verifiedPatientData);
+      } else if (location.state.autoFillInstituteId) {
+        setInstituteId(location.state.autoFillInstituteId);
+        handleVerify(location.state.autoFillInstituteId);
+      }
     }
   }, [location]);
 
@@ -442,11 +447,14 @@ const PatientBooking = () => {
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
     try {
+      const isReceptionist = location.state?.skipOtp;
+      
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
         time: fullTime,
-        force: force
+        force: force,
+        booked_by: isReceptionist ? "receptionist" : "patient"
       });
 
       toast({
@@ -462,7 +470,13 @@ const PatientBooking = () => {
       setBookingData({ doctor_username: '', date: '', timeSlot: '' });
       setBookingFlow('dashboard');
       setIsRedirecting(true);
-      setTimeout(() => navigate('/portal'), 2000);
+      setTimeout(() => {
+        if (location.state?.skipOtp) {
+          navigate(-1);
+        } else {
+          navigate('/portal');
+        }
+      }, 2000);
 
     } catch (err) {
       if (err.response?.status === 409 && err.response?.data?.requires_confirmation) {
@@ -538,9 +552,15 @@ const PatientBooking = () => {
           variant="ghost"
           colorScheme="teal"
           mb={6}
-          onClick={() => navigate('/portal')}
+          onClick={() => {
+            if (location.state?.skipOtp) {
+              navigate(-1);
+            } else {
+              navigate('/portal');
+            }
+          }}
         >
-          Back to Portal
+          {location.state?.skipOtp ? 'Back to Dashboard' : 'Back to Portal'}
         </Button>
 
         <Flex align="center" mb={6}>
