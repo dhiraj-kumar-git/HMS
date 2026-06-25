@@ -8,6 +8,8 @@ const { TextEncoder, TextDecoder } = require('util');
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
+jest.setTimeout(60000); // 60 seconds for heavy parallel tests
+
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query) => ({

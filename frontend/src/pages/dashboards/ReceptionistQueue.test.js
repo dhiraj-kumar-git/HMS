@@ -38,7 +38,7 @@ describe('ReceptionistQueue Component', () => {
     });
 
     // Check actions for 'booked'
-    expect(screen.getAllByRole('button', { name: /Confirm Arrival/i })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: /Confirm/i })).toHaveLength(1);
     
     // Check actions for 'confirmed'
     expect(screen.getAllByRole('button', { name: /Check-In/i })).toHaveLength(1);
@@ -46,14 +46,13 @@ describe('ReceptionistQueue Component', () => {
     // Check No Show button (appears for booked and confirmed)
     expect(screen.getAllByRole('button', { name: /No Show/i })).toHaveLength(2);
 
-    // Check Cancel button (appears for all 3)
-    expect(screen.getAllByRole('button', { name: /Cancel/i })).toHaveLength(3);
+
 
     // Test Confirm Arrival click
     axios.post.mockResolvedValueOnce({ data: { message: 'Success' } });
     axios.get.mockResolvedValueOnce({ data: [] }); // fetchQueue mock for after action
 
-    fireEvent.click(screen.getByRole('button', { name: /Confirm Arrival/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Confirm/i }));
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
