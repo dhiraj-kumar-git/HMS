@@ -36,12 +36,12 @@ def register_patient():
     data = request.json
 
     doctor_username = data.get("doctor_assigned")
+    doctor_name = None
     if doctor_username:
         doctors_map = get_doctors_name()
         doctor_name = doctors_map.get(doctor_username, doctor_username)
         data["doctor_name"] = doctor_name
-
-    print("Doctors Map:", doctors_map)
+        print("Doctors Map:", doctors_map)
 
     name = data.get("name")
     date_of_birth = data.get("date_of_birth")

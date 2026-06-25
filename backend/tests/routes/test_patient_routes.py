@@ -29,6 +29,138 @@ def test_register_patient_success(client, mock_db, mocker, app):
     res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
     assert res.status_code == 201
 
+def test_register_patient_temporary(client, mock_db, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mock_db["register_patient"].return_value = "TEMP-123"
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    
+    payload = {
+        "name": "Temp Pat",
+        "date_of_birth": "1990-01-01",
+        "gender": "M",
+        "contact_no": "123",
+        "doctor_assigned": "doc1",
+        "patient_type": "Temporary"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 201
+    assert "TEMP-" in res.json["institute_id"]
+
+def test_register_patient_temporary_missing_fields(client, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    
+    payload = {
+        "name": "Temp Pat",
+        "patient_type": "Temporary"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 400
+
+def test_register_patient_missing_fields(client, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    
+    payload = {
+        "name": "Student Pat",
+        "patient_type": "Student"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 400
+
+def test_register_patient_duplicate(client, mock_db, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mock_db["register_patient"].return_value = None
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    
+    payload = {
+        "name": "Pat",
+        "date_of_birth": "1990-01-01",
+        "gender": "M",
+        "contact_no": "123",
+        "email": "a@b.com",
+        "address": "Addr",
+        "doctor_assigned": "doc1",
+        "patient_type": "Student",
+        "institute_id": "INST123"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 409
+
+def test_register_patient_with_appointment(client, mock_db, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mock_db["register_patient"].return_value = "INST123"
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    mocker.patch("app.routes.public_routes.validate_appointment_slot", return_value=(True, None))
+    mocker.patch("database.users.find_one", return_value={"display_name": "Dr. First"})
+    mocker.patch("database.book_appointment", return_value=True)
+    
+    payload = {
+        "name": "Pat",
+        "date_of_birth": "1990-01-01",
+        "gender": "M",
+        "contact_no": "123",
+        "email": "a@b.com",
+        "address": "Addr",
+        "doctor_assigned": "doc1",
+        "patient_type": "Student",
+        "institute_id": "INST123",
+        "appointment_time": "2026-06-25T10:00"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 201
+
+def test_register_patient_with_appointment_conflict(client, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    # Validate fails
+    mocker.patch("app.routes.public_routes.validate_appointment_slot", return_value=(False, ({"error": "Slot full"}, 409)))
+    
+    payload = {
+        "name": "Pat",
+        "date_of_birth": "1990-01-01",
+        "gender": "M",
+        "contact_no": "123",
+        "email": "a@b.com",
+        "address": "Addr",
+        "doctor_assigned": "doc1",
+        "patient_type": "Student",
+        "institute_id": "INST123",
+        "appointment_time": "2026-06-25T10:00"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 409
+
+def test_register_patient_with_appointment_duplicate(client, mock_db, app, mocker):
+    with app.app_context():
+        token = create_access_token(identity="recep", additional_claims={"role": "receptionist"})
+    mocker.patch("app.routes.patient_routes.get_doctors_name", return_value={"doc1": "Dr. First"})
+    mocker.patch("app.routes.public_routes.validate_appointment_slot", return_value=(True, None))
+    # Return None for duplicate
+    mock_db["register_patient"].return_value = None
+    
+    payload = {
+        "name": "Pat",
+        "date_of_birth": "1990-01-01",
+        "gender": "M",
+        "contact_no": "123",
+        "email": "a@b.com",
+        "address": "Addr",
+        "doctor_assigned": "doc1",
+        "patient_type": "Student",
+        "institute_id": "INST123",
+        "appointment_time": "2026-06-25T10:00"
+    }
+    res = client.post("/register_patient", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 409
+
+
 def test_get_patient_success(client, mock_db, app):
     with app.app_context():
         token = create_access_token(identity="user", additional_claims={"role": "doctor"})

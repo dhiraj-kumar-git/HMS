@@ -208,3 +208,107 @@ def test_doctor_availability(client, mock_db, mocker):
 def test_doctor_availability_missing_date(client):
     response = client.get("/api/public/doctor-availability/doc")
     assert response.status_code == 400
+
+def test_send_registration_otp_missing_email(client):
+    response = client.post("/api/public/send_registration_otp", json={})
+    assert response.status_code == 400
+
+def test_send_registration_otp_redis_offline(client):
+    import database
+    database.redis_client = None
+    response = client.post("/api/public/send_registration_otp", json={"email": "test@example.com"})
+    assert response.status_code == 500
+
+def test_verify_registration_otp_missing_fields(client):
+    response = client.post("/api/public/verify_registration_otp", json={"email": "test@example.com"})
+    assert response.status_code == 400
+
+def test_verify_registration_otp_redis_offline(client):
+    import database
+    database.redis_client = None
+    response = client.post("/api/public/verify_registration_otp", json={"email": "test@example.com", "otp": "1234"})
+    assert response.status_code == 500
+
+def test_verify_registration_otp_expired(client):
+    import database
+    from unittest.mock import MagicMock
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = None
+    database.redis_client = mock_redis
+    
+    response = client.post("/api/public/verify_registration_otp", json={"email": "test@example.com", "otp": "1234"})
+    assert response.status_code == 400
+    database.redis_client = None
+
+def test_verify_registration_otp_invalid(client):
+    import database
+    from unittest.mock import MagicMock
+    mock_redis = MagicMock()
+    mock_redis.get.return_value = "0000"
+    database.redis_client = mock_redis
+    
+    response = client.post("/api/public/verify_registration_otp", json={"email": "test@example.com", "otp": "1234"})
+    assert response.status_code == 400
+    database.redis_client = None
+
+def test_public_verify_patient_missing_id(client):
+    response = client.post("/api/public/verify", json={})
+    assert response.status_code == 400
+
+def test_public_verify_patient_not_found(client, mock_db):
+    mock_db["get_patient_by_id"].return_value = None
+    response = client.post("/api/public/verify", json={"institute_id": "123"})
+    assert response.status_code == 404
+
+def test_public_verify_patient_archived(client, mock_db):
+    mock_db["get_patient_by_id"].return_value = {"account_status": "archived"}
+    response = client.post("/api/public/verify", json={"institute_id": "123"})
+    assert response.status_code == 403
+
+def test_public_verify_patient_no_email(client, mock_db):
+    mock_db["get_patient_by_id"].return_value = {"account_status": "active", "email": None}
+    response = client.post("/api/public/verify", json={"institute_id": "123"})
+    assert response.status_code == 400
+
+def test_public_verify_patient_otp_fail(client, mock_db, mocker):
+    mock_db["get_patient_by_id"].return_value = {"account_status": "active", "email": "test@example.com", "name": "Patient"}
+    mocker.patch("database.store_patient_otp", return_value=False)
+    
+    response = client.post("/api/public/verify", json={"institute_id": "123"})
+    assert response.status_code == 500
+
+def test_public_verify_patient_email_mask_fallback(client, mock_db, mocker):
+    mock_db["get_patient_by_id"].return_value = {"account_status": "active", "email": "invalidemail", "name": "Patient"}
+    mocker.patch("database.store_patient_otp", return_value=True)
+    mocker.patch("app.routes.public_routes.send_email")
+    
+    response = client.post("/api/public/verify", json={"institute_id": "123"})
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data["email"] == "your registered email"
+
+def test_public_verify_otp_missing_fields(client):
+    response = client.post("/api/public/verify-otp", json={"institute_id": "123"})
+    assert response.status_code == 400
+
+def test_public_verify_otp_failure(client, mock_db):
+    mock_db["verify_patient_otp"].return_value = (False, "Invalid OTP")
+    response = client.post("/api/public/verify-otp", json={"institute_id": "123", "otp": "0000"})
+    assert response.status_code == 400
+
+def test_public_verify_otp_patient_not_found(client, mock_db):
+    mock_db["verify_patient_otp"].return_value = (True, "")
+    mock_db["get_patient_by_id"].return_value = None
+    response = client.post("/api/public/verify-otp", json={"institute_id": "123", "otp": "1234"})
+    assert response.status_code == 404
+
+def test_public_book_appointment_receptionist_warning(client, mock_db, mocker):
+    mock_db["get_patient_by_id"].return_value = {"account_status": "active"}
+    mocker.patch("database.users.find_one", return_value={"display_name": "Dr. Test"})
+    # First count is patient limit (0), second is capacity (1)
+    mocker.patch("database.visits.count_documents", side_effect=[0, 1])
+    
+    # Booked by receptionist
+    response = client.post("/api/public/book-appointment", json={"institute_id": "123", "doctor_username": "doc", "time": "2026-06-21T10:00", "booked_by": "receptionist"})
+    assert response.status_code == 409
+    assert "Continue?" in json.loads(response.data)["warning"]
