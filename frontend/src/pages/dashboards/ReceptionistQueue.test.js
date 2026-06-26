@@ -68,7 +68,8 @@ describe('ReceptionistQueue Component', () => {
     renderComponent();
     
     await waitFor(() => {
-      expect(screen.getByText('No appointments found for the selected criteria.')).toBeInTheDocument();
+      expect(screen.getByText(/No booked appointments found/i)).toBeInTheDocument();
+      expect(screen.getByText(/No confirmed appointments found/i)).toBeInTheDocument();
     });
   });
 

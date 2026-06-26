@@ -321,7 +321,9 @@ def get_receptionist_queue(start_date=None, end_date=None, status_filter=None):
             "name": "$patient_info.name",
             "contact_no": "$patient_info.contact_no",
             "gender": "$patient_info.gender",
-            "date_of_birth": "$patient_info.date_of_birth"
+            "date_of_birth": "$patient_info.date_of_birth",
+            "email": "$patient_info.email",
+            "address": "$patient_info.address"
         }},
         COMPUTE_AGE_STAGE,
         {"$sort": {"time": 1}}

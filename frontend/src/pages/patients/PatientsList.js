@@ -175,7 +175,7 @@ export default function PatientsList() {
               <Th>Contact No</Th>
               <Th>Patient Type</Th>
               <Th>Status</Th>
-              <Th>Action</Th>
+              {userRole === 'receptionist' && <Th>Action</Th>}
             </Tr>
           </Thead>
           <Tbody>
@@ -226,8 +226,8 @@ export default function PatientsList() {
                         {p.workflow_status}
                       </Badge>
                     </Td>
-                    <Td>
-                      {userRole === 'receptionist' && (
+                    {userRole === 'receptionist' && (
+                      <Td>
                         <Button
                           size="xs"
                           colorScheme="green"
@@ -244,8 +244,8 @@ export default function PatientsList() {
                         >
                           Book
                         </Button>
-                      )}
-                    </Td>
+                      </Td>
+                    )}
                   </Tr>
                   {isExpanded && hasAppointments && (
                     <Tr>

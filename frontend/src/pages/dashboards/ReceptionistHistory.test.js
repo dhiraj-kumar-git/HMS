@@ -105,4 +105,68 @@ describe('ReceptionistHistory Component', () => {
       expect(axios.get).toHaveBeenCalledTimes(3);
     });
   });
+
+  it('opens print modal when clicking on a checked_in patient row', async () => {
+    const mockData = [
+      {
+        visit_id: 1,
+        time: '2023-10-10T10:00:00Z',
+        name: 'Checked In Patient',
+        age: 30,
+        gender: 'Male',
+        institute_id: 'H2023001',
+        doctor_name: 'Dr. Smith',
+        status: 'checked_in'
+      },
+      {
+        visit_id: 2,
+        time: '2023-10-10T11:00:00Z',
+        name: 'Completed Patient',
+        age: 25,
+        gender: 'Female',
+        institute_id: 'H2023002',
+        doctor_name: 'Dr. John',
+        status: 'completed'
+      }
+    ];
+
+    axios.get.mockResolvedValueOnce({ data: mockData });
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('Checked In Patient')).toBeInTheDocument();
+      expect(screen.getByText('Completed Patient')).toBeInTheDocument();
+    });
+
+    // Mocking window.matchMedia for the PrescriptionModal component since Chakra UI Modal might render
+    window.matchMedia = window.matchMedia || function() {
+      return {
+        matches: false,
+        addListener: function() {},
+        removeListener: function() {}
+      };
+    };
+
+    // Click on checked in patient row (we'll click the text inside the row)
+    fireEvent.click(screen.getByText('Checked In Patient'));
+
+    // Modal should open, showing "OPD CARD / SLIP"
+    await waitFor(() => {
+      expect(screen.getByText('OPD CARD / SLIP')).toBeInTheDocument();
+    });
+
+    // Close the modal
+    const closeBtn = screen.getByText('Close');
+    fireEvent.click(closeBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText('OPD CARD / SLIP')).not.toBeInTheDocument();
+    });
+
+    // Click on completed patient row
+    fireEvent.click(screen.getByText('Completed Patient'));
+
+    // Modal should NOT open
+    expect(screen.queryByText('OPD CARD / SLIP')).not.toBeInTheDocument();
+  });
 });
