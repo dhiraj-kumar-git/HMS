@@ -55,6 +55,113 @@ describe('PrescriptionModal Component', () => {
     expect(window.print).toHaveBeenCalledTimes(1);
   });
 
+  it('handles beforeprint and afterprint events for successful print', async () => {
+    const onClose = jest.fn();
+    let beforePrintCb = null;
+    let afterPrintCb = null;
+
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = jest.fn().mockImplementation((query) => {
+      if (query === 'print') {
+        return {
+          addListener: (cb) => { beforePrintCb = cb; },
+          removeListener: jest.fn(),
+        };
+      }
+      return originalMatchMedia(query);
+    });
+
+    const originalAddEventListener = window.addEventListener;
+    const originalRemoveEventListener = window.removeEventListener;
+
+    window.addEventListener = jest.fn().mockImplementation((event, cb) => {
+      if (event === 'afterprint') afterPrintCb = cb;
+      else originalAddEventListener(event, cb);
+    });
+    window.removeEventListener = jest.fn().mockImplementation((event, cb) => {
+      if (event === 'afterprint') return;
+      originalRemoveEventListener(event, cb);
+    });
+
+    renderModal({ isOpen: true, onClose, prescriptionData: mockPrescriptionData });
+
+    const printBtn = screen.getByRole('button', { name: /Print Prescription/i });
+    fireEvent.click(printBtn);
+
+    expect(window.print).toHaveBeenCalledTimes(1);
+    
+    // Trigger events
+    if (beforePrintCb) beforePrintCb(); // simulates beforeprint
+    if (afterPrintCb) afterPrintCb();   // simulates afterprint
+
+    // Should show success toast
+    expect(await screen.findByText('Print Completed')).toBeInTheDocument();
+
+    // Restore
+    window.matchMedia = originalMatchMedia;
+    window.addEventListener = originalAddEventListener;
+    window.removeEventListener = originalRemoveEventListener;
+  });
+
+  it('handles afterprint event for cancelled print', async () => {
+    const onClose = jest.fn();
+    let afterPrintCb = null;
+
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = jest.fn().mockImplementation((query) => {
+      if (query === 'print') {
+        return {
+          addListener: jest.fn(), // We don't trigger beforePrintCb to simulate cancellation
+          removeListener: jest.fn(),
+        };
+      }
+      return originalMatchMedia(query);
+    });
+
+    const originalAddEventListener = window.addEventListener;
+    const originalRemoveEventListener = window.removeEventListener;
+
+    window.addEventListener = jest.fn().mockImplementation((event, cb) => {
+      if (event === 'afterprint') afterPrintCb = cb;
+      else originalAddEventListener(event, cb);
+    });
+    window.removeEventListener = jest.fn().mockImplementation((event, cb) => {
+      if (event === 'afterprint') return;
+      originalRemoveEventListener(event, cb);
+    });
+
+    renderModal({ isOpen: true, onClose, prescriptionData: mockPrescriptionData });
+
+    const printBtn = screen.getByRole('button', { name: /Print Prescription/i });
+    fireEvent.click(printBtn);
+
+    if (afterPrintCb) afterPrintCb();   // simulates afterprint without beforeprint
+
+    // Should show cancelled toast
+    expect(await screen.findByText('Print Cancelled')).toBeInTheDocument();
+
+    // Restore
+    window.matchMedia = originalMatchMedia;
+    window.addEventListener = originalAddEventListener;
+    window.removeEventListener = originalRemoveEventListener;
+  });
+
+  it('handles print error correctly', async () => {
+    const mockPrint = jest.spyOn(window, 'print').mockImplementation(() => {
+      throw new Error('Print failed');
+    });
+
+    const onClose = jest.fn();
+    renderModal({ isOpen: true, onClose, prescriptionData: mockPrescriptionData });
+
+    const printBtn = screen.getByRole('button', { name: /Print Prescription/i });
+    fireEvent.click(printBtn);
+
+    expect(await screen.findByText('Print Error')).toBeInTheDocument();
+
+    mockPrint.mockRestore();
+  });
+
   it('closes when close button is clicked', () => {
     const onClose = jest.fn();
     renderModal({ isOpen: true, onClose, prescriptionData: mockPrescriptionData });

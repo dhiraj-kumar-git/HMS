@@ -33,6 +33,7 @@ import { FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { getDateISTString, toTitleCase } from '../../utils/utils';
+import StatusGuideModal from '../../components/StatusGuideModal';
 import PrescriptionModal from '../../components/PrescriptionModal';
 
 export default function ReceptionistQueue() {
@@ -48,7 +49,7 @@ export default function ReceptionistQueue() {
 
   const [isNoShowModalOpen, setIsNoShowModalOpen] = useState(false);
   const [selectedVisitIdForNoShow, setSelectedVisitIdForNoShow] = useState(null);
-
+  
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
 
@@ -99,9 +100,9 @@ export default function ReceptionistQueue() {
       });
 
       if (status === 'checked_in') {
-        const appt = queue.find(app => app.visit_id === visitId);
-        if (appt) {
-          setPrintData(appt);
+        const appointment = queue.find(q => q.visit_id === visitId);
+        if (appointment) {
+          setPrintData(appointment);
           setIsPrintModalOpen(true);
         }
       }

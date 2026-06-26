@@ -184,14 +184,14 @@ export default function ReceptionistHistory() {
                       <Tr
                         key={appointment.visit_id}
                         onClick={() => {
-                          if (appointment.status === 'checked_in') {
+                          if (appointment.status?.toLowerCase() === 'checked_in') {
                             setPrintData(appointment);
                             setIsPrintModalOpen(true);
                           }
                         }}
-                        cursor={appointment.status === 'checked_in' ? "pointer" : "default"}
-                        _hover={appointment.status === 'checked_in' ? { bg: "gray.50" } : {}}
-                        title={appointment.status === 'checked_in' ? "Click to reprint Consultation Slip" : ""}
+                        cursor={appointment.status?.toLowerCase() === 'checked_in' ? "pointer" : "default"}
+                        _hover={appointment.status?.toLowerCase() === 'checked_in' ? { bg: "gray.50" } : {}}
+                        title={appointment.status?.toLowerCase() === 'checked_in' ? "Click to reprint Consultation Slip" : ""}
                       >
                         <Td fontWeight="bold">
                           {new Date(appointment.time).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}

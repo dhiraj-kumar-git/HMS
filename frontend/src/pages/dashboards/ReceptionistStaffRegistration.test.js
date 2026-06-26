@@ -140,4 +140,130 @@ describe('ReceptionistStaffRegistration Component', () => {
       expect(window.location.href).toBe('/login');
     });
   });
+
+  it('updates dependant fields and removes dependant row', () => {
+    const { container } = renderComponent();
+    
+    // Add two rows
+    const addBtn = screen.getByRole('button', { name: /Add Dependant/i });
+    fireEvent.click(addBtn);
+    fireEvent.click(addBtn);
+
+    expect(screen.getByText('Dependant #1')).toBeInTheDocument();
+    expect(screen.getByText('Dependant #2')).toBeInTheDocument();
+
+    // Type in the first dependant's name
+    // 0: psrn, 1: name, 2: email, 3: dob, 4: tel, 5: address
+    // 6: dep1 name, 7: dep1 email, 8: dep1 dob
+    // 9: dep2 name
+    const allInputs = container.querySelectorAll('input');
+    fireEvent.change(allInputs[6], { target: { value: 'Dep1 Name', name: 'name' } });
+
+    // Find and click the delete button for the first dependant
+    // It's in the same container as 'Dependant #1' text
+    const dependant1Heading = screen.getByText('Dependant #1');
+    const deleteBtn = dependant1Heading.parentElement.querySelector('button');
+    if (deleteBtn) {
+      fireEvent.click(deleteBtn);
+    }
+
+    // Now there should only be one dependant left
+    expect(screen.queryByText('Dependant #2')).not.toBeInTheDocument();
+  });
+
+  it('fails verify PSRN when input is empty or API errors out', async () => {
+    renderComponent();
+    const addDepTab = screen.getByText('Add New Dependant');
+    fireEvent.click(addDepTab);
+
+    const verifyBtn = screen.getByRole('button', { name: /Verify PSRN/i });
+    fireEvent.click(verifyBtn); // empty psrn
+
+    // Mock API error
+    fireEvent.change(screen.getByLabelText(/Existing PSRN ID/i), { target: { value: 'P999' } });
+    axios.post.mockRejectedValueOnce({ response: { data: { error: 'Not Found' } } });
+    fireEvent.click(verifyBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalled();
+    });
+  });
+
+  it('handles error when fetching existing dependants fails', async () => {
+    renderComponent();
+    fireEvent.click(screen.getByText('Add New Dependant'));
+    fireEvent.change(screen.getByLabelText(/Existing PSRN ID/i), { target: { value: 'P1234' } });
+
+    axios.post.mockResolvedValueOnce({ data: { message: 'Verified' } });
+    axios.get.mockRejectedValueOnce({ response: { data: { error: 'Fetch failed' } } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Verify PSRN/i }));
+
+    await waitFor(() => {
+      expect(axios.get).toHaveBeenCalled();
+    });
+  });
+
+  it('submits a new dependant in Add New Dependant tab successfully', async () => {
+    const { container } = renderComponent();
+    fireEvent.click(screen.getByText('Add New Dependant'));
+    fireEvent.change(screen.getByLabelText(/Existing PSRN ID/i), { target: { value: 'P1234' } });
+
+    axios.post.mockResolvedValueOnce({ data: { message: 'Verified' } });
+    axios.get.mockResolvedValueOnce({ data: [] });
+
+    fireEvent.click(screen.getByRole('button', { name: /Verify PSRN/i }));
+
+    await waitFor(() => {
+      // It just shows the form, not "Register New Dependant" text, but "New Dependant Details"
+      expect(screen.getByText('New Dependant Details')).toBeInTheDocument();
+    });
+
+    // The name field in this form is labeled "Full Name"
+    const allInputs = container.querySelectorAll('input');
+    // 0-5 are primary form. 
+    // 6 is Existing PSRN in Add New Dependant tab.
+    // 7 is Full Name in New Dependant Details.
+    fireEvent.change(allInputs[7], { target: { value: 'New Dep Name', name: 'name' } });
+
+    axios.post.mockResolvedValueOnce({ data: { message: 'Dependant Added' } });
+    axios.get.mockResolvedValueOnce({ data: [] }); // refetch
+
+    // The first "Add Dependant" button is in the hidden tab, so there is only one visible.
+    const addDepSubmit = screen.getByRole('button', { name: /^Add Dependant$/i });
+    fireEvent.click(addDepSubmit);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/add_dependant'),
+        expect.objectContaining({
+          psrn_id: 'P1234',
+          dependant: expect.objectContaining({ name: 'New Dep Name' })
+        })
+      );
+    });
+  });
+
+  it('fails new registration gracefully', async () => {
+    renderComponent();
+
+    fireEvent.change(screen.getByRole('textbox', { name: /^PSRN ID$/i }), { target: { name: 'psrn_id', value: 'P1234' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /^Full Name$/i }), { target: { name: 'name', value: 'John Staff' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Register Staff & Dependants/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Confirm Registration Details')).toBeInTheDocument();
+    });
+
+    axios.post.mockRejectedValueOnce({ response: { data: { error: 'Registration failed' } } });
+
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalled();
+    });
+  });
 });

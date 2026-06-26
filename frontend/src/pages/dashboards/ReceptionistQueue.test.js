@@ -63,6 +63,38 @@ describe('ReceptionistQueue Component', () => {
     });
   });
 
+  it('opens print modal on Check-In and closes it', async () => {
+    axios.get.mockResolvedValue({
+      data: [
+        { visit_id: 'V1', time: '2026-06-25T10:00:00', name: 'John Doe', institute_id: 'P1', doctor_name: 'Dr. A', status: 'confirmed' },
+      ]
+    });
+
+    renderComponent();
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+    });
+
+    axios.post.mockResolvedValueOnce({ data: { message: 'Success' } });
+    axios.get.mockResolvedValueOnce({ data: [] });
+
+    const checkInBtn = screen.getByRole('button', { name: /Check-In/i });
+    fireEvent.click(checkInBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/receptionist/appointment/V1/status'),
+        { status: 'checked_in' },
+        expect.any(Object)
+      );
+    });
+
+    // Modal should be open
+    await waitFor(() => {
+      expect(screen.getByText('OPD CARD / SLIP')).toBeInTheDocument();
+    });
+  });
+
   it('renders empty message when queue is empty', async () => {
     axios.get.mockResolvedValueOnce({ data: [] });
     renderComponent();

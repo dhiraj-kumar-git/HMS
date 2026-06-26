@@ -200,7 +200,17 @@ describe('CreateUser Component', () => {
 
     // Check Monday
     let checkboxes = screen.getAllByRole('checkbox');
-    fireEvent.click(checkboxes[0]); // Monday
+    fireEvent.click(checkboxes[0]); // Monday (Check)
+    fireEvent.click(checkboxes[0]); // Monday (Uncheck - covers line 337)
+    fireEvent.click(checkboxes[0]); // Monday (Check again)
+
+    // Change Start Minute and End Minute to cover lines 367-370, 406-409
+    const selects = screen.getAllByRole('combobox');
+    // selects[0] = Role, selects[1] = Department
+    // selects[2] = Start Hr, selects[3] = Start Min, selects[4] = Start AMPM
+    // selects[5] = End Hr, selects[6] = End Min, selects[7] = End AMPM
+    fireEvent.change(selects[3], { target: { value: '30' } }); // Start Min
+    fireEvent.change(selects[6], { target: { value: '45' } }); // End Min
     
     // Add shift
     fireEvent.click(screen.getByRole('button', { name: /Add Shift/i }));
