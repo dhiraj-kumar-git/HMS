@@ -40,10 +40,11 @@ import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { getDateISTString } from '../../utils/utils';
 
-const RELATION_OPTIONS = [
-  "Spouse", "Son", "Daughter", "Father", "Mother",
-  "Father-in-law", "Mother-in-law", "Other"
-];
+const getRelationOptions = (gender) => {
+  if (gender === 'Male') return ["Spouse", "Father", "Son", "Father-in-law", "Other"];
+  if (gender === 'Female') return ["Spouse", "Mother", "Daughter", "Daughter-in-law", "Other"];
+  return ["Spouse", "Father", "Mother", "Son", "Daughter", "Father-in-law", "Mother-in-law", "Daughter-in-law", "Other"];
+};
 
 const ReceptionistStaffRegistration = () => {
   const navigate = useNavigate();
@@ -119,6 +120,11 @@ const ReceptionistStaffRegistration = () => {
   // New Registration Confirm State
   const [showRegisterConfirmModal, setShowRegisterConfirmModal] = useState(false);
   const [registerVerifying, setRegisterVerifying] = useState(false);
+
+  // Post-Registration Booking Modal State
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [registeredPatients, setRegisteredPatients] = useState([]);
+  const [selectedBookingPatientId, setSelectedBookingPatientId] = useState('');
 
   const handlePrimaryChange = (e) => {
     setPrimary({ ...primary, [e.target.name]: e.target.value });
@@ -267,9 +273,25 @@ const ReceptionistStaffRegistration = () => {
         isClosable: true,
         position: 'top'
       });
-      setTimeout(() => {
-        navigate('/receptionist/register-patient');
-      }, 1500);
+      
+      try {
+        const familyRes = await axios.get(`${BASE_URL}/api/family/${primary.psrn_id}`);
+        setRegisteredPatients(familyRes.data);
+        if (familyRes.data.length > 0) {
+          setSelectedBookingPatientId(familyRes.data[0].institute_id);
+        }
+      } catch (err) {
+        // Fallback if fetch fails
+        setRegisteredPatients([{
+          institute_id: primary.psrn_id,
+          name: primary.name,
+          patient_type: primary.patient_type,
+          gender: primary.gender,
+          bill_status: 'none'
+        }]);
+        setSelectedBookingPatientId(primary.psrn_id);
+      }
+      setShowBookingModal(true);
     } catch (err) {
       toast({
         title: "Registration Failed",
@@ -482,7 +504,7 @@ const ReceptionistStaffRegistration = () => {
                         <FormControl isRequired>
                           <FormLabel>Relation</FormLabel>
                           <Select placeholder="Select Relation" value={dep.relation} onChange={(e) => handleDependantChange(index, 'relation', e.target.value)}>
-                            {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            {getRelationOptions(dep.gender).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                           </Select>
                         </FormControl>
                         {dep.relation === 'Other' && (
@@ -577,7 +599,7 @@ const ReceptionistStaffRegistration = () => {
                         <FormControl isRequired>
                           <FormLabel>Relation</FormLabel>
                           <Select placeholder="Select Relation" value={singleDependant.relation} onChange={(e) => setSingleDependant({ ...singleDependant, relation: e.target.value })} focusBorderColor="blue.500">
-                            {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            {getRelationOptions(singleDependant.gender).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                           </Select>
                         </FormControl>
                       </SimpleGrid>
@@ -635,7 +657,7 @@ const ReceptionistStaffRegistration = () => {
                     <FormControl isRequired>
                       <FormLabel>Relation</FormLabel>
                       <Select value={editingDependant.relation || ''} onChange={(e) => setEditingDependant({ ...editingDependant, relation: e.target.value })} focusBorderColor="blue.500">
-                        {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        {getRelationOptions(editingDependant.gender).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </Select>
                     </FormControl>
                   </SimpleGrid>
@@ -708,6 +730,40 @@ const ReceptionistStaffRegistration = () => {
         </ModalContent>
       </Modal>
     </Box>
+
+      {/* Booking Prompt Modal */}
+      <Modal isOpen={showBookingModal} onClose={() => navigate('/receptionist/register-patient')} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Book Appointment?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text mb={4}>Would you like to proceed with booking an appointment for a newly registered patient immediately?</Text>
+            {registeredPatients.length > 1 && (
+              <FormControl>
+                <FormLabel>Select Patient to Book For</FormLabel>
+                <Select value={selectedBookingPatientId} onChange={(e) => setSelectedBookingPatientId(e.target.value)}>
+                  {registeredPatients.map(p => (
+                    <option key={p.institute_id} value={p.institute_id}>{p.name} ({p.patient_type})</option>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={() => navigate('/receptionist/register-patient')}>
+              No, return to dashboard
+            </Button>
+            <Button colorScheme="blue" onClick={() => {
+              const selectedPatient = registeredPatients.find(p => p.institute_id === selectedBookingPatientId) || registeredPatients[0];
+              navigate('/portal/book-appointment', { state: { skipOtp: true, verifiedPatientData: selectedPatient } });
+            }}>
+              Yes, book appointment
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
     </Flex>
   );
 };

@@ -75,6 +75,13 @@ describe('ReceptionistStaffRegistration Component', () => {
 
     axios.post.mockResolvedValueOnce({ data: { message: 'Success' } });
 
+    // Add a mock for the family fetch after registration
+    axios.get.mockResolvedValueOnce({
+      data: [
+        { institute_id: 'P1234', name: 'John Staff', patient_type: 'Faculty' }
+      ]
+    });
+
     const confirmBtn = screen.getByRole('button', { name: /Confirm/i });
     fireEvent.click(confirmBtn);
 
@@ -92,8 +99,20 @@ describe('ReceptionistStaffRegistration Component', () => {
     });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/receptionist/register-patient');
-    }, { timeout: 2000 });
+      expect(screen.getByText(/Book Appointment\?/i)).toBeInTheDocument();
+    });
+
+    // Test clicking "Yes"
+    fireEvent.click(screen.getByRole('button', { name: /Yes, book appointment/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/portal/book-appointment', {
+      state: {
+        skipOtp: true,
+        verifiedPatientData: expect.objectContaining({
+          institute_id: 'P1234',
+          name: 'John Staff'
+        })
+      }
+    });
   });
 
   it('verifies PSRN in Add New Dependant tab and shows dependants', async () => {

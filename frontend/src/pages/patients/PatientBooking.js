@@ -472,7 +472,7 @@ const PatientBooking = () => {
       setIsRedirecting(true);
       setTimeout(() => {
         if (location.state?.skipOtp) {
-          navigate(-1);
+          navigate('/receptionist');
         } else {
           navigate('/portal');
         }
@@ -529,7 +529,7 @@ const PatientBooking = () => {
     return (
       <Flex minH="100vh" bg="gray.50" align="center" justify="center" flexDir="column">
         <Spinner thickness="4px" speed="0.65s" emptyColor="gray.200" color="teal.500" size="xl" />
-        <Text mt={4} fontSize="lg" color="teal.700" fontWeight="bold">Booking confirmed! Redirecting to portal...</Text>
+        <Text mt={4} fontSize="lg" color="teal.700" fontWeight="bold">Booking confirmed! Redirecting to {location.state?.skipOtp ? 'dashboard' : 'portal'}...</Text>
       </Flex>
     );
   }

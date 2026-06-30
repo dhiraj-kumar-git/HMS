@@ -19,7 +19,14 @@ import {
   MenuList,
   MenuItem,
   Avatar,
-  Text
+  Text,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalFooter,
+  ModalBody,
+  ModalCloseButton
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiUserCheck, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
 import axios from 'axios';
@@ -31,6 +38,8 @@ const ReceptionistStudentRegistration = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [registeredPatientData, setRegisteredPatientData] = useState(null);
   const username = localStorage.getItem("username");
 
   const hostels = ["Ashok Bhawan", "Bhagirath Bhawan", "Budh Bhawan",
@@ -100,15 +109,20 @@ const ReceptionistStudentRegistration = () => {
       });
       toast({
         title: "Registration Successful",
-        description: `Patient registered successfully. Institute ID is ${response.data.institute_id}. Returning to dashboard...`,
+        description: `Patient registered successfully. Institute ID is ${response.data.institute_id}.`,
         status: "success",
         duration: 3000,
         isClosable: true,
         position: 'top'
       });
-      setTimeout(() => {
-        navigate('/receptionist/register-patient');
-      }, 1500);
+      setRegisteredPatientData({
+        institute_id: response.data.institute_id,
+        name: formData.name,
+        patient_type: formData.patient_type,
+        gender: formData.gender,
+        bill_status: 'none'
+      });
+      setShowBookingModal(true);
     } catch (err) {
       toast({
         title: "Registration Failed",
@@ -323,6 +337,27 @@ const ReceptionistStudentRegistration = () => {
           </form>
         </Box>
       </Box>
+
+      {/* Booking Prompt Modal */}
+      <Modal isOpen={showBookingModal} onClose={() => navigate('/receptionist/register-patient')} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Book Appointment?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text>Would you like to proceed with booking an appointment for the newly registered patient immediately?</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={() => navigate('/receptionist/register-patient')}>
+              No, return to dashboard
+            </Button>
+            <Button colorScheme="blue" onClick={() => navigate('/portal/book-appointment', { state: { skipOtp: true, verifiedPatientData: registeredPatientData } })}>
+              Yes, book appointment
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
     </Flex>
   );
 };

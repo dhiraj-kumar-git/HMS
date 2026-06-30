@@ -106,8 +106,24 @@ describe('ReceptionistStudentRegistration Component', () => {
     });
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/receptionist/register-patient');
-    }, { timeout: 2000 });
+      expect(screen.getByText(/Book Appointment\?/i)).toBeInTheDocument();
+    });
+
+    // Test clicking "No"
+    fireEvent.click(screen.getByRole('button', { name: /No, return to dashboard/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/receptionist/register-patient');
+
+    // Test clicking "Yes"
+    fireEvent.click(screen.getByRole('button', { name: /Yes, book appointment/i }));
+    expect(mockNavigate).toHaveBeenCalledWith('/portal/book-appointment', {
+      state: {
+        skipOtp: true,
+        verifiedPatientData: expect.objectContaining({
+          institute_id: '12345',
+          name: 'Jane Doe'
+        })
+      }
+    });
   });
 
   it('submits temporary guest form successfully', async () => {

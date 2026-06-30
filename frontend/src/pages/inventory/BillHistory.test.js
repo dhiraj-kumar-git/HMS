@@ -50,6 +50,15 @@ describe('BillHistory Component', () => {
     window.location = { href: '' };
     window.alert = jest.fn();
     window.print = jest.fn();
+    window.open = jest.fn().mockReturnValue({
+      document: {
+        write: jest.fn(),
+        close: jest.fn()
+      },
+      focus: jest.fn(),
+      print: jest.fn(),
+      close: jest.fn()
+    });
   });
 
   const renderComponent = () => {
@@ -135,7 +144,7 @@ describe('BillHistory Component', () => {
       fireEvent.click(printReceiptBtn);
     });
     
-    expect(window.print).toHaveBeenCalled();
+    expect(window.open).toHaveBeenCalled();
     
     const closeBtn = screen.getAllByRole('button', { name: /Close/i })[0];
     await act(async () => {

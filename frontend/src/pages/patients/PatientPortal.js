@@ -32,7 +32,7 @@ const PatientPortal = () => {
         <Box textAlign="center">
           <Heading
             as="h1"
-            size="2xl"
+            size="xl"
             bgGradient="linear(to-r, blue.500, teal.400)"
             bgClip="text"
             fontWeight="extrabold"
@@ -74,12 +74,8 @@ const PatientPortal = () => {
                 Book an Appointment
               </Heading>
               <Text color="gray.500" mb={4} fontSize="md">
-                Registered patients can book a new appointment using their Institute ID. 
-                After booking, please visit the reception desk where the receptionist will confirm your appointment with the doctor and provide you with a prescription slip printout. 
-                Your name will appear on the queue screen once the doctor is ready to see you.
-              </Text>
-              <Text color="teal.600" mb={8} fontSize="sm" fontWeight="medium">
-                Note: If you have not yet registered at the clinic, please visit the receptionist first for registration.
+                Registered patients can book a new appointment using their Institute ID.
+                After booking, please visit the reception desk where the receptionist will confirm your appointment with the doctor and provide you with a prescription slip printout.
               </Text>
             </Box>
             <Button

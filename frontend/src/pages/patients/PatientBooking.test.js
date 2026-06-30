@@ -148,6 +148,44 @@ describe('PatientBooking Component', () => {
     }, { timeout: 3000 });
   });
 
+  it('handles receptionist skipOtp redirection to /receptionist', async () => {
+    // 1) Setup mocks before rendering
+    axios.get.mockResolvedValueOnce({
+      data: [
+        {
+          username: 'doc1',
+          display_name: 'Dr. Smith',
+          department: 'General',
+          schedule: [{ duty_days: ['Monday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+        }
+      ]
+    });
+
+    // 2) Set state to skipOtp
+    renderComponent({ skipOtp: true, verifiedPatientData: { institute_id: 'receptionist123', name: 'Rec Patient' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // 3) Quick Book
+    fireEvent.click(screen.getByRole('button', { name: /Book Now/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Immediate Booking Confirmation/i)).toBeInTheDocument();
+    });
+
+    // 4) Check active appointments and Book Appointment
+    axios.get.mockResolvedValueOnce({ data: { activeAppointments: [] } });
+    axios.post.mockResolvedValueOnce({ data: { success: true } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirm & Book/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/receptionist');
+    }, { timeout: 3000 });
+  });
+
   it('handles billing warning when bill_status is pending for quick book', async () => {
     // Verify patient with pending bills
     axios.post.mockResolvedValueOnce({

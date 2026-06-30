@@ -87,32 +87,135 @@ function BillHistory() {
     };
 
     const handlePrintReceipt = () => {
-        window.print();
+        if (!selectedPatient) return;
+        try {
+            let finalInvoiceNo = selectedPatient.invoice_no || '';
+            let finalTotal = selectedPatient.total_amount || 0;
+            let paymentMode = selectedPatient.payment_mode || 'N/A';
+            
+            let itemIndex = 1;
+            let printItemsHtml = '';
+            
+            (selectedPatient.items || []).forEach((item) => {
+                if (item.type === 'medicine') {
+                    printItemsHtml += `<tr><td>${itemIndex++}</td><td>${item.name}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
+                } else {
+                    const gross = item.gross || 0;
+                    const discPerc = item.discount || 0;
+                    const discAmt = item.discount_amount || 0;
+                    const rembPerc = item.rembursement || 0;
+                    const rembAmt = item.rembursement_amount || 0;
+                    const amt = item.amount || 0;
+                    printItemsHtml += `<tr><td>${itemIndex++}</td><td>${item.name}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt.toFixed(2)}</td><td>${rembPerc}</td><td>${rembAmt.toFixed(2)}</td><td>${amt.toFixed(2)}</td></tr>`;
+                }
+            });
+
+            // Build HTML for printing
+            const html = `
+                <html>
+                <head>
+                    <title>Payment Receipt</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin:0; padding:10mm; }
+                        .header { text-align:center; font-size:12px; }
+                        .header h2 { margin:0; font-size:16px; }
+                        .title { text-align:center; font-weight:bold; margin:10px 0; }
+                        table { width:100%; border-collapse: collapse; font-size:11px; }
+                        table th, table td { border:1px solid #000; padding:4px; }
+                        table th { font-weight:bold; }
+                        .small-table td { border:none; padding:2px; }
+                        .amount-words { margin-top:10px; font-weight:bold; text-transform: uppercase; }
+                        .footer { text-align:center; margin-top:20px; font-size:12px; }
+                        @page { size: A4 portrait; margin:10mm; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h2>Birla Institute of Technology & Science</h2>
+                        <div>MEDICAL CENTRE</div>
+                        <div>Vidya Vihar, Pilani, RAJASTHAN</div>
+                        <div>Contact: 01596-515525 | medc@pilani.bits-pilani.ac.in | Fax:01596-244183</div>
+                        <div>Date/Time: ${formatDateTimeIST(selectedPatient.payment_date || new Date())}</div>
+                    </div>
+                    <hr style="border:1px solid #000; margin:8px 0;" />
+                    <div class="title">* PAYMENT RECEIPT *</div>
+                    <hr style="border:1px solid #000; margin:8px 0;" />
+                    <table class="small-table" style="margin-bottom:10px;">
+                        <tr>
+                            <td>Invoice No.:</td><td>${finalInvoiceNo}</td>
+                            <td>Institute ID:</td><td>${selectedPatient.institute_id}</td>
+                        </tr>
+                        <tr>
+                            <td>UMR:</td><td>${selectedPatient.umrn || ''}</td>
+                            <td>Age/Gender:</td><td>${selectedPatient.age || 'N/A'}/${selectedPatient.gender || 'N/A'}</td>
+                        </tr>
+                        <tr>
+                            <td>Patient:</td><td>${toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}</td>
+                            <td>Payment No.:</td><td>${selectedPatient.payment_no || ''}</td>
+                        </tr>
+                    </table>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>S.No.</th><th>Service</th><th>Gross Amt</th>
+                                <th>Disc(%)</th><th>Disc</th><th>Remb(%)</th>
+                                <th>Remb Amt</th><th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${printItemsHtml}
+                        </tbody>
+                    </table>
+                    <table class="small-table" style="margin-top:10px;">
+                        <tr><td>Total :</td><td style="text-align:right;">${finalTotal.toFixed(2)}</td></tr>
+                        <tr><td>Payment Mode:</td><td style="text-align:right;">${paymentMode}</td></tr>
+                    </table>
+                    <div class="amount-words">${numberToWords(Math.round(finalTotal))} Rupees Only</div>
+                    <div class="footer">
+                        <p>Thank you.</p>
+                    </div>
+                </body>
+                </html>
+            `;
+
+            const printWindow = window.open('', '', 'width=800,height=600');
+            printWindow.document.write(html);
+            printWindow.document.close();
+            printWindow.focus();
+            setTimeout(() => {
+                printWindow.print();
+                printWindow.close();
+            }, 250);
+        } catch (err) {
+            console.error('Error printing receipt:', err);
+            toast({
+                title: "Error printing",
+                description: "There was an error generating the print view.",
+                status: "error"
+            });
+        }
     };
 
     const ReceiptPreview = () => {
         if (!selectedPatient) return null;
         return (
-            <Box p={4} borderWidth="1px" borderRadius="md">
-                <Box textAlign="center" mb={2}>
-                    <Text fontWeight="bold" fontSize="lg">Birla Institute of Technology & Science</Text>
-                    <Text>MEDICAL CENTRE, Pilani, Rajasthan</Text>
-                    <Text>Date/Time: {formatDateTimeIST(selectedPatient.payment_date)}</Text>
-                    <Divider borderColor="black" borderWidth="1px" my={2} />
+            <Box p={4} borderWidth="1px" borderRadius="md" bg="white">
+                <Box textAlign="center" mb={4}>
+                    <Text fontWeight="bold" fontSize="lg" color="blue.800">Payment Receipt Preview</Text>
+                    <Text fontSize="sm" color="gray.600">Click "Print Receipt" below to view the full printable format.</Text>
                 </Box>
-                <Divider mb={2} />
-                <Flex justify="space-between" mb={2} fontSize="sm">
+                <Divider mb={4} />
+                <Flex justify="space-between" mb={4} fontSize="sm">
                     <Box>
                         <Text><strong>Invoice No:</strong> {selectedPatient.invoice_no}</Text>
-                        <Text><strong>Patient Name:</strong> {toTitleCase(selectedPatient.patient_name)}</Text>
+                        <Text><strong>Patient Name:</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}</Text>
                     </Box>
                     <Box textAlign="right">
                         <Text><strong>Institute ID:</strong> {selectedPatient.institute_id}</Text>
-                        <Text><strong>Type:</strong> {selectedPatient.patient_type}</Text>
+                        <Text><strong>Total Amount:</strong> ₹{selectedPatient.total_amount?.toFixed(2)}</Text>
                     </Box>
                 </Flex>
-                <Divider mb={2} />
-                <Table size="sm" mb={4}>
+                <Table size="sm" mb={4} variant="simple">
                     <Thead>
                         <Tr>
                             <Th>S.No.</Th><Th>Items</Th><Th>Gross</Th><Th>Disc(%)</Th><Th>DiscAmt</Th><Th>Remb(%)</Th><Th>RembAmt</Th><Th>Amount</Th>
@@ -136,12 +239,13 @@ function BillHistory() {
                                 </Tr>
                             );
                         })}
+                        {(selectedPatient.items || []).length === 0 && (
+                            <Tr>
+                                <Td colSpan={8} textAlign="center">No items found.</Td>
+                            </Tr>
+                        )}
                     </Tbody>
                 </Table>
-                <Flex justify="space-between" fontWeight="bold">
-                    <Text>Total Amount</Text>
-                    <Text>₹{selectedPatient.total_amount?.toFixed(2)}</Text>
-                </Flex>
             </Box>
         );
     };
