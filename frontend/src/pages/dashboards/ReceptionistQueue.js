@@ -49,7 +49,7 @@ export default function ReceptionistQueue() {
 
   const [isNoShowModalOpen, setIsNoShowModalOpen] = useState(false);
   const [selectedVisitIdForNoShow, setSelectedVisitIdForNoShow] = useState(null);
-  
+
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
 
@@ -144,8 +144,8 @@ export default function ReceptionistQueue() {
             <Table variant="simple" size="sm" sx={{ tableLayout: 'fixed' }}>
               <Thead>
                 <Tr>
-                  <Th w="10%">Date & Time</Th>
-                  <Th w="30%">Patient Info</Th>
+                  <Th w="15%">Date & Time</Th>
+                  <Th w="25%">Patient Info</Th>
                   <Th w="15%">Institute ID</Th>
                   <Th w="15%">Doctor</Th>
                   <Th w="10%">Status</Th>
