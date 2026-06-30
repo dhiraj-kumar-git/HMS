@@ -14,6 +14,7 @@ import {
   Input,
   useToast,
   VStack,
+  Text,
 } from '@chakra-ui/react';
 import axios from 'axios';
 import BASE_URL from '../utils/Config';
@@ -35,6 +36,8 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
       setAppointmentDate('');
       setAppointmentTimeSlot('');
       setFullSlots([]);
+      setShowWarning(false);
+      setWarningText('');
     }
   }, [isOpen]);
 
@@ -115,7 +118,10 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
     }
   }
 
-  const handleBook = async () => {
+  const [showWarning, setShowWarning] = useState(false);
+  const [warningText, setWarningText] = useState('');
+
+  const handleBook = async (force = false) => {
     if (!doctorUsername || !appointmentDate || !appointmentTimeSlot) {
       toast({ title: 'Please fill all fields', status: 'warning' });
       return;
@@ -129,7 +135,8 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
       await axios.post(`${BASE_URL}/api/receptionist/book-appointment`, {
         institute_id: patient.institute_id,
         doctor_username: doctorUsername,
-        time: formattedTime
+        time: formattedTime,
+        force: force === true
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -138,13 +145,18 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
       onSuccess();
       onClose();
     } catch (err) {
-      toast({
-        title: 'Booking failed',
-        description: err.response?.data?.error || err.message,
-        status: 'error',
-        duration: 4000,
-        isClosable: true
-      });
+      if (err.response?.status === 409 && err.response?.data?.requires_confirmation && !force) {
+        setWarningText(err.response.data.warning);
+        setShowWarning(true);
+      } else {
+        toast({
+          title: 'Booking failed',
+          description: err.response?.data?.error || err.message,
+          status: 'error',
+          duration: 4000,
+          isClosable: true
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -157,54 +169,70 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
         <ModalHeader>Book Appointment for {patient?.name}</ModalHeader>
         <ModalCloseButton />
         <ModalBody>
-          <VStack spacing={4}>
-            <FormControl isRequired>
-              <FormLabel>Select Doctor</FormLabel>
-              <Select placeholder="Select doctor" value={doctorUsername} onChange={e => setDoctorUsername(e.target.value)}>
-                {doctors.map(doc => (
-                  <option key={doc.username} value={doc.username}>
-                    {doc.display_name || doc.username} {doc.department ? `(${doc.department})` : ''}
-                  </option>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel>Appointment Date</FormLabel>
-              <Input
-                type="date"
-                min={getDateISTString()}
-                value={appointmentDate}
-                onChange={e => setAppointmentDate(e.target.value)}
-              />
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel>Appointment Time</FormLabel>
-              <Select
-                value={appointmentTimeSlot}
-                onChange={e => setAppointmentTimeSlot(e.target.value)}
-                placeholder="Select Time"
-                isDisabled={!appointmentDate || !doctorUsername}
-              >
-                {availableTimeSlots.map((slot, idx) => {
-                  const [h, m] = slot.split(':');
-                  const hours = parseInt(h);
-                  const ampm = hours >= 12 ? 'PM' : 'AM';
-                  const displayH = hours % 12 || 12;
-                  const displayTime = `${displayH}:${m} ${ampm}`;
-                  const isFull = fullSlots.includes(slot);
-                  return (
-                    <option key={idx} value={slot} disabled={isFull} style={isFull ? { color: 'red' } : {}}>
-                      {displayTime} {isFull ? '(Full)' : ''}
+          {showWarning ? (
+            <VStack spacing={4} align="stretch">
+              <Text color="orange.600" fontWeight="bold">Booking Warning</Text>
+              <Text>{warningText}</Text>
+            </VStack>
+          ) : (
+            <VStack spacing={4}>
+              <FormControl isRequired>
+                <FormLabel>Select Doctor</FormLabel>
+                <Select placeholder="Select doctor" value={doctorUsername} onChange={e => setDoctorUsername(e.target.value)}>
+                  {doctors.map(doc => (
+                    <option key={doc.username} value={doc.username}>
+                      {doc.display_name || doc.username} {doc.department ? `(${doc.department})` : ''}
                     </option>
-                  );
-                })}
-              </Select>
-            </FormControl>
-          </VStack>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel>Appointment Date</FormLabel>
+                <Input
+                  type="date"
+                  min={getDateISTString()}
+                  value={appointmentDate}
+                  onChange={e => setAppointmentDate(e.target.value)}
+                />
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel>Appointment Time</FormLabel>
+                <Select
+                  value={appointmentTimeSlot}
+                  onChange={e => setAppointmentTimeSlot(e.target.value)}
+                  placeholder="Select Time"
+                  isDisabled={!appointmentDate || !doctorUsername}
+                >
+                  {availableTimeSlots.map((slot, idx) => {
+                    const [h, m] = slot.split(':');
+                    const hours = parseInt(h);
+                    const ampm = hours >= 12 ? 'PM' : 'AM';
+                    const displayH = hours % 12 || 12;
+                    const displayTime = `${displayH}:${m} ${ampm}`;
+                    const isFull = fullSlots.includes(slot);
+                    return (
+                      <option key={idx} value={slot} disabled={isFull} style={isFull ? { color: 'red' } : {}}>
+                        {displayTime} {isFull ? '(Full)' : ''}
+                      </option>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            </VStack>
+          )}
         </ModalBody>
         <ModalFooter>
-          <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading}>Cancel</Button>
-          <Button colorScheme="brand" onClick={handleBook} isLoading={loading}>Book</Button>
+          {showWarning ? (
+            <>
+              <Button variant="ghost" mr={3} onClick={() => setShowWarning(false)}>Go Back</Button>
+              <Button colorScheme="orange" onClick={() => handleBook(true)} isLoading={loading}>Proceed Anyway</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading}>Cancel</Button>
+              <Button colorScheme="brand" onClick={() => handleBook(false)} isLoading={loading}>Book</Button>
+            </>
+          )}
         </ModalFooter>
       </ModalContent>
     </Modal>

@@ -89,7 +89,7 @@ def test_get_family_by_psrn(mocker):
 
 def test_get_patients_by_doctor(mocker):
     mock_patients = mocker.patch.object(patients_db, 'patients')
-    mock_patients.aggregate.return_value = [{"institute_id": "123", "patient_visits": []}]
+    mock_patients.aggregate.return_value = [{"institute_id": "123", "patient_visits": [{"doctor_username": "doc1", "status": "confirmed", "visit_id": "v1"}]}]
     res = get_patients_by_doctor("doc1")
     assert len(res) == 1
 
@@ -101,33 +101,38 @@ def test_get_patient_history_for_doctor(mocker):
 
 def test_update_consultation_details(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
-    mocker.patch("app.database.patients._get_active_visit_id", return_value="v123")
     mock_visits.update_one.return_value.matched_count = 1
-    res = update_consultation_details("123", "doc1", [], [], [], [])
+    res = update_consultation_details("v123", "doc1", [], [], [], [])
     assert res is True
 
 def test_complete_patient(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.find_one.return_value = {"institute_id": "123"}
     mock_patients = mocker.patch.object(patients_db, 'patients')
     mock_patients.find_one.return_value = {"institute_id": "123"}
     mocker.patch("app.database.patients._finalize_visit")
     mock_patients.update_one.return_value.modified_count = 1
-    res = complete_patient("123")
+    res = complete_patient("v1")
     assert res is True
 
 def test_consultation_patient(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.find_one.return_value = {"institute_id": "123"}
     mock_patients = mocker.patch.object(patients_db, 'patients')
     mock_patients.find_one.return_value = {"institute_id": "123"}
     mocker.patch("app.database.patients._finalize_visit")
     mock_patients.update_one.return_value.matched_count = 1
-    res = consultation_patient("123", "doc1", False, False)
+    res = consultation_patient("v1", "doc1", False, False)
     assert res is True
 
 def test_complete_consultation(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.find_one.return_value = {"institute_id": "123"}
     mock_patients = mocker.patch.object(patients_db, 'patients')
     mock_patients.find_one.return_value = {"institute_id": "123", "bill_status": "none", "lab_status": "none"}
     mocker.patch("app.database.patients._finalize_visit")
     mock_patients.update_one.return_value.modified_count = 1
-    res = complete_consultation("123")
+    res = complete_consultation("v1")
     assert res is True
 
 def test_get_inactive_patients_by_doctor(mocker):

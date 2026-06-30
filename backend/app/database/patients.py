@@ -417,10 +417,20 @@ def get_patients_by_doctor(doctor_username):
     pts = list(patients.aggregate(pipeline))
     result = []
     for p in pts:
-        assembled = _map_aggregated_patient(p, active_doctor_username=doctor_username)
-        if assembled:
-            assembled.pop("_id", None)
-            result.append(assembled)
+        patient_visits = p.get("patient_visits", [])
+        doctor_visits = [v for v in patient_visits if v.get("doctor_username") == doctor_username and v.get("status") in ["confirmed", "checked_in", "consultation"]]
+        
+        for visit in doctor_visits:
+            # Clone patient but keep only this single visit in the list
+            p_clone = p.copy()
+            p_clone["patient_visits"] = [visit]
+            
+            assembled = _map_aggregated_patient(p_clone, active_doctor_username=doctor_username)
+            if assembled:
+                assembled.pop("_id", None)
+                assembled["visit_id"] = visit.get("visit_id")
+                result.append(assembled)
+                
     return result
 
 def _get_active_visit_id(institute_id, doctor_username=None):
@@ -476,8 +486,7 @@ def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0,
 
 
 
-def _finalize_visit(institute_id, doctor_username=None, mark_as_completed=True):
-    visit_id = _get_active_visit_id(institute_id, doctor_username)
+def _finalize_visit(visit_id, mark_as_completed=True):
     if visit_id:
         visit = visits.find_one({"visit_id": visit_id})
         if visit:
@@ -508,8 +517,7 @@ def _finalize_visit(institute_id, doctor_username=None, mark_as_completed=True):
             )
 
 # [NEW] Overwrite consultation details using $set to prevent duplicates
-def update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
-    visit_id = _get_active_visit_id(institute_id, doctor_username)
+def update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
     if not visit_id: return False
     
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -532,11 +540,15 @@ def update_consultation_details(institute_id, doctor_username, prescriptions, pr
     return result.matched_count > 0
 
 # Add a lab report to a patient
-def complete_patient(institute_id, doctor_username=None):
+def complete_patient(visit_id):
+    visit = visits.find_one({"visit_id": visit_id})
+    if not visit: return False
+    institute_id = visit.get("institute_id")
+    
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
-    _finalize_visit(institute_id, doctor_username, mark_as_completed=True)
+    _finalize_visit(visit_id, mark_as_completed=True)
 
     result = patients.update_one(
         {"institute_id": institute_id},
@@ -549,7 +561,11 @@ def complete_patient(institute_id, doctor_username=None):
     return result.modified_count > 0
 
 # Set patient status to 'consultation'
-def consultation_patient(institute_id, doctor_username, has_labs, has_meds):
+def consultation_patient(visit_id, doctor_username, has_labs, has_meds):
+    visit = visits.find_one({"visit_id": visit_id})
+    if not visit: return False
+    institute_id = visit.get("institute_id")
+    
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
@@ -559,7 +575,7 @@ def consultation_patient(institute_id, doctor_username, has_labs, has_meds):
     # Update visit summary so patient can see it in history immediately
     # We must explicitly set the visit status to 'consultation' so _map_aggregated_patient picks it up
     setattr(_finalize_visit, 'force_consultation', True)
-    _finalize_visit(institute_id, doctor_username, mark_as_completed=False)
+    _finalize_visit(visit_id, mark_as_completed=False)
     setattr(_finalize_visit, 'force_consultation', False)
 
     # If labs are assigned, move to 'lab test pending' so they show up for billing/labs
@@ -578,12 +594,16 @@ def consultation_patient(institute_id, doctor_username, has_labs, has_meds):
     return result.matched_count > 0
 
 # Move patient to 'consultation completed' or 'completed'
-def complete_consultation(institute_id, doctor_username=None):
+def complete_consultation(visit_id, doctor_username=None):
+    visit = visits.find_one({"visit_id": visit_id})
+    if not visit: return False
+    institute_id = visit.get("institute_id")
+    
     patient = patients.find_one({"institute_id": institute_id})
     if not patient: return False
     
     # Finalize the visit status to "completed" in the visits collection
-    _finalize_visit(institute_id, doctor_username, mark_as_completed=True)
+    _finalize_visit(visit_id, mark_as_completed=True)
     
     # Check if we can move straight to "completed" in the patients collection
     # If bill is already paid (or none) and labs are already completed (or none)

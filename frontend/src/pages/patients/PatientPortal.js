@@ -61,7 +61,7 @@ const PatientPortal = () => {
             borderRadius="2xl"
             boxShadow="xl"
             w="100%"
-            maxW="500px"
+            maxW="450px"
             direction="column"
             justify="space-between"
             transition="all 0.3s ease"
@@ -73,8 +73,13 @@ const PatientPortal = () => {
               <Heading as="h3" size="lg" mb={4} color="gray.700">
                 Book an Appointment
               </Heading>
-              <Text color="gray.500" mb={8}>
-                Enter your Institute ID to book a new appointment. Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
+              <Text color="gray.500" mb={4} fontSize="md">
+                Registered patients can book a new appointment using their Institute ID. 
+                After booking, please visit the reception desk where the receptionist will confirm your appointment with the doctor and provide you with a prescription slip printout. 
+                Your name will appear on the queue screen once the doctor is ready to see you.
+              </Text>
+              <Text color="teal.600" mb={8} fontSize="sm" fontWeight="medium">
+                Note: If you have not yet registered at the clinic, please visit the receptionist first for registration.
               </Text>
             </Box>
             <Button

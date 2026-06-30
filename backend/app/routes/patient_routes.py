@@ -89,7 +89,7 @@ def register_patient():
 
     if appointment_time and doctor_assigned:
         from app.routes.public_routes import validate_appointment_slot
-        is_valid, error_response = validate_appointment_slot(institute_id, doctor_assigned, appointment_time, force)
+        is_valid, error_response = validate_appointment_slot(institute_id, doctor_assigned, appointment_time, force, booked_by="receptionist")
         if not is_valid:
             return error_response
 
@@ -179,9 +179,9 @@ def get_doctor_patients():
     return jsonify(patients_list), 200
 
 # [NEW] Endpoint for doctor to overwrite all drafted consultation details at once
-@patient_bp.route('/doctor/save_consultation_details/<institute_id>', methods=['PUT'])
+@patient_bp.route('/doctor/save_consultation_details/<visit_id>', methods=['PUT'])
 @jwt_required()
-def save_consultation_details_route(institute_id):
+def save_consultation_details_route(visit_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
@@ -194,15 +194,15 @@ def save_consultation_details_route(institute_id):
     lab_tests = data.get("lab_tests", [])
     remarks = data.get("remarks", [])
 
-    if database.update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+    if database.update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
         return jsonify({"message": "Consultation details saved successfully"}), 200
     return jsonify({"error": "Failed to save consultation details"}), 400
 
 
 # Endpoint for doctor to confirm consultation details and update statuses
-@patient_bp.route('/doctor/save_consultation/<institute_id>', methods=['POST'])
+@patient_bp.route('/doctor/save_consultation/<visit_id>', methods=['POST'])
 @jwt_required()
-def save_consultation_route(institute_id):
+def save_consultation_route(visit_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
@@ -213,20 +213,20 @@ def save_consultation_route(institute_id):
     doctor_username = get_jwt_identity()
 
     # Move to 'consultation' status (patient stays in doctor list)
-    if database.consultation_patient(institute_id, doctor_username, has_labs, has_meds):
+    if database.consultation_patient(visit_id, doctor_username, has_labs, has_meds):
         return jsonify({"message": "Consultation details saved"}), 200
     return jsonify({"error": "Failed to save consultation"}), 400
 
-@patient_bp.route('/doctor/complete_consultation/<institute_id>', methods=['POST'])
+@patient_bp.route('/doctor/complete_consultation/<visit_id>', methods=['POST'])
 @jwt_required()
-def complete_consultation_route(institute_id):
+def complete_consultation_route(visit_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
     doctor_username = get_jwt_identity()
 
-    if database.complete_consultation(institute_id, doctor_username):
+    if database.complete_consultation(visit_id, doctor_username):
         return jsonify({"message": "Consultation marked as completed"}), 200
     return jsonify({"error": "Failed to complete consultation"}), 400
 
@@ -615,7 +615,7 @@ def receptionist_book_appointment():
         if not patient or patient.get("account_status") == "archived":
             return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments."}), 403
             
-        is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force)
+        is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by="receptionist")
         if not is_valid:
             return error_response
             

@@ -546,7 +546,7 @@ const PatientBooking = () => {
           .pulsing-dot { animation: pulse-green 2s infinite; }
         `}
       </style>
-      <Box w="100%" maxW={verifiedPatient ? "1100px" : "600px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
+      <Box w="100%" maxW={verifiedPatient ? "1100px" : "500px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
@@ -574,6 +574,7 @@ const PatientBooking = () => {
           <VStack spacing={6}>
             <Text color="gray.600" w="100%">
               Enter your Institute ID to fetch your patient record and book an appointment.
+              Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
             </Text>
             <FormControl>
               <FormLabel color="gray.700">Institute ID</FormLabel>
@@ -1157,7 +1158,7 @@ const PatientBooking = () => {
           <ModalHeader color="yellow.600">
             <Flex align="center">
               <Icon as={FiAlertTriangle} mr={2} />
-              Slot Partially Booked
+              Booking Warning
             </Flex>
           </ModalHeader>
           <ModalCloseButton />
@@ -1166,7 +1167,6 @@ const PatientBooking = () => {
               <AlertIcon />
               {slotWarningMessage}
             </Alert>
-            <Text mt={4}>Do you still want to proceed with booking this slot?</Text>
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" onClick={() => setShowSlotWarningModal(false)}>Cancel</Button>

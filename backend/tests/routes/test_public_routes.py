@@ -124,7 +124,7 @@ def test_public_book_appointment_success(client, mock_db, mocker):
 
 def test_public_book_appointment_patient_limit(client, mock_db, mocker):
     mock_db["get_patient_by_id"].return_value = {"account_status": "active"}
-    mocker.patch("database.visits.count_documents", return_value=3)
+    mocker.patch("database.visits.count_documents", side_effect=[0, 3])
     
     response = client.post("/api/public/book-appointment", json={"institute_id": "123", "doctor_username": "doc", "time": "2026-06-21T10:00"})
     assert response.status_code == 403
@@ -133,8 +133,8 @@ def test_public_book_appointment_patient_limit(client, mock_db, mocker):
 def test_public_book_appointment_warning(client, mock_db, mocker):
     mock_db["get_patient_by_id"].return_value = {"account_status": "active"}
     mocker.patch("database.users.find_one", return_value={"display_name": "Dr. Test"})
-    # First count is patient limit (0), second is capacity (1)
-    mocker.patch("database.visits.count_documents", side_effect=[0, 1, 0, 1])
+    # Each request calls count 3 times. First request (no force): [0, 0, 1]. Second request (force): [0, 0, 1]
+    mocker.patch("database.visits.count_documents", side_effect=[0, 0, 1, 0, 0, 1])
     
     # Without force flag
     response = client.post("/api/public/book-appointment", json={"institute_id": "123", "doctor_username": "doc", "time": "2026-06-21T10:00"})
@@ -153,8 +153,8 @@ def test_public_book_appointment_slot_full(client, mock_db, mocker):
         "schedule": [{"duty_days": ["Sunday"], "start_time": "09:00", "end_time": "10:00"}]
     })
     
-    # First count is patient limit (0), second is capacity (3)
-    mocker.patch("database.visits.count_documents", side_effect=[0, 3])
+    # First count is same slot (0), second is patient limit (0), third is capacity (3)
+    mocker.patch("database.visits.count_documents", side_effect=[0, 0, 3])
     mocker.patch("database.visits.find", return_value=[])
     
     response = client.post("/api/public/book-appointment", json={"institute_id": "123", "doctor_username": "doc", "time": "2026-06-21T09:00"})
@@ -168,8 +168,8 @@ def test_public_book_appointment_day_full(client, mock_db, mocker):
         "schedule": [{"duty_days": ["Sunday"], "start_time": "09:00", "end_time": "09:20"}]
     })
     
-    # First count is patient limit (0), second is capacity (3)
-    mocker.patch("database.visits.count_documents", side_effect=[0, 3])
+    # First count is same slot (0), second is patient limit (0), third is capacity (3)
+    mocker.patch("database.visits.count_documents", side_effect=[0, 0, 3])
     # Mock find for the whole day to simulate all slots are full
     # 09:00, 09:10, 09:20 are the slots (3 slots). 3 appointments each = 9.
     fake_appointments = []
@@ -305,10 +305,10 @@ def test_public_verify_otp_patient_not_found(client, mock_db):
 def test_public_book_appointment_receptionist_warning(client, mock_db, mocker):
     mock_db["get_patient_by_id"].return_value = {"account_status": "active"}
     mocker.patch("database.users.find_one", return_value={"display_name": "Dr. Test"})
-    # First count is patient limit (0), second is capacity (1)
-    mocker.patch("database.visits.count_documents", side_effect=[0, 1])
+    # First count is same slot (0), second is patient limit (0), third is capacity (1)
+    mocker.patch("database.visits.count_documents", side_effect=[0, 0, 1])
     
     # Booked by receptionist
     response = client.post("/api/public/book-appointment", json={"institute_id": "123", "doctor_username": "doc", "time": "2026-06-21T10:00", "booked_by": "receptionist"})
     assert response.status_code == 409
-    assert "Continue?" in json.loads(response.data)["warning"]
+    assert "proceed?" in json.loads(response.data)["warning"]

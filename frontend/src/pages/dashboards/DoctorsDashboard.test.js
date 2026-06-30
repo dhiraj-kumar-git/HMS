@@ -71,6 +71,7 @@ describe('DoctorsDashboard Component', () => {
               workflow_status: 'consultation',
               doctor_assigned: 'doctor1',
               registration_time: '2023-01-01T10:00:00Z',
+              visit_id: 'v101',
               appointments: []
             }
           ]
@@ -171,7 +172,7 @@ describe('DoctorsDashboard Component', () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -199,7 +200,7 @@ describe('DoctorsDashboard Component', () => {
     
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('/doctor/save_consultation/101'),
+        expect.stringContaining('/doctor/save_consultation/v101'),
         expect.objectContaining({ has_labs: false, has_meds: false }),
         expect.any(Object)
       );
@@ -210,7 +211,7 @@ describe('DoctorsDashboard Component', () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -252,6 +253,7 @@ describe('DoctorsDashboard Component', () => {
             name: 'John Doe', 
             age: 30, 
             workflow_status: 'consultation',
+            visit_id: 'v101',
             lab_reports: [{ s3_key: 'test_report.pdf', file_name: 'report.pdf' }]
           }]
         });

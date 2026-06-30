@@ -333,6 +333,17 @@ def public_doctor_availability(doctor_username):
 def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
     active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
     
+    # HARD BLOCK: Same doctor, same slot
+    same_slot_count = database.visits.count_documents({
+        "institute_id": institute_id,
+        "doctor_username": doctor_username,
+        "time": appointment_time,
+        "status": {"$in": active_statuses}
+    })
+    
+    if same_slot_count > 0:
+        return False, (jsonify({"error": "You already have an active appointment with this doctor at the exact same time slot."}), 409)
+
     # PATIENT LIMIT VALIDATION
     patient_active_count = database.visits.count_documents({
         "institute_id": institute_id,
@@ -341,6 +352,10 @@ def validate_appointment_slot(institute_id, doctor_username, appointment_time, f
     
     if patient_active_count >= 3:
         return False, (jsonify({"error": "You have reached the maximum limit of 3 active appointments. Please complete all previous appointments with the doctor before booking another appointment."}), 403)
+        
+    warnings = []
+    if patient_active_count > 0:
+        warnings.append("You already have an active appointment.")
 
     # CAPACITY VALIDATION
     try:
@@ -407,17 +422,15 @@ def validate_appointment_slot(institute_id, doctor_username, appointment_time, f
             
         return False, (jsonify({"error": "The selected appointment slot is fully booked and is no longer available."}), 409)
         
-    elif active_count in [1, 2] and not force:
-        if booked_by == "receptionist":
-            return False, (jsonify({
-                "warning": "Note: This slot already has another patient booked, but there is availability. Continue?",
-                "requires_confirmation": True
-            }), 409)
-        else:
-            return False, (jsonify({
-                "warning": "This slot is already booked by another patient but still has remaining availability.",
-                "requires_confirmation": True
-            }), 409)
+    if active_count in [1, 2]:
+        warnings.append("This slot is already booked by another patient but still has remaining availability.")
+        
+    if warnings and not force:
+        combined_warning = " ".join(warnings) + " Do you want to proceed?"
+        return False, (jsonify({
+            "warning": combined_warning,
+            "requires_confirmation": True
+        }), 409)
 
     return True, None
 

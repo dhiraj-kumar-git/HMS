@@ -208,7 +208,7 @@ export default function DoctorsDashboard() {
       patientsWithDetails.forEach(p => {
         // Patients in 'consultation' or 'lab test pending' are ready for the doctor to finalize
         if (p.workflow_status === "consultation" || p.workflow_status === "lab test pending") {
-          readyMap[p.institute_id] = true;
+          readyMap[p.visit_id] = true;
         }
       });
       setReadyToComplete(readyMap);
@@ -383,7 +383,7 @@ export default function DoctorsDashboard() {
 
       // Save all details in a single efficient PUT request
       await axios.put(
-        `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.institute_id}`,
+        `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.visit_id}`,
         {
           prescriptions: sessionSavedMedicines,
           prescription_details: sessionSavedPrescriptions,
@@ -412,7 +412,7 @@ export default function DoctorsDashboard() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/doctor/save_consultation/${selectedPatient.institute_id}`,
+        `${BASE_URL}/doctor/save_consultation/${selectedPatient.visit_id}`,
         { has_labs: hasLabs, has_meds: hasMeds },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -440,11 +440,11 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const executeSaveAndUpdate = async (patientId) => {
+  const executeSaveAndUpdate = async (visitId) => {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        `${BASE_URL}/doctor/complete_consultation/${patientId}`,
+        `${BASE_URL}/doctor/complete_consultation/${visitId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -452,7 +452,7 @@ export default function DoctorsDashboard() {
 
       await fetchPatients();
       onConfirmClose();
-      if (selectedPatient?.institute_id === patientId) {
+      if (selectedPatient?.visit_id === visitId) {
         onClose();
         setSelectedPatient(null);
       }
@@ -840,13 +840,13 @@ export default function DoctorsDashboard() {
                             )}
                           </Td>
                           <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                            {readyToComplete[p.institute_id] && (
+                            {readyToComplete[p.visit_id] && (
                               <IconButton
                                 aria-label="Complete consultation"
                                 icon={<FiCheckCircle />}
                                 colorScheme="green"
                                 size="sm"
-                                onClick={() => executeSaveAndUpdate(p.institute_id)}
+                                onClick={() => executeSaveAndUpdate(p.visit_id)}
                                 title="Complete consultation"
                               />
                             )}

@@ -74,7 +74,8 @@ describe('BookAppointmentModal Component', () => {
         {
           institute_id: 'P123',
           doctor_username: 'doc1',
-          time: '2026-06-25T10:00'
+          time: '2026-06-25T10:00',
+          force: false
         },
         expect.any(Object)
       );
