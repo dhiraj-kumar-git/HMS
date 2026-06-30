@@ -170,4 +170,24 @@ describe('PrescriptionModal Component', () => {
     fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('temporarily changes document.title to include institute ID and timestamp during print', () => {
+    const originalTitle = 'Original Title';
+    document.title = originalTitle;
+
+    const onClose = jest.fn();
+    const { unmount } = renderModal({ isOpen: true, onClose, prescriptionData: mockPrescriptionData });
+
+    const printBtn = screen.getByRole('button', { name: /Print Prescription/i });
+    fireEvent.click(printBtn);
+
+    // The title should be changed immediately when clicked
+    expect(document.title).toMatch(/^ID-456_\d{14}$/); // Checks for ID-456_YYYYMMDDHHMMSS
+
+    // Unmount the component to trigger the title restore
+    unmount();
+
+    // The title should be restored
+    expect(document.title).toBe(originalTitle);
+  });
 });

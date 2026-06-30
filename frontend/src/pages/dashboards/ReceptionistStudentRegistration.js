@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -95,7 +95,7 @@ const ReceptionistStudentRegistration = () => {
       });
       toast({
         title: "Registration Successful",
-        description: `Institute ID is ${response.data.institute_id}. Returning to dashboard...`,
+        description: `Patient registered successfully. Institute ID is ${response.data.institute_id}. Returning to dashboard...`,
         status: "success",
         duration: 3000,
         isClosable: true,

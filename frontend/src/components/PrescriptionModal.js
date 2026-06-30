@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Modal,
   ModalOverlay,
@@ -18,9 +18,21 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
 
   const currentDateTime = formatDateTimeIST(new Date());
 
+  const originalTitleRef = React.useRef(document.title);
+
+  useEffect(() => {
+    const origTitle = originalTitleRef.current;
+    return () => {
+      document.title = origTitle;
+    };
+  }, []);
 
   const handlePrint = () => {
     try {
+      const instituteId = prescriptionData?.institute_id || 'Slip';
+      const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').substring(0, 14);
+      document.title = `${instituteId}_${timestamp}`;
+
       let printStarted = false;
 
       // Some browsers fire beforeprint/afterprint events

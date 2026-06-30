@@ -60,10 +60,10 @@ def register_patient():
         institute_id = f"TEMP-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
     if patient_type == "Temporary":
-        if not all([name, date_of_birth, gender, contact_no, doctor_assigned, doctor_name, institute_id]):
+        if not all([name, date_of_birth, gender, contact_no, institute_id]):
             return jsonify({"error": "Missing required fields for Temporary guest"}), 400
     else:
-        if not all([name, date_of_birth, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type, institute_id]):
+        if not all([name, date_of_birth, gender, contact_no, email, address, patient_type, institute_id]):
             return jsonify({"error": "Missing required fields"}), 400
 
     patient_data = {
