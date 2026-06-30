@@ -40,6 +40,7 @@ def test_register_patient_temporary(client, mock_db, app, mocker):
         "date_of_birth": "1990-01-01",
         "gender": "M",
         "contact_no": "123",
+        "email": "temp@example.com",
         "doctor_assigned": "doc1",
         "patient_type": "Temporary"
     }

@@ -32,12 +32,12 @@ const ReceptionistStudentRegistration = () => {
   const toast = useToast();
   const [loading, setLoading] = useState(false);
   const username = localStorage.getItem("username");
-  
+
   const hostels = ["Ashok Bhawan", "Bhagirath Bhawan", "Budh Bhawan",
     "CVR Bhawan", "Gandhi Bhawan", "Krishna Bhawan", "Malviya Studio Apartment (MSA)",
     "Malviya Bhawan - A block", "Malviya Bhawan - B block", "Malviya Bhawan - C block",
     "Meera Bhawan", "Ram Bhawan", "Rana Pratap Bhawan", "Shankar Bhawan", "Vishwakarma Bhawan", "Vyas Bhawan"];
-  
+
   const [formData, setFormData] = useState({
     institute_id: '',
     name: '',
@@ -73,7 +73,12 @@ const ReceptionistStudentRegistration = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    if (name === 'patient_type' && value === 'Temporary') {
+      setFormData({ ...formData, [name]: value, address: 'Other', institute_id: '' });
+    } else {
+      setFormData({ ...formData, [name]: value });
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -171,44 +176,7 @@ const ReceptionistStudentRegistration = () => {
 
           <form onSubmit={handleSubmit}>
             <VStack spacing={6}>
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="100%">
-                <FormControl isRequired>
-                  <FormLabel color="gray.700">BITS Institute ID</FormLabel>
-                  <Input
-                    name="institute_id"
-                    placeholder="e.g. 2025H1120147P"
-                    value={formData.institute_id}
-                    onChange={handleChange}
-                    focusBorderColor="blue.500"
-                  />
-                </FormControl>
-
-                <FormControl isRequired>
-                  <FormLabel color="gray.700">Full Name</FormLabel>
-                  <Input
-                    name="name"
-                    placeholder="e.g. Dhiraj Kumar"
-                    value={formData.name}
-                    onChange={handleChange}
-                    textTransform="capitalize"
-                    focusBorderColor="blue.500"
-                  />
-                </FormControl>
-              </SimpleGrid>
-
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="100%">
-                <FormControl isRequired>
-                  <FormLabel color="gray.700">BITS Email ID</FormLabel>
-                  <Input
-                    name="email"
-                    type="email"
-                    placeholder="e.g. h20250147@pilani.bits-pilani.ac.in"
-                    value={formData.email}
-                    onChange={handleChange}
-                    focusBorderColor="blue.500"
-                  />
-                </FormControl>
-
+              <SimpleGrid columns={{ base: 1, md: formData.patient_type === 'Temporary' ? 1 : 2 }} spacing={6} w="100%">
                 <FormControl isRequired>
                   <FormLabel color="gray.700">Patient Type</FormLabel>
                   <Select
@@ -220,7 +188,47 @@ const ReceptionistStudentRegistration = () => {
                   >
                     <option value="Student">Student</option>
                     <option value="Other">Other</option>
+                    <option value="Temporary">Temporary (Guest)</option>
                   </Select>
+                </FormControl>
+
+                {formData.patient_type !== 'Temporary' && (
+                  <FormControl isRequired>
+                    <FormLabel color="gray.700">BITS Institute ID</FormLabel>
+                    <Input
+                      name="institute_id"
+                      placeholder="e.g. 2025H1120147P"
+                      value={formData.institute_id}
+                      onChange={handleChange}
+                      focusBorderColor="blue.500"
+                    />
+                  </FormControl>
+                )}
+              </SimpleGrid>
+
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="100%">
+                <FormControl isRequired>
+                  <FormLabel color="gray.700">Full Name</FormLabel>
+                  <Input
+                    name="name"
+                    placeholder="e.g. Dhiraj Kumar"
+                    value={formData.name}
+                    onChange={handleChange}
+                    textTransform="capitalize"
+                    focusBorderColor="blue.500"
+                  />
+                </FormControl>
+
+                <FormControl isRequired>
+                  <FormLabel color="gray.700">{formData.patient_type === 'Temporary' ? 'Email ID' : 'BITS Email ID'}</FormLabel>
+                  <Input
+                    name="email"
+                    type="email"
+                    placeholder="e.g. h20250147@pilani.bits-pilani.ac.in"
+                    value={formData.email}
+                    onChange={handleChange}
+                    focusBorderColor="blue.500"
+                  />
                 </FormControl>
               </SimpleGrid>
 
@@ -267,7 +275,7 @@ const ReceptionistStudentRegistration = () => {
               </SimpleGrid>
 
               <SimpleGrid columns={{ base: 1, md: formData.address === 'Other' ? 2 : 1 }} spacing={6} w="100%">
-                <FormControl isRequired w="100%">
+                <FormControl isRequired={formData.patient_type !== 'Temporary'} w="100%">
                   <FormLabel color="gray.700">Address / Hostel</FormLabel>
                   <Select
                     name="address"
@@ -286,7 +294,7 @@ const ReceptionistStudentRegistration = () => {
                 </FormControl>
 
                 {formData.address === 'Other' && (
-                  <FormControl isRequired w="100%">
+                  <FormControl isRequired={formData.patient_type !== 'Temporary'} w="100%">
                     <FormLabel color="gray.700">Custom Address Details</FormLabel>
                     <Input
                       name="customAddress"

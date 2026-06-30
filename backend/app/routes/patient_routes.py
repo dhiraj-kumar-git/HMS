@@ -57,10 +57,10 @@ def register_patient():
         import uuid
         from datetime import datetime
         # Generate a unique pseudo-ID for temporary guests
-        institute_id = f"TEMP-{datetime.now().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
+        institute_id = f"TEMP-{datetime.now().strftime('%d%m%Y')}-{uuid.uuid4().hex[:2].upper()}"
 
     if patient_type == "Temporary":
-        if not all([name, date_of_birth, gender, contact_no, institute_id]):
+        if not all([name, date_of_birth, gender, contact_no, email, institute_id]):
             return jsonify({"error": "Missing required fields for Temporary guest"}), 400
     else:
         if not all([name, date_of_birth, gender, contact_no, email, address, patient_type, institute_id]):

@@ -60,6 +60,17 @@ describe('ReceptionistStudentRegistration Component', () => {
     expect(screen.getByLabelText(/Custom Address Details/i)).toBeInTheDocument();
   });
 
+  it('hides Institute ID and alters fields for Temporary guest', () => {
+    renderComponent();
+
+    const typeSelect = screen.getByLabelText(/Patient Type/i);
+    fireEvent.change(typeSelect, { target: { name: 'patient_type', value: 'Temporary' } });
+
+    expect(screen.queryByLabelText(/BITS Institute ID/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/Email ID/i)).toBeInTheDocument(); // The BITS prefix is dropped
+    expect(screen.getByLabelText(/Address \/ Hostel/i).value).toBe('Other');
+  });
+
   it('submits form successfully', async () => {
     axios.post.mockResolvedValueOnce({ data: { institute_id: '12345' } });
 
@@ -97,6 +108,43 @@ describe('ReceptionistStudentRegistration Component', () => {
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/receptionist/register-patient');
     }, { timeout: 2000 });
+  });
+
+  it('submits temporary guest form successfully', async () => {
+    axios.post.mockResolvedValueOnce({ data: { institute_id: 'TEMP-12345' } });
+
+    renderComponent();
+
+    fireEvent.change(screen.getByLabelText(/Patient Type/i), { target: { name: 'patient_type', value: 'Temporary' } });
+    fireEvent.change(screen.getByLabelText(/Full Name/i), { target: { name: 'name', value: 'John Guest' } });
+    fireEvent.change(screen.getByLabelText(/Email ID/i), { target: { name: 'email', value: 'guest@email.com' } });
+    fireEvent.change(screen.getByLabelText(/Date of Birth/i), { target: { name: 'date_of_birth', value: '1990-01-01' } });
+    fireEvent.change(screen.getByLabelText(/Gender/i), { target: { name: 'gender', value: 'Male' } });
+    fireEvent.change(screen.getByLabelText(/Contact Number/i), { target: { name: 'contact_no', value: '8888888888' } });
+    // address defaults to 'Other' and is disabled, institute_id is hidden
+
+    const submitBtn = screen.getByRole('button', { name: /Complete Registration/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/register_patient'),
+        expect.objectContaining({
+          institute_id: '',
+          name: 'John Guest',
+          email: 'guest@email.com',
+          date_of_birth: '1990-01-01',
+          patient_type: 'Temporary',
+          gender: 'Male',
+          contact_no: '8888888888',
+          address: '',
+          customAddress: ''
+        }),
+        expect.objectContaining({
+          headers: { Authorization: 'Bearer fake-token' }
+        })
+      );
+    });
   });
 
   it('handles submission error', async () => {
