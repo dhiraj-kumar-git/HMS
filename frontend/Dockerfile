@@ -6,10 +6,6 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-# Inject React URL build argument
-ARG REACT_APP_BASE_URL
-ENV REACT_APP_BASE_URL=$REACT_APP_BASE_URL
-
 COPY . .
 RUN npm run build
 
