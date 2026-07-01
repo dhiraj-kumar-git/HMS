@@ -33,6 +33,7 @@ class Visit:
     institute_id: str
     doctor_username: str
     status: str = "upcoming"
+    booked_by: str = "patient"
     time: Optional[str] = None
     booked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     prescriptions: list = field(default_factory=list)

@@ -30,9 +30,11 @@ import {
   ModalHeader,
   ModalFooter,
   ModalBody,
-  ModalCloseButton
+  ModalCloseButton,
+  IconButton,
+  Tooltip
 } from '@chakra-ui/react';
-import { FiSearch, FiCalendar, FiClock, FiCheckCircle, FiPlus, FiAlertCircle, FiArrowLeft, FiAlertTriangle } from 'react-icons/fi';
+import { FiSearch, FiCalendar, FiClock, FiCheckCircle, FiPlus, FiAlertCircle, FiArrowLeft, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
 import { getWeekdayIST, formatDateTimeIST, toTitleCase } from '../../utils/utils';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
@@ -72,6 +74,29 @@ const PatientBooking = () => {
   const [showBillingWarning, setShowBillingWarning] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [showFutureBookingWarning, setShowFutureBookingWarning] = useState(false);
+
+  // Slot Capacity Warning
+  const [showSlotWarningModal, setShowSlotWarningModal] = useState(false);
+  const [slotWarningMessage, setSlotWarningMessage] = useState('');
+  const [fullSlots, setFullSlots] = useState([]);
+
+  const fetchFullSlots = async (docUsername, dateStr) => {
+    if (!docUsername || !dateStr) {
+      setFullSlots([]);
+      return;
+    }
+    try {
+      const res = await axios.get(`${BASE_URL}/api/public/doctor-availability/${docUsername}?date=${dateStr}`);
+      setFullSlots(res.data.full_slots || []);
+    } catch (error) {
+      console.error('Error fetching full slots', error);
+      setFullSlots([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchFullSlots(bookingData.doctor_username, bookingData.date);
+  }, [bookingData.doctor_username, bookingData.date]);
 
   const handleProceedWithFutureBooking = () => {
     setShowFutureBookingWarning(false);
@@ -139,11 +164,16 @@ const PatientBooking = () => {
 
 
 
-  // Check if we came directly from registration
+  // Check if we came directly from registration or receptionist
   useEffect(() => {
-    if (location.state && location.state.autoFillInstituteId) {
-      setInstituteId(location.state.autoFillInstituteId);
-      handleVerify(location.state.autoFillInstituteId);
+    if (location.state) {
+      if (location.state.skipOtp && location.state.verifiedPatientData) {
+        setInstituteId(location.state.verifiedPatientData.institute_id);
+        setVerifiedAndCheckFamily(location.state.verifiedPatientData);
+      } else if (location.state.autoFillInstituteId) {
+        setInstituteId(location.state.autoFillInstituteId);
+        handleVerify(location.state.autoFillInstituteId);
+      }
     }
   }, [location]);
 
@@ -173,7 +203,9 @@ const PatientBooking = () => {
 
   const setVerifiedAndCheckFamily = (patientData) => {
     setVerifiedPatient(patientData);
-    if (patientData.psrn_id) {
+    if (patientData.patient_type === 'Faculty' || patientData.patient_type === 'Staff') {
+      fetchFamily(patientData.institute_id);
+    } else if (patientData.psrn_id) {
       fetchFamily(patientData.psrn_id);
     } else {
       setFamilyMembers([]);
@@ -377,14 +409,25 @@ const PatientBooking = () => {
       });
       return;
     }
-    
+
     // Check for active appointments first
     setBookingLoading(true);
     try {
       const activeRes = await axios.get(`${BASE_URL}/api/public/check-active-appointments/${verifiedPatient.institute_id}`);
       const appointments = activeRes.data.activeAppointments || activeRes.data.active_appointments || [];
-      
-      if (appointments.length > 0) {
+
+      if (appointments.length >= 3) {
+        toast({
+          title: "Appointment Limit Reached",
+          description: "You have reached the maximum limit of 3 active appointments. Please complete all previous appointments with the doctor before booking another appointment.",
+          status: "error",
+          duration: 7000,
+          isClosable: true,
+          position: 'top'
+        });
+        setBookingLoading(false);
+        return; // Block booking
+      } else if (appointments.length > 0) {
         setActiveAppointments(appointments);
         setShowWarningModal(true);
         setBookingLoading(false);
@@ -393,21 +436,25 @@ const PatientBooking = () => {
     } catch (err) {
       console.error("Failed to check active appointments", err);
     }
-    
+
     await proceedWithBooking();
   };
 
-  const proceedWithBooking = async () => {
+  const proceedWithBooking = async (force = false) => {
     setShowWarningModal(false);
     setBookingLoading(true);
-    
+
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
     try {
+      const isReceptionist = location.state?.skipOtp;
+      
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
-        time: fullTime
+        time: fullTime,
+        force: force,
+        booked_by: isReceptionist ? "receptionist" : "patient"
       });
 
       toast({
@@ -423,17 +470,28 @@ const PatientBooking = () => {
       setBookingData({ doctor_username: '', date: '', timeSlot: '' });
       setBookingFlow('dashboard');
       setIsRedirecting(true);
-      setTimeout(() => navigate('/portal'), 2000);
+      setTimeout(() => {
+        if (location.state?.skipOtp) {
+          navigate('/receptionist');
+        } else {
+          navigate('/portal');
+        }
+      }, 2000);
 
     } catch (err) {
-      toast({
-        title: "Booking Failed",
-        description: err.response?.data?.error || "Could not book appointment.",
-        status: "error",
-        duration: 3000,
-        position: 'top',
-        isClosable: true,
-      });
+      if (err.response?.status === 409 && err.response?.data?.requires_confirmation) {
+        setSlotWarningMessage(err.response.data.warning);
+        setShowSlotWarningModal(true);
+      } else {
+        toast({
+          title: "Booking Failed",
+          description: err.response?.data?.error || "Could not book appointment.",
+          status: "error",
+          duration: 3000,
+          position: 'top',
+          isClosable: true,
+        });
+      }
     } finally {
       setBookingLoading(false);
     }
@@ -471,7 +529,7 @@ const PatientBooking = () => {
     return (
       <Flex minH="100vh" bg="gray.50" align="center" justify="center" flexDir="column">
         <Spinner thickness="4px" speed="0.65s" emptyColor="gray.200" color="teal.500" size="xl" />
-        <Text mt={4} fontSize="lg" color="teal.700" fontWeight="bold">Booking confirmed! Redirecting to portal...</Text>
+        <Text mt={4} fontSize="lg" color="teal.700" fontWeight="bold">Booking confirmed! Redirecting to {location.state?.skipOtp ? 'dashboard' : 'portal'}...</Text>
       </Flex>
     );
   }
@@ -488,15 +546,21 @@ const PatientBooking = () => {
           .pulsing-dot { animation: pulse-green 2s infinite; }
         `}
       </style>
-      <Box w="100%" maxW={verifiedPatient ? "1100px" : "600px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
+      <Box w="100%" maxW={verifiedPatient ? "1100px" : "500px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
           colorScheme="teal"
           mb={6}
-          onClick={() => navigate('/portal')}
+          onClick={() => {
+            if (location.state?.skipOtp) {
+              navigate(-1);
+            } else {
+              navigate('/portal');
+            }
+          }}
         >
-          Back to Portal
+          {location.state?.skipOtp ? 'Back to Dashboard' : 'Back to Portal'}
         </Button>
 
         <Flex align="center" mb={6}>
@@ -510,6 +574,7 @@ const PatientBooking = () => {
           <VStack spacing={6}>
             <Text color="gray.600" w="100%">
               Enter your Institute ID to fetch your patient record and book an appointment.
+              Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
             </Text>
             <FormControl>
               <FormLabel color="gray.700">Institute ID</FormLabel>
@@ -721,7 +786,20 @@ const PatientBooking = () => {
                     </Box>
 
                     <FormControl isRequired>
-                      <FormLabel color="gray.700">Confirm Time Slot</FormLabel>
+                      <Flex justify="space-between" align="center" mb={2}>
+                        <FormLabel color="gray.700" m={0}>Confirm Time Slot</FormLabel>
+                        <Tooltip label="Refresh slot availability">
+                          <IconButton
+                            aria-label="Refresh slots"
+                            icon={<FiRefreshCw />}
+                            size="sm"
+                            variant="ghost"
+                            colorScheme="teal"
+                            onClick={() => fetchFullSlots(bookingData.doctor_username, bookingData.date)}
+                            isDisabled={!bookingData.date || !bookingData.doctor_username}
+                          />
+                        </Tooltip>
+                      </Flex>
                       <Select
                         value={bookingData.timeSlot}
                         onChange={(e) => setBookingData({ ...bookingData, timeSlot: e.target.value })}
@@ -735,8 +813,11 @@ const PatientBooking = () => {
                           const ampm = hours >= 12 ? 'PM' : 'AM';
                           const displayH = hours % 12 || 12;
                           const displayTime = `${displayH}:${m} ${ampm}`;
+                          const isFull = fullSlots.includes(slot);
                           return (
-                            <option key={idx} value={slot}>{displayTime}</option>
+                            <option key={idx} value={slot} disabled={isFull} style={isFull ? { color: 'red' } : {}}>
+                              {displayTime} {isFull ? '(Full)' : ''}
+                            </option>
                           );
                         })}
                       </Select>
@@ -798,7 +879,20 @@ const PatientBooking = () => {
                           />
                         </FormControl>
                         <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username}>
-                          <FormLabel color="gray.700">Time Slot</FormLabel>
+                          <Flex justify="space-between" align="center" mb={2}>
+                            <FormLabel color="gray.700" m={0}>Time Slot</FormLabel>
+                            <Tooltip label="Refresh slot availability">
+                              <IconButton
+                                aria-label="Refresh slots"
+                                icon={<FiRefreshCw />}
+                                size="sm"
+                                variant="ghost"
+                                colorScheme="teal"
+                                onClick={() => fetchFullSlots(bookingData.doctor_username, bookingData.date)}
+                                isDisabled={!bookingData.date || !bookingData.doctor_username}
+                              />
+                            </Tooltip>
+                          </Flex>
                           <Select
                             placeholder="Select a time slot"
                             value={bookingData.timeSlot}
@@ -813,8 +907,11 @@ const PatientBooking = () => {
                               const ampm = hours >= 12 ? 'PM' : 'AM';
                               const displayH = hours % 12 || 12;
                               const displayTime = `${displayH}:${m} ${ampm}`;
+                              const isFull = fullSlots.includes(slot);
                               return (
-                                <option key={idx} value={slot}>{displayTime}</option>
+                                <option key={idx} value={slot} disabled={isFull} style={isFull ? { color: 'red' } : {}}>
+                                  {displayTime} {isFull ? '(Full)' : ''}
+                                </option>
                               );
                             })}
                           </Select>
@@ -981,12 +1078,12 @@ const PatientBooking = () => {
               <VStack align="stretch" pl={4} spacing={2}>
                 {activeAppointments.map((appt, idx) => (
                   <Text key={idx} fontWeight="bold" color="gray.700">
-                    • Dr. {toTitleCase(appt.doctor_name)} (Waiting)
+                    • {toTitleCase(appt.doctor_name)} (Waiting)
                   </Text>
                 ))}
               </VStack>
               <Text mt={2}>
-                Are you sure you want to proceed with booking another appointment with <b>Dr. {toTitleCase(doctors.find(d => d.username === bookingData.doctor_username)?.display_name || bookingData.doctor_username)}</b>?
+                Are you sure you want to proceed with booking another appointment with <b>{toTitleCase(doctors.find(d => d.username === bookingData.doctor_username)?.display_name || bookingData.doctor_username)}</b>?
               </Text>
             </VStack>
           </ModalBody>
@@ -995,7 +1092,7 @@ const PatientBooking = () => {
             <Button variant="ghost" mr={3} onClick={() => setShowWarningModal(false)}>
               Cancel
             </Button>
-            <Button colorScheme="orange" onClick={proceedWithBooking} isLoading={bookingLoading}>
+            <Button colorScheme="orange" onClick={() => proceedWithBooking()} isLoading={bookingLoading}>
               Yes, Proceed
             </Button>
           </ModalFooter>
@@ -1054,6 +1151,35 @@ const PatientBooking = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
+      {/* Slot Warning Modal */}
+      <Modal isOpen={showSlotWarningModal} onClose={() => setShowSlotWarningModal(false)}>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader color="yellow.600">
+            <Flex align="center">
+              <Icon as={FiAlertTriangle} mr={2} />
+              Booking Warning
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Alert status="warning" borderRadius="md">
+              <AlertIcon />
+              {slotWarningMessage}
+            </Alert>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" onClick={() => setShowSlotWarningModal(false)}>Cancel</Button>
+            <Button colorScheme="yellow" ml={3} onClick={() => {
+              setShowSlotWarningModal(false);
+              proceedWithBooking(true);
+            }}>
+              Acknowledge & Proceed
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
     </Flex>
   );
 };

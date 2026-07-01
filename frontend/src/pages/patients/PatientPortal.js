@@ -32,7 +32,7 @@ const PatientPortal = () => {
         <Box textAlign="center">
           <Heading
             as="h1"
-            size="2xl"
+            size="xl"
             bgGradient="linear(to-r, blue.500, teal.400)"
             bgClip="text"
             fontWeight="extrabold"
@@ -41,7 +41,10 @@ const PatientPortal = () => {
             Welcome to BITS Medical Center Patient Portal
           </Heading>
           <Text fontSize="lg" color="gray.600">
-            Self-service platform for seamless registration and appointment booking.
+            Book an appointment with a doctor for your medical consultation.
+          </Text>
+          <Text fontSize="sm" color="gray.500" mt={2}>
+            Note: If you are not registered in the system, please visit the reception desk first.
           </Text>
         </Box>
 
@@ -51,46 +54,14 @@ const PatientPortal = () => {
           gap={8}
           justify="center"
         >
-          {/* New Patient Card */}
-          <Flex
-            bg={cardBg}
-            p={8}
-            borderRadius="2xl"
-            boxShadow="xl"
-            flex="1"
-            direction="column"
-            justify="space-between"
-            transition="all 0.3s ease"
-            _hover={{ transform: 'translateY(-5px)', boxShadow: '2xl' }}
-            textAlign="center"
-          >
-            <Box>
-              <Icon as={FiUserPlus} w={12} h={12} color="blue.500" mb={4} />
-              <Heading as="h3" size="lg" mb={4} color="gray.700">
-                New Visitors
-              </Heading>
-              <Text color="gray.500" mb={8}>
-                First time here? Register seamlessly into our system using your Institute ID to get started.
-              </Text>
-            </Box>
-            <Button
-              size="lg"
-              colorScheme="blue"
-              w="100%"
-              borderRadius="xl"
-              onClick={() => navigate('/portal/register')}
-            >
-              Register Now
-            </Button>
-          </Flex>
-
           {/* Returning Patient Card */}
           <Flex
             bg={cardBg}
             p={8}
             borderRadius="2xl"
             boxShadow="xl"
-            flex="1"
+            w="100%"
+            maxW="450px"
             direction="column"
             justify="space-between"
             transition="all 0.3s ease"
@@ -100,10 +71,11 @@ const PatientPortal = () => {
             <Box>
               <Icon as={FiCalendar} w={12} h={12} color="teal.500" mb={4} />
               <Heading as="h3" size="lg" mb={4} color="gray.700">
-                Returning Patients
+                Book an Appointment
               </Heading>
-              <Text color="gray.500" mb={8}>
-                Already registered? Book a new appointment quickly with your Institute ID.
+              <Text color="gray.500" mb={4} fontSize="md">
+                Registered patients can book a new appointment using their Institute ID.
+                After booking, please visit the reception desk where the receptionist will confirm your appointment with the doctor and provide you with a prescription slip printout.
               </Text>
             </Box>
             <Button
@@ -114,39 +86,6 @@ const PatientPortal = () => {
               onClick={() => navigate('/portal/book-appointment')}
             >
               Book Appointment
-            </Button>
-          </Flex>
-
-          {/* Faculty/Staff Card */}
-          <Flex
-            bg={cardBg}
-            p={8}
-            borderRadius="2xl"
-            boxShadow="xl"
-            flex="1"
-            direction="column"
-            justify="space-between"
-            transition="all 0.3s ease"
-            _hover={{ transform: 'translateY(-5px)', boxShadow: '2xl' }}
-            textAlign="center"
-          >
-            <Box>
-              <Icon as={FiUsers} w={12} h={12} color="purple.500" mb={4} />
-              <Heading as="h3" size="lg" mb={4} color="gray.700">
-                Faculty & Staff
-              </Heading>
-              <Text color="gray.500" mb={8}>
-                Register yourself and your dependants using your PSRN ID.
-              </Text>
-            </Box>
-            <Button
-              size="lg"
-              colorScheme="purple"
-              w="100%"
-              borderRadius="xl"
-              onClick={() => navigate('/portal/staff-register')}
-            >
-              Register Family
             </Button>
           </Flex>
         </Flex>

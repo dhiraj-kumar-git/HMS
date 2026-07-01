@@ -293,12 +293,155 @@ def public_verify_otp():
         "bill_status": patient.get("bill_status", "none")
     }), 200
 
+@public_bp.route('/api/public/doctor-availability/<doctor_username>', methods=['GET'])
+def public_doctor_availability(doctor_username):
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({"error": "Date is required"}), 400
+        
+    # Get all active appointments for the day
+    appointments_on_date = list(database.visits.find({
+        "doctor_username": doctor_username,
+        "time": {"$regex": f"^{date_str}[T ]"},
+        "status": {"$in": ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]}
+    }))
+    
+    time_counts = {}
+    for app in appointments_on_date:
+        time_counts[app["time"]] = time_counts.get(app["time"], 0) + 1
+        
+    # Full slots are those with >= 3 appointments
+    full_slots = []
+    for time_str, count in time_counts.items():
+        if count >= 3:
+            try:
+                if 'T' in time_str:
+                    slot_time = time_str.split('T')[1]
+                else:
+                    slot_time = time_str.split(' ')[1]
+                
+                # Keep only HH:MM
+                if len(slot_time) > 5:
+                    slot_time = slot_time[:5]
+                    
+                full_slots.append(slot_time)
+            except IndexError:
+                pass
+                
+    return jsonify({"full_slots": full_slots}), 200
+
+def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
+    active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
+    
+    # HARD BLOCK: Same doctor, same slot
+    same_slot_count = database.visits.count_documents({
+        "institute_id": institute_id,
+        "doctor_username": doctor_username,
+        "time": appointment_time,
+        "status": {"$in": active_statuses}
+    })
+    
+    if same_slot_count > 0:
+        return False, (jsonify({"error": "You already have an active appointment with this doctor at the exact same time slot."}), 409)
+
+    # PATIENT LIMIT VALIDATION
+    patient_active_count = database.visits.count_documents({
+        "institute_id": institute_id,
+        "status": {"$in": active_statuses}
+    })
+    
+    if patient_active_count >= 3:
+        return False, (jsonify({"error": "You have reached the maximum limit of 3 active appointments. Please complete all previous appointments with the doctor before booking another appointment."}), 403)
+        
+    warnings = []
+    if patient_active_count > 0:
+        warnings.append("You already have an active appointment.")
+
+    # CAPACITY VALIDATION
+    try:
+        # Extract just the date part (e.g., '2026-06-21')
+        date_str = appointment_time.split("T")[0]
+    except Exception:
+        date_str = appointment_time.split(" ")[0]
+        
+    # Count active appointments for this specific slot
+    active_count = database.visits.count_documents({
+        "doctor_username": doctor_username,
+        "time": appointment_time,
+        "status": {"$in": active_statuses}
+    })
+    
+    if active_count >= 3:
+        # The slot is full. Check if the doctor has ANY slots left for the whole day.
+        doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
+        
+        # Get all active appointments for the day
+        appointments_on_date = list(database.visits.find({
+            "doctor_username": doctor_username,
+            "time": {"$regex": f"^{date_str}[T ]"},
+            "status": {"$in": active_statuses}
+        }))
+        
+        time_counts = {}
+        for app in appointments_on_date:
+            normalized_time = app["time"].replace(" ", "T")
+            time_counts[normalized_time] = time_counts.get(normalized_time, 0) + 1
+            
+        # Determine day of week
+        try:
+            from datetime import datetime
+            date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+            day_name = date_obj.strftime("%A")
+            
+            # Find the shift
+            shift = next((s for s in doctor.get("schedule", []) if day_name in s.get("duty_days", [])), None)
+            has_available_slot = False
+            
+            if shift:
+                start_h, start_m = map(int, shift["start_time"].split(":"))
+                end_h, end_m = map(int, shift["end_time"].split(":"))
+                
+                curr_time = datetime(2000, 1, 1, start_h, start_m)
+                end_time = datetime(2000, 1, 1, end_h, end_m)
+                
+                while curr_time <= end_time:
+                    slot_str = f"{date_str}T{curr_time.strftime('%H:%M')}"
+                    if time_counts.get(slot_str, 0) < 3:
+                        has_available_slot = True
+                        break
+                    from datetime import timedelta
+                    curr_time += timedelta(minutes=10)
+            else:
+                # If no shift found but they're trying to book, assume there's availability we can't calculate
+                has_available_slot = True
+                
+            if not has_available_slot:
+                return False, (jsonify({"error": "Doctor is not available for appointments on the selected day as all appointment slots are fully booked."}), 409)
+        except Exception as e:
+            print("Error calculating daily schedule availability:", str(e))
+            
+        return False, (jsonify({"error": "The selected appointment slot is fully booked and is no longer available."}), 409)
+        
+    if active_count in [1, 2]:
+        warnings.append("This slot is already booked by another patient but still has remaining availability.")
+        
+    if warnings and not force:
+        combined_warning = " ".join(warnings) + " Do you want to proceed?"
+        return False, (jsonify({
+            "warning": combined_warning,
+            "requires_confirmation": True
+        }), 409)
+
+    return True, None
+
 @public_bp.route('/api/public/book-appointment', methods=['POST'])
 def public_book_appointment():
     data = request.json
     institute_id = data.get("institute_id")
     doctor_username = data.get("doctor_username")
     appointment_time = data.get("time") 
+    force = data.get("force", False)
+    booked_by = data.get("booked_by", "patient")
     
     if not all([institute_id, doctor_username, appointment_time]):
         return jsonify({"error": "Missing required fields"}), 400
@@ -307,10 +450,16 @@ def public_book_appointment():
     if not patient or patient.get("account_status") == "archived":
         return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
         
+    is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by)
+    if not is_valid:
+        return error_response
+
     doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
     doctor_name = doctor.get("display_name") if doctor else doctor_username
     
-    if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time):
+    initial_status = "confirmed" if booked_by == "receptionist" else "booked"
+    
+    if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status=initial_status, booked_by=booked_by):
         return jsonify({"message": "Appointment booked successfully"}), 200
     return jsonify({"error": "Failed to book appointment"}), 400
 

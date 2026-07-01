@@ -3,9 +3,9 @@ import { Box, Flex, Heading, Text, IconButton, HStack, Menu, MenuButton, MenuLis
 import { FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
 import axios from "axios";
 import BASE_URL from "../../utils/Config";
-import ReceptionistQueue from "./ReceptionistQueue";
+import PatientsList from "../patients/PatientsList";
 
-export default function ReceptionistDashboard() {
+export default function ReceptionistPatientsList() {
   const username = localStorage.getItem("username");
 
   const handleLogout = async () => {
@@ -44,7 +44,7 @@ export default function ReceptionistDashboard() {
         justify="space-between"
       >
         <Heading size="md" color="blue.800">
-          Receptionist Dashboard
+          Patient Directory
         </Heading>
         <HStack spacing="4">
           <IconButton icon={<FiBell />} variant="ghost" aria-label="Notifications" />
@@ -63,10 +63,7 @@ export default function ReceptionistDashboard() {
 
       {/* Main Content Area */}
       <Box p={{ base: "4", md: "6" }} flex="1" overflowY="auto">
-        <Box bg="white" p={4} borderRadius="lg" boxShadow="sm">
-          <Heading size="md" mb={4}>Appointments Dashboard</Heading>
-          <ReceptionistQueue />
-        </Box>
+        <PatientsList />
       </Box>
     </Flex>
   );

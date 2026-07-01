@@ -64,6 +64,32 @@ const StatusGuideModal = ({ isOpen, onClose }) => {
             </Box>
             <Divider />
             <Box>
+              <Heading size="sm" mb={3} color="gray.700">Appointment Statuses</Heading>
+              <Stack align="start" spacing={3}>
+                <Box>
+                  <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="yellow">booked</Badge>
+                  <Text fontSize="sm">Appointment is booked but arrival is not yet confirmed.</Text>
+                </Box>
+                <Box>
+                  <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="green">confirmed</Badge>
+                  <Text fontSize="sm">Patient arrival has been confirmed by the receptionist.</Text>
+                </Box>
+                <Box>
+                  <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="blue">checked_in</Badge>
+                  <Text fontSize="sm">Patient has checked in and is ready to be seen by the doctor.</Text>
+                </Box>
+                <Box>
+                  <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="red">cancelled</Badge>
+                  <Text fontSize="sm">The appointment was cancelled.</Text>
+                </Box>
+                <Box>
+                  <Badge variant="subtle" mb={1} fontSize="10px" colorScheme="orange">no_show</Badge>
+                  <Text fontSize="sm">The patient did not show up for the appointment.</Text>
+                </Box>
+              </Stack>
+            </Box>
+            <Divider />
+            <Box>
               <Heading size="sm" mb={3} color="gray.700">Billing Statuses</Heading>
               <Stack align="start" spacing={3}>
                 <Box>

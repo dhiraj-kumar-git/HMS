@@ -54,7 +54,7 @@ def test_archive_patient(mocker):
 def test_book_appointment(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
     mock_patients = mocker.patch.object(patients_db, 'patients')
-    mock_patients.update_one.return_value.modified_count = 1
+    mock_patients.update_one.return_value.matched_count = 1
     res = book_appointment("123", "doc1", "Dr. One", "10:00")
     assert res is True
     mock_visits.insert_one.assert_called_once()
@@ -89,7 +89,7 @@ def test_get_family_by_psrn(mocker):
 
 def test_get_patients_by_doctor(mocker):
     mock_patients = mocker.patch.object(patients_db, 'patients')
-    mock_patients.aggregate.return_value = [{"institute_id": "123", "patient_visits": []}]
+    mock_patients.aggregate.return_value = [{"institute_id": "123", "patient_visits": [{"doctor_username": "doc1", "status": "confirmed", "visit_id": "v1"}]}]
     res = get_patients_by_doctor("doc1")
     assert len(res) == 1
 
@@ -101,33 +101,38 @@ def test_get_patient_history_for_doctor(mocker):
 
 def test_update_consultation_details(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
-    mocker.patch("app.database.patients._get_active_visit_id", return_value="v123")
     mock_visits.update_one.return_value.matched_count = 1
-    res = update_consultation_details("123", "doc1", [], [], [], [])
+    res = update_consultation_details("v123", "doc1", [], [], [], [])
     assert res is True
 
 def test_complete_patient(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.find_one.return_value = {"institute_id": "123"}
     mock_patients = mocker.patch.object(patients_db, 'patients')
     mock_patients.find_one.return_value = {"institute_id": "123"}
     mocker.patch("app.database.patients._finalize_visit")
     mock_patients.update_one.return_value.modified_count = 1
-    res = complete_patient("123")
+    res = complete_patient("v1")
     assert res is True
 
 def test_consultation_patient(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.find_one.return_value = {"institute_id": "123"}
     mock_patients = mocker.patch.object(patients_db, 'patients')
     mock_patients.find_one.return_value = {"institute_id": "123"}
     mocker.patch("app.database.patients._finalize_visit")
     mock_patients.update_one.return_value.matched_count = 1
-    res = consultation_patient("123", "doc1", False, False)
+    res = consultation_patient("v1", "doc1", False, False)
     assert res is True
 
 def test_complete_consultation(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.find_one.return_value = {"institute_id": "123"}
     mock_patients = mocker.patch.object(patients_db, 'patients')
     mock_patients.find_one.return_value = {"institute_id": "123", "bill_status": "none", "lab_status": "none"}
     mocker.patch("app.database.patients._finalize_visit")
     mock_patients.update_one.return_value.modified_count = 1
-    res = complete_consultation("123")
+    res = complete_consultation("v1")
     assert res is True
 
 def test_get_inactive_patients_by_doctor(mocker):
@@ -141,6 +146,12 @@ def test_get_active_pending_patients(mocker):
     mock_visits.aggregate.return_value = [{"patient_info": {"institute_id": "123", "_id": "1", "patient_visits": []}}]
     res = get_active_pending_patients()
     assert len(res) == 1
+    
+    # Verify that the pipeline filters for "status": "completed"
+    pipeline = mock_visits.aggregate.call_args[0][0]
+    match_stage = pipeline[0]["$match"]
+    assert match_stage.get("status") == "completed"
+    assert match_stage.get("invoice_no") == {"$exists": False}
 
 def test_bulk_register_patients(mocker):
     mocker.patch("app.database.patients.register_patient", return_value="123")
@@ -185,7 +196,7 @@ def test_map_aggregated_patient_with_visits():
         ]
     }
     res = _map_aggregated_patient(p, active_doctor_username="doc1")
-    assert res["workflow_status"] == "active"
+    assert res["workflow_status"] == "upcoming"
     
 def test_map_aggregated_patient_other_statuses():
     p = {
@@ -204,8 +215,73 @@ def test_get_active_visit_id(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
     mock_visits.find_one.return_value = {"visit_id": "v1"}
     assert _get_active_visit_id("123", "doc1") == "v1"
+
 def test_finalize_visit(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
     _finalize_visit('v1', 'completed')
     mock_visits.update_one.assert_called_once()
+
+def test_get_receptionist_queue(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.aggregate.return_value = [{"visit_id": "v1", "status": "booked"}]
+    
+    # Test without date filter
+    res = patients_db.get_receptionist_queue(status_filter="all")
+    assert len(res) == 1
+    
+    # Test with active status
+    res = patients_db.get_receptionist_queue(status_filter="active")
+    assert len(res) == 1
+    
+    # Test with dates
+    res = patients_db.get_receptionist_queue(start_date="2026-06-01", end_date="2026-06-30", status_filter="")
+    assert len(res) == 1
+
+def test_book_appointment_confirmed(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_patients = mocker.patch.object(patients_db, 'patients')
+    mock_patients.update_one.return_value.matched_count = 1
+    
+    res = book_appointment("123", "doc1", "Dr. One", "10:00", status="confirmed")
+    assert res is True
+    mock_visits.insert_one.assert_called_once()
+
+def test_generate_relation_id():
+    # Test prefixes
+    assert patients_db.generate_relation_id("P123", "Son", []) == "P123-SON1"
+    assert patients_db.generate_relation_id("P123", "Daughter", []) == "P123-DAUGHTER1"
+    assert patients_db.generate_relation_id("P123", "Spouse", []) == "P123-SPOUSE"
+    assert patients_db.generate_relation_id("P123", "Father-in-law", []) == "P123-FIL"
+    assert patients_db.generate_relation_id("P123", "Mother-in-law", []) == "P123-MIL"
+    assert patients_db.generate_relation_id("P123", "Father", []) == "P123-FATHER"
+    assert patients_db.generate_relation_id("P123", "Mother", []) == "P123-MOTHER"
+    assert patients_db.generate_relation_id("P123", "Uncle", []) == "P123-OTHER1"
+    
+    # Test existing numbering
+    family = [{"institute_id": "P123-SON1"}, {"institute_id": "P123-SON2"}]
+    assert patients_db.generate_relation_id("P123", "Son", family) == "P123-SON3"
+    
+    # Test unnumbered spouse becomes numbered if duplicate
+    family2 = [{"institute_id": "P123-SPOUSE"}]
+    assert patients_db.generate_relation_id("P123", "Spouse", family2) == "P123-SPOUSE2"
+
+def test_bulk_register_patients_duplicate_in_file(mocker):
+    rows = [
+        {"institute_id": "1", "name": "Pat1", "email": "a@b.com", "date_of_birth": "1990-01-01", "gender": "M", "contact_no": "123", "patient_type": "Student", "address": "Addr"},
+        {"institute_id": "1", "name": "Pat2", "email": "a@b.com", "date_of_birth": "1990-01-01", "gender": "M", "contact_no": "123", "patient_type": "Student", "address": "Addr"}
+    ]
+    res = bulk_register_patients(rows, "admin")
+    assert res["success"] == 0
+    assert res["failed"] == 2
+    assert "Duplicate institute_id within the uploaded file" in res["errors"][1]["reason"]
+
+def test_bulk_register_patients_already_in_db(mocker):
+    mocker.patch("app.database.patients.register_patient", return_value=None)
+    rows = [
+        {"institute_id": "1", "name": "Pat", "email": "a@b.com", "date_of_birth": "1990-01-01", "gender": "M", "contact_no": "1234567890", "patient_type": "Student", "address": "Addr"}
+    ]
+    res = bulk_register_patients(rows, "admin")
+    assert res["success"] == 0
+    assert res["failed"] == 1
+    assert "Already registered in database" in res["errors"][0]["reason"]
 

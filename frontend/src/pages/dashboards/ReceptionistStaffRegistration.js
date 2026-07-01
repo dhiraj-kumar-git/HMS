@@ -27,23 +27,52 @@ import {
   ModalHeader,
   ModalBody,
   ModalCloseButton,
-  ModalFooter
+  ModalFooter,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Avatar
 } from '@chakra-ui/react';
-import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2, FiEdit2 } from 'react-icons/fi';
+import { FiArrowLeft, FiUserCheck, FiPlus, FiTrash2, FiEdit2, FiBell, FiMail, FiUser, FiLogOut } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { getDateISTString } from '../../utils/utils';
 
-const RELATION_OPTIONS = [
-  "Spouse", "Son", "Daughter", "Father", "Mother",
-  "Father-in-law", "Mother-in-law", "Other"
-];
+const getRelationOptions = (gender) => {
+  if (gender === 'Male') return ["Spouse", "Father", "Son", "Father-in-law", "Other"];
+  if (gender === 'Female') return ["Spouse", "Mother", "Daughter", "Daughter-in-law", "Other"];
+  return ["Spouse", "Father", "Mother", "Son", "Daughter", "Father-in-law", "Mother-in-law", "Daughter-in-law", "Other"];
+};
 
-const StaffRegistration = () => {
+const ReceptionistStaffRegistration = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
+  const username = localStorage.getItem("username");
+
+  const handleLogout = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const session_id = localStorage.getItem("session_id");
+      if (token && session_id) {
+        await axios.post(
+          `${BASE_URL}/logout`,
+          { session_id },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      localStorage.removeItem("token");
+      localStorage.removeItem("username");
+      localStorage.removeItem("role");
+      localStorage.removeItem("session_id");
+      window.location.href = "/login";
+    }
+  };
 
   // Tab 1 State
   const [primary, setPrimary] = useState({
@@ -74,13 +103,9 @@ const StaffRegistration = () => {
   const [fetchingDependants, setFetchingDependants] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
 
-  // OTP State
+  // OTP State (bypassed for receptionist)
   const [isVerified, setIsVerified] = useState(false);
-  const [showOtpModal, setShowOtpModal] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
   const [verifying, setVerifying] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
-  const [maskedEmail, setMaskedEmail] = useState('');
 
   // Edit State
   const [editingDependant, setEditingDependant] = useState(null);
@@ -92,12 +117,14 @@ const StaffRegistration = () => {
   const [dependantToDelete, setDependantToDelete] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // New Registration Confirm/OTP State
+  // New Registration Confirm State
   const [showRegisterConfirmModal, setShowRegisterConfirmModal] = useState(false);
-  const [showRegisterOtpModal, setShowRegisterOtpModal] = useState(false);
-  const [registerOtpInput, setRegisterOtpInput] = useState('');
   const [registerVerifying, setRegisterVerifying] = useState(false);
-  const [registerOtpLoading, setRegisterOtpLoading] = useState(false);
+
+  // Post-Registration Booking Modal State
+  const [showBookingModal, setShowBookingModal] = useState(false);
+  const [registeredPatients, setRegisteredPatients] = useState([]);
+  const [selectedBookingPatientId, setSelectedBookingPatientId] = useState('');
 
   const handlePrimaryChange = (e) => {
     setPrimary({ ...primary, [e.target.name]: e.target.value });
@@ -125,14 +152,10 @@ const StaffRegistration = () => {
     }
     setVerifying(true);
     try {
-      const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: existingPsrn });
-      if (response.data.requires_otp) {
-        setMaskedEmail(response.data.email);
-        setShowOtpModal(true);
-      } else {
-        setIsVerified(true);
-        checkExistingDependants();
-      }
+      await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: existingPsrn });
+      // Bypass OTP for receptionist
+      setIsVerified(true);
+      checkExistingDependants();
     } catch (err) {
       toast({
         title: "Verification Failed",
@@ -146,30 +169,6 @@ const StaffRegistration = () => {
       setHasFetched(false);
     } finally {
       setVerifying(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (!otpInput) {
-      toast({ title: "OTP required", status: "warning", duration: 2000 });
-      return;
-    }
-    setVerifyingOtp(true);
-    try {
-      await axios.post(`${BASE_URL}/api/public/verify-otp`, {
-        institute_id: existingPsrn,
-        otp: otpInput
-      });
-      setShowOtpModal(false);
-      setIsVerified(true);
-      checkExistingDependants();
-      toast({ title: "Identity Verified", status: "success", duration: 2000 });
-    } catch (err) {
-      toast({ title: "Invalid OTP", status: "error", duration: 3000 });
-      setIsVerified(false);
-    } finally {
-      setVerifyingOtp(false);
-      setOtpInput('');
     }
   };
 
@@ -248,32 +247,9 @@ const StaffRegistration = () => {
   };
 
   const handleRegisterConfirm = async () => {
-    setRegisterVerifying(true);
-    try {
-      await axios.post(`${BASE_URL}/api/public/send_registration_otp`, { email: primary.email });
-      toast({ title: "OTP Sent", description: `Sent to ${primary.email}`, status: "info", duration: 3000, position: 'top' });
-      setShowRegisterConfirmModal(false);
-      setShowRegisterOtpModal(true);
-    } catch (err) {
-      toast({ title: "Failed to send OTP", description: err.response?.data?.error || "Error", status: "error", duration: 3000, position: 'top' });
-    } finally {
-      setRegisterVerifying(false);
-    }
-  };
-
-  const handleRegisterOtpValidate = async () => {
-    setRegisterOtpLoading(true);
-    try {
-      await axios.post(`${BASE_URL}/api/public/verify_registration_otp`, {
-        email: primary.email,
-        otp: registerOtpInput
-      });
-      // Verification successful, execute actual registration
-      executeFinalRegistration();
-    } catch (err) {
-      toast({ title: "Invalid OTP", description: err.response?.data?.error || "Error", status: "error", duration: 3000, position: 'top' });
-      setRegisterOtpLoading(false);
-    }
+    // Bypass OTP for receptionist
+    setShowRegisterConfirmModal(false);
+    executeFinalRegistration();
   };
 
   const executeFinalRegistration = async () => {
@@ -297,10 +273,25 @@ const StaffRegistration = () => {
         isClosable: true,
         position: 'top'
       });
-      setShowRegisterOtpModal(false);
-      setTimeout(() => {
-        navigate('/portal');
-      }, 1500);
+      
+      try {
+        const familyRes = await axios.get(`${BASE_URL}/api/family/${primary.psrn_id}`);
+        setRegisteredPatients(familyRes.data);
+        if (familyRes.data.length > 0) {
+          setSelectedBookingPatientId(familyRes.data[0].institute_id);
+        }
+      } catch (err) {
+        // Fallback if fetch fails
+        setRegisteredPatients([{
+          institute_id: primary.psrn_id,
+          name: primary.name,
+          patient_type: primary.patient_type,
+          gender: primary.gender,
+          bill_status: 'none'
+        }]);
+        setSelectedBookingPatientId(primary.psrn_id);
+      }
+      setShowBookingModal(true);
     } catch (err) {
       toast({
         title: "Registration Failed",
@@ -312,7 +303,6 @@ const StaffRegistration = () => {
       });
     } finally {
       setLoading(false);
-      setRegisterOtpLoading(false);
     }
   };
 
@@ -355,17 +345,48 @@ const StaffRegistration = () => {
   };
 
   return (
-    <Flex minH="100vh" bg="gray.50" align="flex-start" justify="center" p={6}>
-      <Box w="100%" maxW="900px" bg="white" borderRadius="2xl" boxShadow="xl" p={8} mt={8}>
-        <Button
-          leftIcon={<FiArrowLeft />}
-          variant="ghost"
-          colorScheme="blue"
-          mb={6}
-          onClick={() => navigate('/portal')}
-        >
-          Back to Portal
-        </Button>
+    <Flex direction="column" h="100vh" bg="gray.50" overflow="hidden">
+      {/* HEADER */}
+      <Flex
+        as="header"
+        w="100%"
+        h="64px"
+        bg="white"
+        boxShadow="sm"
+        align="center"
+        px="4"
+        justify="space-between"
+      >
+        <Heading size="md" color="blue.800">
+          Register Patient
+        </Heading>
+        <HStack spacing="4">
+          <IconButton icon={<FiBell />} variant="ghost" aria-label="Notifications" />
+          <IconButton icon={<FiMail />} variant="ghost" aria-label="Messages" />
+          <Menu>
+            <MenuButton as={Button} variant="ghost" rightIcon={<Avatar size="sm" name={username} />}>
+              <Text fontWeight="medium">Welcome, {username}</Text>
+            </MenuButton>
+            <MenuList>
+              <MenuItem icon={<FiUser />}>Profile</MenuItem>
+              <MenuItem icon={<FiLogOut />} onClick={handleLogout}>Logout</MenuItem>
+            </MenuList>
+          </Menu>
+        </HStack>
+      </Flex>
+
+      {/* Main Content Area */}
+      <Box p={{ base: "4", md: "8" }} flex="1" overflowY="auto">
+        <Box w="100%" maxW="900px" mx="auto" bg="white" borderRadius="2xl" boxShadow="xl" p={8}>
+          <Button
+            leftIcon={<FiArrowLeft />}
+            variant="ghost"
+            colorScheme="blue"
+            mb={6}
+            onClick={() => navigate('/receptionist/register-patient')}
+          >
+            Back
+          </Button>
 
         <Flex align="center" mb={6}>
           <Icon as={FiUserCheck} w={8} h={8} color="blue.500" mr={3} />
@@ -483,7 +504,7 @@ const StaffRegistration = () => {
                         <FormControl isRequired>
                           <FormLabel>Relation</FormLabel>
                           <Select placeholder="Select Relation" value={dep.relation} onChange={(e) => handleDependantChange(index, 'relation', e.target.value)}>
-                            {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            {getRelationOptions(dep.gender).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                           </Select>
                         </FormControl>
                         {dep.relation === 'Other' && (
@@ -578,7 +599,7 @@ const StaffRegistration = () => {
                         <FormControl isRequired>
                           <FormLabel>Relation</FormLabel>
                           <Select placeholder="Select Relation" value={singleDependant.relation} onChange={(e) => setSingleDependant({ ...singleDependant, relation: e.target.value })} focusBorderColor="blue.500">
-                            {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            {getRelationOptions(singleDependant.gender).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                           </Select>
                         </FormControl>
                       </SimpleGrid>
@@ -601,57 +622,6 @@ const StaffRegistration = () => {
           </TabPanels>
         </Tabs>
       </Box>
-
-      {/* OTP Verification Modal */}
-      <Modal isOpen={showOtpModal} onClose={() => setShowOtpModal(false)} isCentered>
-        <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent borderRadius="xl">
-          <ModalHeader color="blue.800">Verify Your Identity</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            <VStack spacing={4}>
-              <Box p={4} bg="blue.50" borderRadius="md" w="100%">
-                <Text fontSize="sm" color="blue.800" textAlign="center">
-                  We've sent a 4-digit OTP to your registered email address:<br />
-                  <strong>{maskedEmail}</strong>
-                </Text>
-              </Box>
-              <FormControl isRequired>
-                <FormLabel>Enter OTP</FormLabel>
-                <Input
-                  placeholder="----"
-                  size="lg"
-                  textAlign="center"
-                  letterSpacing="0.5em"
-                  maxLength={4}
-                  value={otpInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (/^\d{0,4}$/.test(value)) {
-                      setOtpInput(value);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleVerifyOtp();
-                    }
-                  }}
-                />
-              </FormControl>
-              <Text fontSize="xs" color="gray.500" textAlign="center">
-                This code will expire in 5 minutes.
-              </Text>
-            </VStack>
-          </ModalBody>
-          <ModalFooter bg="gray.50" borderBottomRadius="xl">
-            <Button variant="ghost" onClick={() => setShowOtpModal(false)}>Cancel</Button>
-            <Button colorScheme="blue" ml={3} isLoading={verifyingOtp} onClick={handleVerifyOtp}>
-              Verify OTP
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
 
       {/* Edit Dependant Modal */}
       <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} size="xl">
@@ -687,7 +657,7 @@ const StaffRegistration = () => {
                     <FormControl isRequired>
                       <FormLabel>Relation</FormLabel>
                       <Select value={editingDependant.relation || ''} onChange={(e) => setEditingDependant({ ...editingDependant, relation: e.target.value })} focusBorderColor="blue.500">
-                        {RELATION_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        {getRelationOptions(editingDependant.gender).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                       </Select>
                     </FormControl>
                   </SimpleGrid>
@@ -754,66 +724,48 @@ const StaffRegistration = () => {
           <ModalFooter bg="gray.50" borderBottomRadius="xl">
             <Button variant="ghost" onClick={() => setShowRegisterConfirmModal(false)}>Cancel</Button>
             <Button colorScheme="blue" ml={3} isLoading={registerVerifying} onClick={handleRegisterConfirm}>
-              Confirm & Send OTP
+              Confirm
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </Box>
+
+      {/* Booking Prompt Modal */}
+      <Modal isOpen={showBookingModal} onClose={() => navigate('/receptionist/register-patient')} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Book Appointment?</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text mb={4}>Would you like to proceed with booking an appointment for a newly registered patient immediately?</Text>
+            {registeredPatients.length > 1 && (
+              <FormControl>
+                <FormLabel>Select Patient to Book For</FormLabel>
+                <Select value={selectedBookingPatientId} onChange={(e) => setSelectedBookingPatientId(e.target.value)}>
+                  {registeredPatients.map(p => (
+                    <option key={p.institute_id} value={p.institute_id}>{p.name} ({p.patient_type})</option>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={() => navigate('/receptionist/register-patient')}>
+              No, return to dashboard
+            </Button>
+            <Button colorScheme="blue" onClick={() => {
+              const selectedPatient = registeredPatients.find(p => p.institute_id === selectedBookingPatientId) || registeredPatients[0];
+              navigate('/portal/book-appointment', { state: { skipOtp: true, verifiedPatientData: selectedPatient } });
+            }}>
+              Yes, book appointment
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* Registration OTP Modal */}
-      <Modal isOpen={showRegisterOtpModal} onClose={() => setShowRegisterOtpModal(false)} isCentered>
-        <ModalOverlay backdropFilter="blur(4px)" />
-        <ModalContent borderRadius="xl">
-          <ModalHeader color="blue.800">Verify Your Identity</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody pb={6}>
-            <VStack spacing={4}>
-              <Box p={4} bg="blue.50" borderRadius="md" w="100%">
-                <Text fontSize="sm" color="blue.800" textAlign="center">
-                  We've sent a 4-digit OTP to your registered email address:<br />
-                  <strong>{primary.email}</strong>
-                </Text>
-              </Box>
-              <FormControl isRequired>
-                <FormLabel>Enter OTP</FormLabel>
-                <Input
-                  placeholder="----"
-                  size="lg"
-                  textAlign="center"
-                  letterSpacing="0.5em"
-                  maxLength={4}
-                  value={registerOtpInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (/^\d{0,4}$/.test(value)) {
-                      setRegisterOtpInput(value);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleRegisterOtpValidate();
-                    }
-                  }}
-                  autoFocus
-                  focusBorderColor="blue.500"
-                />
-              </FormControl>
-              <Text fontSize="xs" color="gray.500" textAlign="center">
-                This code will expire in 5 minutes.
-              </Text>
-            </VStack>
-          </ModalBody>
-          <ModalFooter bg="gray.50" borderBottomRadius="xl">
-            <Button variant="ghost" onClick={() => setShowRegisterOtpModal(false)}>Cancel</Button>
-            <Button colorScheme="blue" ml={3} isLoading={registerOtpLoading} onClick={handleRegisterOtpValidate}>
-              Verify OTP & Register
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </Flex>
   );
 };
 
-export default StaffRegistration;
+export default ReceptionistStaffRegistration;
