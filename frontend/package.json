@@ -12,8 +12,11 @@
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.8.2",
+    "crypto-js": "^4.2.0",
     "framer-motion": "^7.10.3",
+    "http-proxy-middleware": "^2.0.6",
     "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.8",
     "multiselect-react-dropdown": "^2.0.25",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -29,6 +32,7 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
+    "test:unit": "react-scripts test --coverage --watchAll=false",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -48,5 +52,15 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^axios$": "<rootDir>/node_modules/axios/dist/node/axios.cjs",
+      "^@chakra-ui/utils/context$": "<rootDir>/node_modules/@chakra-ui/utils/dist/cjs/context.cjs",
+      "^@chakra-ui/utils/(.*)$": "<rootDir>/node_modules/@chakra-ui/utils/dist/cjs/$1.cjs",
+      "^react-router-dom$": "<rootDir>/node_modules/react-router-dom/dist/index.js",
+      "^react-router/dom$": "<rootDir>/node_modules/react-router/dist/development/dom-export.js",
+      "^react-router$": "<rootDir>/node_modules/react-router/dist/development/index.js"
+    }
   }
 }

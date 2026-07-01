@@ -25,12 +25,6 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        # We define a default fallback if the host machine hasn't specified its own IP manually.
-        # Note: Since React is client-side, this URL must be publicly addressable by the end-user's browser! 
-        # If deploying to a server (e.g. 192.168.1.100), you would run:
-        # REACT_APP_BASE_URL=http://192.168.1.100:5000 docker compose up -d
-        - REACT_APP_BASE_URL=${REACT_APP_BASE_URL:-http://localhost:5000}
     container_name: hms-frontend
     restart: unless-stopped
     ports:
