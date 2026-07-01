@@ -58,6 +58,7 @@ def mock_db(mocker):
     mock_update_doctor_schedule = mocker.patch("database.update_doctor_schedule", return_value=True)
     mock_delete_user = mocker.patch("database.delete_user", return_value=True)
     mock_get_active_pending_patients = mocker.patch("database.get_active_pending_patients", return_value=[])
+    mock_verify_patient_otp = mocker.patch("database.verify_patient_otp", return_value=(True, ""))
     
     return {
         "get_all_doctors": mock_get_all_doctors,
@@ -73,5 +74,6 @@ def mock_db(mocker):
         "update_doctor_schedule": mock_update_doctor_schedule,
         "delete_user": mock_delete_user,
         "get_active_pending_patients": mock_get_active_pending_patients,
+        "verify_patient_otp": mock_verify_patient_otp,
         "redis_client": None
     }

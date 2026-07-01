@@ -21,6 +21,7 @@ describe('StatusGuideModal Component', () => {
 
     // Check for some badges/text
     expect(screen.getByText('Workflow Statuses')).toBeInTheDocument();
+    expect(screen.getByText('Appointment Statuses')).toBeInTheDocument();
     expect(screen.getByText('Billing Statuses')).toBeInTheDocument();
     expect(screen.getByText('Lab Statuses')).toBeInTheDocument();
     

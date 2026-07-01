@@ -36,12 +36,12 @@ def register_patient():
     data = request.json
 
     doctor_username = data.get("doctor_assigned")
+    doctor_name = None
     if doctor_username:
         doctors_map = get_doctors_name()
         doctor_name = doctors_map.get(doctor_username, doctor_username)
         data["doctor_name"] = doctor_name
-
-    print("Doctors Map:", doctors_map)
+        print("Doctors Map:", doctors_map)
 
     name = data.get("name")
     date_of_birth = data.get("date_of_birth")
@@ -53,8 +53,18 @@ def register_patient():
     patient_type = data.get("patient_type")
     institute_id = data.get("institute_id")
 
-    if not all([name, date_of_birth, gender, contact_no, email, address, doctor_assigned, doctor_name, patient_type, institute_id]):
-        return jsonify({"error": "Missing required fields"}), 400
+    if patient_type == "Temporary" and not institute_id:
+        import uuid
+        from datetime import datetime
+        # Generate a unique pseudo-ID for temporary guests
+        institute_id = f"TEMP-{datetime.now().strftime('%d%m%Y')}-{uuid.uuid4().hex[:2].upper()}"
+
+    if patient_type == "Temporary":
+        if not all([name, date_of_birth, gender, contact_no, email, institute_id]):
+            return jsonify({"error": "Missing required fields for Temporary guest"}), 400
+    else:
+        if not all([name, date_of_birth, gender, contact_no, email, address, patient_type, institute_id]):
+            return jsonify({"error": "Missing required fields"}), 400
 
     patient_data = {
         "institute_id": institute_id,
@@ -73,6 +83,28 @@ def register_patient():
         "lab_tests": [],
         "lab_results": []
     }
+
+    appointment_time = data.get("appointment_time")
+    force = data.get("force", False)
+
+    if appointment_time and doctor_assigned:
+        from app.routes.public_routes import validate_appointment_slot
+        is_valid, error_response = validate_appointment_slot(institute_id, doctor_assigned, appointment_time, force, booked_by="receptionist")
+        if not is_valid:
+            return error_response
+
+        # Register patient
+        result_id = database.register_patient(patient_data)
+        if result_id is None:
+            return jsonify({"error": "Patient with this Institute ID already exists"}), 409
+            
+        # Get doctor name
+        doctor = database.users.find_one({"username": doctor_assigned, "role": "doctor"})
+        doctor_name = doctor.get("display_name") if doctor else doctor_assigned
+
+        # Book appointment as confirmed immediately
+        database.book_appointment(institute_id, doctor_assigned, doctor_name, appointment_time, status="confirmed")
+        return jsonify({"message": "Patient registered and appointment confirmed successfully", "institute_id": result_id}), 201
 
     result_id = database.register_patient(patient_data)
     if result_id is None:
@@ -94,7 +126,7 @@ def get_patient(institute_id):
 @jwt_required()
 def get_patients():
     claims = get_jwt()
-    if claims.get("role") != "admin":
+    if claims.get("role") not in ["admin", "receptionist"]:
         return jsonify({"error": "Unauthorized"}), 403
 
     try:
@@ -147,9 +179,9 @@ def get_doctor_patients():
     return jsonify(patients_list), 200
 
 # [NEW] Endpoint for doctor to overwrite all drafted consultation details at once
-@patient_bp.route('/doctor/save_consultation_details/<institute_id>', methods=['PUT'])
+@patient_bp.route('/doctor/save_consultation_details/<visit_id>', methods=['PUT'])
 @jwt_required()
-def save_consultation_details_route(institute_id):
+def save_consultation_details_route(visit_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
@@ -162,15 +194,15 @@ def save_consultation_details_route(institute_id):
     lab_tests = data.get("lab_tests", [])
     remarks = data.get("remarks", [])
 
-    if database.update_consultation_details(institute_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+    if database.update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
         return jsonify({"message": "Consultation details saved successfully"}), 200
     return jsonify({"error": "Failed to save consultation details"}), 400
 
 
 # Endpoint for doctor to confirm consultation details and update statuses
-@patient_bp.route('/doctor/save_consultation/<institute_id>', methods=['POST'])
+@patient_bp.route('/doctor/save_consultation/<visit_id>', methods=['POST'])
 @jwt_required()
-def save_consultation_route(institute_id):
+def save_consultation_route(visit_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
@@ -181,20 +213,20 @@ def save_consultation_route(institute_id):
     doctor_username = get_jwt_identity()
 
     # Move to 'consultation' status (patient stays in doctor list)
-    if database.consultation_patient(institute_id, doctor_username, has_labs, has_meds):
+    if database.consultation_patient(visit_id, doctor_username, has_labs, has_meds):
         return jsonify({"message": "Consultation details saved"}), 200
     return jsonify({"error": "Failed to save consultation"}), 400
 
-@patient_bp.route('/doctor/complete_consultation/<institute_id>', methods=['POST'])
+@patient_bp.route('/doctor/complete_consultation/<visit_id>', methods=['POST'])
 @jwt_required()
-def complete_consultation_route(institute_id):
+def complete_consultation_route(visit_id):
     claims = get_jwt()
     if claims.get("role") != "doctor":
         return jsonify({"error": "Unauthorized access"}), 403
 
     doctor_username = get_jwt_identity()
 
-    if database.complete_consultation(institute_id, doctor_username):
+    if database.complete_consultation(visit_id, doctor_username):
         return jsonify({"message": "Consultation marked as completed"}), 200
     return jsonify({"error": "Failed to complete consultation"}), 400
 
@@ -516,3 +548,84 @@ def generate_view_url():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@patient_bp.route('/api/receptionist/queue', methods=['GET'])
+@jwt_required()
+def get_receptionist_appointments():
+    claims = get_jwt()
+    if claims.get("role") not in ["receptionist", "admin"]:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    try:
+        import database
+        start_date = request.args.get("start_date")
+        end_date = request.args.get("end_date")
+        status_filter = request.args.get("status")
+        
+        queue = database.get_receptionist_queue(
+            start_date=start_date,
+            end_date=end_date,
+            status_filter=status_filter
+        )
+        return jsonify(queue), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@patient_bp.route('/api/receptionist/appointment/<visit_id>/status', methods=['POST'])
+@jwt_required()
+def update_appointment_status_route(visit_id):
+    claims = get_jwt()
+    if claims.get("role") not in ["receptionist", "admin"]:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    new_status = data.get("status")
+    if not new_status:
+        return jsonify({"error": "Status is required"}), 400
+
+    try:
+        import database
+        success = database.update_appointment_status(visit_id, new_status)
+        if success:
+            return jsonify({"message": "Appointment status updated"}), 200
+        return jsonify({"error": "Visit not found or no changes made"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@patient_bp.route('/api/receptionist/book-appointment', methods=['POST'])
+@jwt_required()
+def receptionist_book_appointment():
+    claims = get_jwt()
+    if claims.get("role") not in ["receptionist", "admin"]:
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    institute_id = data.get("institute_id")
+    doctor_username = data.get("doctor_username")
+    appointment_time = data.get("time") 
+    force = data.get("force", False)
+    
+    if not all([institute_id, doctor_username, appointment_time]):
+        return jsonify({"error": "Missing required fields"}), 400
+        
+    try:
+        import database
+        from app.routes.public_routes import validate_appointment_slot
+        
+        patient = database.get_patient_by_id(institute_id)
+        if not patient or patient.get("account_status") == "archived":
+            return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments."}), 403
+            
+        is_valid, error_response = validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by="receptionist")
+        if not is_valid:
+            return error_response
+            
+        doctor = database.users.find_one({"username": doctor_username, "role": "doctor"})
+        doctor_name = doctor.get("display_name") if doctor else doctor_username
+        
+        # Receptionist books directly to 'confirmed' status
+        if database.book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status="confirmed"):
+            return jsonify({"message": "Appointment booked and confirmed successfully"}), 200
+            
+        return jsonify({"error": "Failed to book appointment"}), 400
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

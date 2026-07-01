@@ -148,6 +148,175 @@ describe('PatientBooking Component', () => {
     }, { timeout: 3000 });
   });
 
+  it('handles receptionist skipOtp redirection to /receptionist', async () => {
+    // 1) Setup mocks before rendering
+    axios.get.mockResolvedValueOnce({
+      data: [
+        {
+          username: 'doc1',
+          display_name: 'Dr. Smith',
+          department: 'General',
+          schedule: [{ duty_days: ['Monday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+        }
+      ]
+    });
+
+    // 2) Set state to skipOtp
+    renderComponent({ skipOtp: true, verifiedPatientData: { institute_id: 'receptionist123', name: 'Rec Patient' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // 3) Quick Book
+    fireEvent.click(screen.getByRole('button', { name: /Book Now/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Immediate Booking Confirmation/i)).toBeInTheDocument();
+    });
+
+    // 4) Check active appointments and Book Appointment
+    axios.get.mockResolvedValueOnce({ data: { activeAppointments: [] } });
+    axios.post.mockResolvedValueOnce({ data: { success: true } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Confirm & Book/i }));
+
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/receptionist');
+    }, { timeout: 3000 });
+  });
+
+  it('handles billing warning when bill_status is pending for quick book', async () => {
+    // Verify patient with pending bills
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: '12345', name: 'John Doe', bill_status: 'pending', appointments: [] }
+    });
+    // Fetch doctors
+    axios.get.mockResolvedValueOnce({
+      data: [
+        {
+          username: 'doc1',
+          display_name: 'Dr. Smith',
+          department: 'General',
+          schedule: [{ duty_days: ['Monday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+        }
+      ]
+    });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // Click Book Now
+    fireEvent.click(screen.getByRole('button', { name: /Book Now/i }));
+
+    // Billing warning modal should appear
+    await waitFor(() => {
+      expect(screen.getByText(/Pending Bill Notice/i)).toBeInTheDocument();
+    });
+
+    // Proceed from warning
+    fireEvent.click(screen.getByRole('button', { name: /Proceed to Book/i }));
+
+    // Should open Immediate Booking Confirmation
+    await waitFor(() => {
+      expect(screen.getByText(/Immediate Booking Confirmation/i)).toBeInTheDocument();
+    });
+  });
+
+  it('handles future booking warning and active appointments check', async () => {
+    // 1) Verify Patient
+    axios.post.mockResolvedValueOnce({
+      data: { institute_id: '12345', name: 'John Doe', appointments: [] }
+    });
+    
+    // Mock for actual booking submission
+    axios.post.mockResolvedValueOnce({
+      data: { message: 'Appointment booked successfully' }
+    });
+    // Mock all get requests robustly to handle multiple renders
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctors')) {
+        return Promise.resolve({
+          data: [
+            {
+              username: 'doc1',
+              display_name: 'Dr. Smith',
+              department: 'General',
+              schedule: [{ duty_days: ['Monday'], start_time: '09:00 AM', end_time: '05:00 PM' }]
+            }
+          ]
+        });
+      }
+      if (url.includes('/doctor-availability/')) {
+        return Promise.resolve({ data: { full_slots: ['09:10 AM'] } });
+      }
+      if (url.includes('/check-active-appointments/')) {
+        return Promise.resolve({ data: { activeAppointments: [{ doctor_name: 'Dr. Jones', time: '2030-10-14T09:00:00Z', status: 'Booked' }] } });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderComponent();
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Dr. Smith (General)')).toBeInTheDocument();
+    });
+
+    // Switch to Advanced Booking
+    fireEvent.click(screen.getByRole('button', { name: /Schedule for a Later Date/i }));
+
+    // Wait for the warning modal
+    await waitFor(() => {
+      expect(screen.getByText(/Do you want to proceed with advanced booking?/i)).toBeInTheDocument();
+    });
+
+    // Proceed from warning
+    fireEvent.click(screen.getByRole('button', { name: /Proceed/i }));
+
+    // Select the doctor
+    const doctorSelect = screen.getByRole('combobox', { name: /Doctor/i });
+    fireEvent.change(doctorSelect, { target: { value: 'doc1' } });
+
+    // Fill date to enable confirm button
+    const dateInput = screen.getByLabelText(/Appointment Date/i);
+    fireEvent.change(dateInput, { target: { value: '2030-10-14' } }); // A Monday
+
+    // Wait for availability fetch
+    await waitFor(() => {
+      expect(axios.get).toHaveBeenCalledWith(expect.stringContaining('/doctor-availability/'));
+    });
+
+    // Pick a slot
+    const slotSelect = screen.getByLabelText(/Time Slot/i);
+    fireEvent.change(slotSelect, { target: { value: '09:00' } });
+
+    // Click confirm booking
+    const confirmBtn = screen.getByRole('button', { name: /Confirm Appointment/i });
+    fireEvent.submit(confirmBtn.closest('form'));
+
+    // Wait for the active appointments warning
+    await waitFor(() => {
+      expect(screen.getByText(/Active Appointments Detected/i)).toBeInTheDocument();
+    });
+    
+    // Proceed from warning
+    axios.post.mockResolvedValueOnce({ data: { success: true } });
+    fireEvent.click(screen.getByRole('button', { name: /Yes, Proceed/i }));
+
+    // Should successfully navigate after proceeding
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/portal');
+    }, { timeout: 3000 });
+  });
+
+
   it('handles future booking flow', async () => {
     // Verify
     axios.post.mockResolvedValueOnce({

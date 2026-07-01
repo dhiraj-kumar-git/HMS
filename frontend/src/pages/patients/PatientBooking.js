@@ -164,11 +164,16 @@ const PatientBooking = () => {
 
 
 
-  // Check if we came directly from registration
+  // Check if we came directly from registration or receptionist
   useEffect(() => {
-    if (location.state && location.state.autoFillInstituteId) {
-      setInstituteId(location.state.autoFillInstituteId);
-      handleVerify(location.state.autoFillInstituteId);
+    if (location.state) {
+      if (location.state.skipOtp && location.state.verifiedPatientData) {
+        setInstituteId(location.state.verifiedPatientData.institute_id);
+        setVerifiedAndCheckFamily(location.state.verifiedPatientData);
+      } else if (location.state.autoFillInstituteId) {
+        setInstituteId(location.state.autoFillInstituteId);
+        handleVerify(location.state.autoFillInstituteId);
+      }
     }
   }, [location]);
 
@@ -442,11 +447,14 @@ const PatientBooking = () => {
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
     try {
+      const isReceptionist = location.state?.skipOtp;
+      
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
         time: fullTime,
-        force: force
+        force: force,
+        booked_by: isReceptionist ? "receptionist" : "patient"
       });
 
       toast({
@@ -462,7 +470,13 @@ const PatientBooking = () => {
       setBookingData({ doctor_username: '', date: '', timeSlot: '' });
       setBookingFlow('dashboard');
       setIsRedirecting(true);
-      setTimeout(() => navigate('/portal'), 2000);
+      setTimeout(() => {
+        if (location.state?.skipOtp) {
+          navigate('/receptionist');
+        } else {
+          navigate('/portal');
+        }
+      }, 2000);
 
     } catch (err) {
       if (err.response?.status === 409 && err.response?.data?.requires_confirmation) {
@@ -515,7 +529,7 @@ const PatientBooking = () => {
     return (
       <Flex minH="100vh" bg="gray.50" align="center" justify="center" flexDir="column">
         <Spinner thickness="4px" speed="0.65s" emptyColor="gray.200" color="teal.500" size="xl" />
-        <Text mt={4} fontSize="lg" color="teal.700" fontWeight="bold">Booking confirmed! Redirecting to portal...</Text>
+        <Text mt={4} fontSize="lg" color="teal.700" fontWeight="bold">Booking confirmed! Redirecting to {location.state?.skipOtp ? 'dashboard' : 'portal'}...</Text>
       </Flex>
     );
   }
@@ -532,15 +546,21 @@ const PatientBooking = () => {
           .pulsing-dot { animation: pulse-green 2s infinite; }
         `}
       </style>
-      <Box w="100%" maxW={verifiedPatient ? "1100px" : "600px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
+      <Box w="100%" maxW={verifiedPatient ? "1100px" : "500px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
           colorScheme="teal"
           mb={6}
-          onClick={() => navigate('/portal')}
+          onClick={() => {
+            if (location.state?.skipOtp) {
+              navigate(-1);
+            } else {
+              navigate('/portal');
+            }
+          }}
         >
-          Back to Portal
+          {location.state?.skipOtp ? 'Back to Dashboard' : 'Back to Portal'}
         </Button>
 
         <Flex align="center" mb={6}>
@@ -554,6 +574,7 @@ const PatientBooking = () => {
           <VStack spacing={6}>
             <Text color="gray.600" w="100%">
               Enter your Institute ID to fetch your patient record and book an appointment.
+              Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
             </Text>
             <FormControl>
               <FormLabel color="gray.700">Institute ID</FormLabel>
@@ -1137,7 +1158,7 @@ const PatientBooking = () => {
           <ModalHeader color="yellow.600">
             <Flex align="center">
               <Icon as={FiAlertTriangle} mr={2} />
-              Slot Partially Booked
+              Booking Warning
             </Flex>
           </ModalHeader>
           <ModalCloseButton />
@@ -1146,7 +1167,6 @@ const PatientBooking = () => {
               <AlertIcon />
               {slotWarningMessage}
             </Alert>
-            <Text mt={4}>Do you still want to proceed with booking this slot?</Text>
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" onClick={() => setShowSlotWarningModal(false)}>Cancel</Button>

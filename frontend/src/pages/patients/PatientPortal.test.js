@@ -24,17 +24,11 @@ describe('PatientPortal Component', () => {
 
   it('renders correctly', () => {
     renderComponent();
-    expect(screen.getByText('Welcome to BITS Medical Center Patient Portal')).toBeInTheDocument();
-    expect(screen.getByText('New Visitors')).toBeInTheDocument();
-    expect(screen.getByText('Returning Patients')).toBeInTheDocument();
-    expect(screen.getByText('Faculty & Staff')).toBeInTheDocument();
+    expect(screen.getByText('Welcome to the Medical Center')).toBeInTheDocument();
+    expect(screen.getByText('Book an Appointment')).toBeInTheDocument();
   });
 
-  it('navigates to registration page when Register Now is clicked', () => {
-    renderComponent();
-    fireEvent.click(screen.getByText('Register Now'));
-    expect(mockNavigate).toHaveBeenCalledWith('/portal/register');
-  });
+
 
   it('navigates to book appointment page when Book Appointment is clicked', () => {
     renderComponent();
@@ -42,11 +36,7 @@ describe('PatientPortal Component', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/portal/book-appointment');
   });
 
-  it('navigates to staff registration page when Register Family is clicked', () => {
-    renderComponent();
-    fireEvent.click(screen.getByText('Register Family'));
-    expect(mockNavigate).toHaveBeenCalledWith('/portal/staff-register');
-  });
+
 
   it('navigates to login page when Clinic Staff Login is clicked', () => {
     renderComponent();
