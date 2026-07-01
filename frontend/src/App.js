@@ -8,29 +8,35 @@ import {
   useLocation
 } from 'react-router-dom';
 import axios from 'axios';
-import BASE_URL from './Config';
+import BASE_URL from './utils/Config';
 
-import SidebarComponent from './Sidebar';
-import Login from './Login';
-import Dashboard from './Dashboard';
-import ReceptionistDashboard from './ReceptionistDashboard';
-import DoctorSchedulePage from "./DoctorSchedulePage";
-import AdminDashboard from './AdminDashboard';
-import MedicalCounterDashboard from './MedicalCounterDashboard';
-import BillHistory from './BillHistory';
-import DoctorsDashboard from './DoctorsDashboard';
-import AddMedicine from './AddMedicine';
-import InventoryList from './InventoryList';
-import LabTest from './LabTest';
-import AllPatients from './AllPatients';
-import PatientHistory from './PatientHistory';
-import PatientLabReports from "./PatientLabReports";
-import UploadLabReports from "./UploadLabReports";
+import SidebarComponent from './components/Sidebar';
+import Login from './pages/auth/Login';
+import Dashboard from './pages/dashboards/Dashboard';
+import ReceptionistDashboard from './pages/dashboards/ReceptionistDashboard';
+import ReceptionistRegistration from './pages/dashboards/ReceptionistRegistration';
+import ReceptionistStudentRegistration from './pages/dashboards/ReceptionistStudentRegistration';
+import ReceptionistStaffRegistration from './pages/dashboards/ReceptionistStaffRegistration';
+import ReceptionistHistory from './pages/dashboards/ReceptionistHistory';
+import DoctorSchedulePage from "./pages/staff/DoctorSchedulePage";
+import AdminDashboard from './pages/dashboards/AdminDashboard';
+import MedicalCounterDashboard from './pages/dashboards/MedicalCounterDashboard';
+import BillHistory from './pages/inventory/BillHistory';
+import DoctorsDashboard from './pages/dashboards/DoctorsDashboard';
+import AddMedicine from './pages/inventory/AddMedicine';
+import InventoryList from './pages/inventory/InventoryList';
+import LabTest from './pages/lab/LabTest';
+import AllPatients from './pages/patients/AllPatients';
+import PatientsList from './pages/patients/PatientsList';
+import ReceptionistPatientsList from './pages/dashboards/ReceptionistPatientsList';
+import PatientHistory from './pages/patients/PatientHistory';
+import PatientLabReports from "./pages/lab/PatientLabReports";
+import UploadLabReports from "./pages/lab/UploadLabReports";
 
-import PatientPortal from './PatientPortal';
-import PatientRegistration from './PatientRegistration';
-import StaffRegistration from './StaffRegistration';
-import PatientBooking from './PatientBooking';
+import PatientPortal from './pages/patients/PatientPortal';
+import PatientRegistration from './pages/patients/PatientRegistration';
+import StaffRegistration from './pages/staff/StaffRegistration';
+import PatientBooking from './pages/patients/PatientBooking';
 
 const theme = extendTheme({
   fonts: {
@@ -63,7 +69,7 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
   return (
     <Flex minH="100vh" w="100%" bg="gray.50">
       {/* Render the sidebar only if the user is logged in, not on /login, and not when role is 'admin' (admin dashboard includes its own sidebar) */}
-      {!hideSidebar && role !== 'admin' && role !== 'receptionist' && (
+      {!hideSidebar && role !== 'admin' && (
         <SidebarComponent
           isLoggedIn={isLoggedIn}
           username={username}
@@ -100,6 +106,67 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
               )
             }
           />
+          <Route
+            path="/receptionist/register-patient"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ReceptionistRegistration />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/register-student"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ReceptionistStudentRegistration />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/register-staff"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ReceptionistStaffRegistration />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+
+          <Route
+            path="/receptionist/patient-directory"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ReceptionistPatientsList />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/history"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ReceptionistHistory />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/patient-history/:id"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <PatientHistory />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
           <Route path="/schedule" element={<DoctorSchedulePage />} />
           <Route
             path="/doctor"
@@ -125,6 +192,16 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             path="/doctor/patient-history/:id"
             element={
               isLoggedIn && role === 'doctor' ? (
+                <PatientHistory />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/patient-history/:id"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
                 <PatientHistory />
               ) : (
                 <Navigate to="/login" />
