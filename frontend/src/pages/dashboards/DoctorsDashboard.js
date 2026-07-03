@@ -6,7 +6,6 @@ import {
   Input,
   Button,
   Avatar,
-  Image,
   Heading,
   useToast,
   Spinner,
@@ -43,21 +42,9 @@ import {
   InputGroup,
   InputLeftElement,
   Badge,
-  Tabs,
-  TabList,
-  TabPanels,
-  Tab,
-  TabPanel,
   VStack,
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogContent,
-  AlertDialogOverlay,
 } from "@chakra-ui/react";
 import {
-  FiCalendar,
   FiBell,
   FiMail,
   FiUser,
@@ -66,29 +53,19 @@ import {
   FiRefreshCw,
   FiSearch,
   FiCheckCircle,
-  FiPlusCircle,
-  FiActivity,
-  FiSave,
   FiPlus,
   FiX,
-  FiAlertTriangle,
-  FiFileText,
 } from "react-icons/fi";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, getWeekdayIST, toTitleCase } from '../../utils/utils';
-import Multiselect from "multiselect-react-dropdown";
 
 export default function DoctorsDashboard() {
-  const navigate = useNavigate();
   const toast = useToast();
   const username = localStorage.getItem("username");
   const [displayName, setDisplayName] = useState(localStorage.getItem("display_name") || "");
-  const token = localStorage.getItem("token");
 
   // GLOBAL STATE
-  const [dutyTiming, setDutyTiming] = useState("Checking schedule...");
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true); // initial full‐page load
   const [listLoading, setListLoading] = useState(false); // list‐only refresh
@@ -97,31 +74,12 @@ export default function DoctorsDashboard() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
   const { isOpen: isUnsavedOpen, onOpen: onUnsavedOpen, onClose: onUnsavedClose } = useDisclosure();
-  const cancelRef = React.useRef();
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [sessionHasMeds, setSessionHasMeds] = useState(false);
-  const [sessionHasLabs, setSessionHasLabs] = useState(false);
   const [readyToComplete, setReadyToComplete] = useState({}); // { institute_id: { hasLabs, hasMeds } }
-
-  // PRESCRIPTION & REMARK
-  const [prescriptionDetails, setPrescriptionDetails] = useState("");
-  const [remark, setRemark] = useState("");
 
   // MEDICINES & LAB TESTS
   const [medicineOptions, setMedicineOptions] = useState([]);
   const [labTestOptions, setLabTestOptions] = useState([]);
-  const [selectedMedicines, setSelectedMedicines] = useState([]);
-  const [selectedLabTests, setSelectedLabTests] = useState([]);
-  const [medicineSearch, setMedicineSearch] = useState("");
-  const [labTestSearch, setLabTestSearch] = useState("");
-  const [customMedicine, setCustomMedicine] = useState("");
-  const [customLabTest, setCustomLabTest] = useState("");
-
-  // SAVED IN CURRENT SESSION
-  const [sessionSavedPrescriptions, setSessionSavedPrescriptions] = useState([]);
-  const [sessionSavedRemarks, setSessionSavedRemarks] = useState([]);
-  const [sessionSavedMedicines, setSessionSavedMedicines] = useState([]);
-  const [sessionSavedLabTests, setSessionSavedLabTests] = useState([]);
 
   const [emrData, setEmrData] = useState({
     subjective: { chief_complaints: '', history_of_present_illness: '', past_medical_history: '', allergies: '' },
@@ -182,16 +140,13 @@ export default function DoctorsDashboard() {
         );
 
         if (todaysShifts.length > 0) {
-          const timingStrs = todaysShifts.map(s => `${s.start_time} - ${s.end_time}`);
-          setDutyTiming(`${timingStrs.join(', ')} on duty`);
+          // duty timings
         } else {
-          setDutyTiming("Not on duty today");
         }
 
       } catch (error) {
         console.error("Error fetching user details:", error);
         setDisplayName(localStorage.getItem("username"));
-        setDutyTiming("Schedule unavailable");
       }
     };
 
@@ -252,6 +207,7 @@ export default function DoctorsDashboard() {
       setLoading(false);
     };
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /** FETCH DROPDOWNS **/
@@ -275,19 +231,6 @@ export default function DoctorsDashboard() {
     })();
   }, []);
 
-  // Filter dropdowns
-  const filteredMedicineOptions = medicineOptions.filter((opt) =>
-    opt.item_name.toLowerCase().includes(medicineSearch.toLowerCase())
-  );
-  const filteredLabTestOptions = labTestOptions.filter((opt) =>
-    opt.test_name.toLowerCase().includes(labTestSearch.toLowerCase())
-  );
-
-  // MULTISELECT handlers
-  const handleMedicineSelect = (list) => setSelectedMedicines(list);
-  const handleMedicineRemove = (list) => setSelectedMedicines(list);
-  const handleLabTestSelect = (list) => setSelectedLabTests(list);
-  const handleLabTestRemove = (list) => setSelectedLabTests(list);
 
   // LOCAL ACTIONS (Batched)
   const handleViewReports = async (reports) => {
@@ -337,60 +280,7 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const handleAddPrescription = () => {
-    if (!prescriptionDetails.trim()) return;
-    setSessionSavedPrescriptions((prev) => [...prev, prescriptionDetails.trim()]);
-    setPrescriptionDetails("");
-  };
 
-  const handleAddRemark = () => {
-    if (!remark.trim()) return;
-    setSessionSavedRemarks((prev) => [...prev, remark.trim()]);
-    setRemark("");
-  };
-
-  const handleAddMedicines = () => {
-    if (!selectedMedicines.length) return;
-    setSessionSavedMedicines((prev) => [
-      ...prev,
-      ...selectedMedicines.map((m) => m.item_name),
-    ]);
-    setSelectedMedicines([]);
-  };
-
-  const handleAddLabTests = () => {
-    if (!selectedLabTests.length) return;
-    setSessionSavedLabTests((prev) => [
-      ...prev,
-      ...selectedLabTests.map((t) => t.test_name),
-    ]);
-    setSelectedLabTests([]);
-  };
-
-  const handleAddCustomMedicine = () => {
-    if (!customMedicine.trim()) return;
-    setSessionSavedMedicines((prev) => [...prev, customMedicine.trim()]);
-    setCustomMedicine("");
-  };
-
-  const handleAddCustomLabTest = () => {
-    if (!customLabTest.trim()) return;
-    setSessionSavedLabTests((prev) => [...prev, customLabTest.trim()]);
-    setCustomLabTest("");
-  };
-
-  const handleRemovePrescription = (idx) => {
-    setSessionSavedPrescriptions((prev) => prev.filter((_, i) => i !== idx));
-  };
-  const handleRemoveRemark = (idx) => {
-    setSessionSavedRemarks((prev) => prev.filter((_, i) => i !== idx));
-  };
-  const handleRemoveMedicine = (idx) => {
-    setSessionSavedMedicines((prev) => prev.filter((_, i) => i !== idx));
-  };
-  const handleRemoveLabTest = (idx) => {
-    setSessionSavedLabTests((prev) => prev.filter((_, i) => i !== idx));
-  };
 
 
   const handleUpdateEmr = (section, field, value) => {
@@ -457,21 +347,7 @@ export default function DoctorsDashboard() {
   };
 
 
-  const handleSaveDraft = async () => {
-    if (!selectedPatient) return;
-    try {
-      const token = localStorage.getItem("token");
-      await axios.put(
-        `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.visit_id}`,
-        { prescription_data: emrData },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast({ title: "Draft Saved", description: "Your current notes have been saved.", status: "info", duration: 2000, isClosable: true });
-    } catch (error) {
-      console.error("Error saving draft:", error);
-      toast({ title: "Error", description: "Failed to save draft.", status: "error", duration: 3000, isClosable: true });
-    }
-  };
+
 
   const handleSaveDetails = async () => {
     if (!selectedPatient) return;
@@ -517,15 +393,6 @@ export default function DoctorsDashboard() {
         isClosable: true
       });
       onConfirmClose();
-
-      // Clear locally so warning doesn't trigger on close
-      setSessionSavedPrescriptions([]);
-      setSessionSavedRemarks([]);
-      setSessionSavedMedicines([]);
-      setSessionSavedLabTests([]);
-      setPrescriptionDetails("");
-      setRemark("");
-
       onClose();
       await fetchPatients();
     } catch (e) {
@@ -556,12 +423,12 @@ export default function DoctorsDashboard() {
 
   const handleAttemptClose = () => {
     const hasUnsavedItems =
-      sessionSavedPrescriptions.length > 0 ||
-      sessionSavedRemarks.length > 0 ||
-      sessionSavedMedicines.length > 0 ||
-      sessionSavedLabTests.length > 0 ||
-      prescriptionDetails.trim() !== "" ||
-      remark.trim() !== "";
+      emrData.plan.medications.length > 0 ||
+      emrData.plan.investigations.length > 0 ||
+      emrData.plan.advice.trim() !== "" ||
+      emrData.subjective.chief_complaints.trim() !== "" ||
+      medInput.drug.trim() !== "" ||
+      labInput.trim() !== "";
 
     if (hasUnsavedItems) {
       onUnsavedOpen();
@@ -640,8 +507,6 @@ export default function DoctorsDashboard() {
     } else {
       setEmrData(defaultEmrData);
     }
-    setPrescriptionDetails("");
-    setRemark("");
     onOpen();
   };
 
@@ -669,9 +534,6 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const currentTime = formatDateTimeIST(new Date());
-
-  // Helper to safely get timestamp for sorting
   const getRegistrationTimestamp = (timeStr) => {
     if (!timeStr) return 0;
     // Strip trailing Z if present to prevent UTC shifting, backend time is already local IST
@@ -1246,6 +1108,46 @@ export default function DoctorsDashboard() {
             </Button>
             <Button colorScheme="green" size="lg" onClick={handleSaveDetails}>
               Save all Details & Complete
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* CONFIRMATION MODAL */}
+      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Confirm Status Update</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            You are completing the consultation without prescribing any medicines or lab tests. Are you sure you want to proceed?
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={onConfirmClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="blue" onClick={() => markAsReady(false, false)}>
+              Confirm & Save
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* UNSAVED CHANGES MODAL */}
+      <Modal isOpen={isUnsavedOpen} onClose={onUnsavedClose} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Unsaved Changes</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            You have unsaved changes. If you close now, they will be lost. Are you sure you want to close?
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={onUnsavedClose}>
+              Cancel
+            </Button>
+            <Button colorScheme="red" onClick={confirmCloseWithoutSaving}>
+              Discard and Close
             </Button>
           </ModalFooter>
         </ModalContent>

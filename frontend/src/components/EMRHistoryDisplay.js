@@ -42,7 +42,7 @@ const EMRHistoryDisplay = ({ emrData, legacyApp }) => {
           <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
           {legacyApp?.diagnosis_note && legacyApp.diagnosis_note.length > 0 ? (
             <VStack align="start" spacing={1}>
-              {legacyApp.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
+              {legacyApp.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {typeof d === 'string' ? d : d.note || JSON.stringify(d)}</Text>)}
             </VStack>
           ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
         </Box>

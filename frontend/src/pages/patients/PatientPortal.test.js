@@ -24,7 +24,7 @@ describe('PatientPortal Component', () => {
 
   it('renders correctly', () => {
     renderComponent();
-    expect(screen.getByText('Welcome to the Medical Center')).toBeInTheDocument();
+    expect(screen.getByText('Welcome to BITS Medical Center Patient Portal')).toBeInTheDocument();
     expect(screen.getByText('Book an Appointment')).toBeInTheDocument();
   });
 

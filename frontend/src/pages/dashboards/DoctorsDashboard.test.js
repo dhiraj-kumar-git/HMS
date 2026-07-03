@@ -130,12 +130,12 @@ describe('DoctorsDashboard Component', () => {
     fireEvent.click(screen.getByText('John Doe'));
 
     await waitFor(() => {
-      expect(screen.getByText('John Doe (ID: 101)')).toBeInTheDocument();
-      expect(screen.getByText('Prescription & Remarks')).toBeInTheDocument();
+      expect(screen.getByText(/John Doe \(ID: 101\)/i)).toBeInTheDocument();
+      expect(screen.getByText('Plan (Medications, Labs, Advice)')).toBeInTheDocument();
     });
   });
 
-  it('adds custom prescription and remark in the modal', async () => {
+  it('adds custom medication and advice in the modal', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
@@ -151,21 +151,23 @@ describe('DoctorsDashboard Component', () => {
 
     await waitFor(() => screen.getByText('John Doe (ID: 101)'));
 
-    // Add Prescription
-    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
-    fireEvent.change(prescriptionInput, { target: { value: 'Drink water' } });
-    const addPrescriptionBtn = screen.getAllByRole('button', { name: /Add/i })[0];
-    fireEvent.click(addPrescriptionBtn);
+    // Add Medication
+    const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];
+    fireEvent.change(drugInput, { target: { value: 'Paracetamol' } });
+    const doseInput = screen.getByPlaceholderText(/500mg/i);
+    fireEvent.change(doseInput, { target: { value: '650mg' } });
+    
+    const addMedicationBtn = screen.getByRole('button', { name: /Add Medication/i });
+    fireEvent.click(addMedicationBtn);
 
-    expect(screen.getByText('• Drink water')).toBeInTheDocument();
+    expect(screen.getByText(/Paracetamol/i)).toBeInTheDocument();
+    expect(screen.getByText(/650mg/i)).toBeInTheDocument();
 
-    // Add Remark
-    const remarkInput = screen.getByPlaceholderText(/Type a remark/i);
-    fireEvent.change(remarkInput, { target: { value: 'Rest for 2 days' } });
-    const addRemarkBtn = screen.getAllByRole('button', { name: /Add/i })[1];
-    fireEvent.click(addRemarkBtn);
+    // Add Advice
+    const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
+    fireEvent.change(adviceInput, { target: { value: 'Rest for 2 days' } });
 
-    expect(screen.getByText('• Rest for 2 days')).toBeInTheDocument();
+    expect(adviceInput.value).toBe('Rest for 2 days');
   });
 
   it('triggers confirmation modal when saving with no meds or labs', async () => {
@@ -223,12 +225,12 @@ describe('DoctorsDashboard Component', () => {
 
     await waitFor(() => screen.getByText('John Doe (ID: 101)'));
 
-    // Type in a prescription without adding it
-    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
-    fireEvent.change(prescriptionInput, { target: { value: 'Unsaved prescription' } });
+    // Type in advice
+    const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
+    fireEvent.change(adviceInput, { target: { value: 'Unsaved advice' } });
 
-    // Click Cancel
-    fireEvent.click(screen.getByText('Cancel'));
+    // Click Close
+    fireEvent.click(screen.getByText('Close'));
 
     // Expect unsaved changes modal
     await waitFor(() => {
@@ -330,15 +332,12 @@ describe('DoctorsDashboard Component', () => {
 
 
 
-  it('removes custom prescription and selects dropdown medicine', async () => {
+  it('adds and removes a medication', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
           data: [{ institute_id: '101', name: 'John Doe', workflow_status: 'consultation' }]
         });
-      }
-      if (url.includes('/dropdown/medicines')) {
-        return Promise.resolve({ data: [{ item_name: 'Paracetamol' }] });
       }
       return Promise.resolve({ data: [] });
     });
@@ -349,18 +348,11 @@ describe('DoctorsDashboard Component', () => {
 
     await waitFor(() => screen.getByText('John Doe (ID: 101)'));
 
-    // Select Dropdown Medicine
-    const selectMockBtn = screen.getByTestId('select-Paracetamol');
-    fireEvent.click(selectMockBtn);
-
-    // It should add to medications table or state
-    // Just verify the button click doesn't throw and adds it
-
-    // Add custom prescription
-    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
-    fireEvent.change(prescriptionInput, { target: { value: 'Drink water' } });
-    const addPrescriptionBtn = screen.getAllByRole('button', { name: /Add/i })[0];
-    fireEvent.click(addPrescriptionBtn);
+    // Add custom medication
+    const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];
+    fireEvent.change(drugInput, { target: { value: 'Drink water' } });
+    const addMedicationBtn = screen.getByRole('button', { name: /Add Medication/i });
+    fireEvent.click(addMedicationBtn);
 
     expect(screen.getByText(/Drink water/i)).toBeInTheDocument();
 
