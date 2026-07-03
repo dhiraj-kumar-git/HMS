@@ -189,12 +189,9 @@ def save_consultation_details_route(visit_id):
     data = request.json
     doctor_username = get_jwt_identity()
     
-    prescriptions = data.get("prescriptions", [])
-    prescription_details = data.get("prescription_details", [])
-    lab_tests = data.get("lab_tests", [])
-    remarks = data.get("remarks", [])
+    prescription_data = data.get("prescription_data", {})
 
-    if database.update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+    if database.update_consultation_details(visit_id, doctor_username, prescription_data):
         return jsonify({"message": "Consultation details saved successfully"}), 200
     return jsonify({"error": "Failed to save consultation details"}), 400
 

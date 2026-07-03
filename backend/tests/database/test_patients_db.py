@@ -102,7 +102,7 @@ def test_get_patient_history_for_doctor(mocker):
 def test_update_consultation_details(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
     mock_visits.update_one.return_value.matched_count = 1
-    res = update_consultation_details("v123", "doc1", [], [], [], [])
+    res = update_consultation_details("v123", "doc1", {})
     assert res is True
 
 def test_complete_patient(mocker):

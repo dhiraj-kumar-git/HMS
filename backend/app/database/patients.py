@@ -202,7 +202,8 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
             "prescriptions_draft": v.get("prescriptions", []),
             "prescription_details_draft": v.get("prescription_details", []),
             "lab_tests_draft": v.get("lab_tests", []),
-            "remarks_draft": v.get("remarks", [])
+            "remarks_draft": v.get("remarks", []),
+            "emr_data": v.get("emr_data", {})
         })
 
     # The root properties should ONLY reflect the most recent/active visit
@@ -517,24 +518,36 @@ def _finalize_visit(visit_id, mark_as_completed=True):
             )
 
 # [NEW] Overwrite consultation details using $set to prevent duplicates
-def update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+def update_consultation_details(visit_id, doctor_username, prescription_data):
     if not visit_id: return False
     
     timestamp = datetime.now(timezone.utc).isoformat()
     
-    # Structure natively to preserve expected db formats
-    new_prescriptions = [{"doctor": doctor_username, "note": p, "timestamp": timestamp} for p in prescriptions]
-    new_prescription_details = [{"doctor": doctor_username, "prescription_details": pd, "timestamp": timestamp} for pd in prescription_details]
-    new_lab_tests = [{"doctor": doctor_username, "lab_test": lt, "status": "pending", "timestamp": timestamp} for lt in lab_tests]
-    new_remarks = [{"doctor": doctor_username, "remark": r, "timestamp": timestamp} for r in remarks]
+    # We still want to maintain `prescriptions` array for the Medical Store mapping.
+    # The new medications list will be in prescription_data["plan"]["medications"]
+    new_prescriptions = []
+    medications = prescription_data.get("plan", {}).get("medications", [])
+    for m in medications:
+        new_prescriptions.append({
+            "doctor": doctor_username, 
+            "note": m.get("drug", ""), 
+            "dose": m.get("dose", ""),
+            "route": m.get("route", ""),
+            "frequency": m.get("frequency", ""),
+            "duration": m.get("duration", ""),
+            "quantity": m.get("quantity", ""),
+            "timestamp": timestamp
+        })
+
+    # The same goes for lab_tests
+    new_lab_tests = [{"doctor": doctor_username, "lab_test": lt, "status": "pending", "timestamp": timestamp} for lt in prescription_data.get("plan", {}).get("investigations", [])]
     
     result = visits.update_one(
         {"visit_id": visit_id},
         {"$set": {
             "prescriptions": new_prescriptions,
-            "prescription_details": new_prescription_details,
             "lab_tests": new_lab_tests,
-            "remarks": new_remarks
+            "emr_data": prescription_data
         }}
     )
     return result.matched_count > 0

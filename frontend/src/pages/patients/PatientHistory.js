@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
 
 import {
   Box,
@@ -178,40 +179,7 @@ export default function PatientHistory() {
                   </AccordionButton>
                 </h2>
                 <AccordionPanel pb={4} bg={panelBg}>
-                  <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
-                    <Box>
-                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Medicines Prescribed</Text>
-                      {app.prescription_summary && app.prescription_summary.length > 0 ? (
-                        <VStack align="start" spacing={1}>
-                          {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
-                        </VStack>
-                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                    </Box>
-                    <Box>
-                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Prescription Remarks</Text>
-                      {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
-                        <VStack align="start" spacing={1}>
-                          {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
-                        </VStack>
-                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                    </Box>
-                    <Box gridColumn={{ md: "span 2" }}>
-                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Diagnosis Notes</Text>
-                      {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
-                        <VStack align="start" spacing={1}>
-                          {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
-                        </VStack>
-                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                    </Box>
-                    <Box gridColumn={{ md: "span 2" }}>
-                      <Text fontWeight="bold" fontSize="sm" color={subTextColor} mb={1}>Lab Tests Overview</Text>
-                      {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
-                        <VStack align="start" spacing={1}>
-                          {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
-                        </VStack>
-                      ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                    </Box>
-                  </Grid>
+                  <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
                 </AccordionPanel>
               </AccordionItem>
             ))}

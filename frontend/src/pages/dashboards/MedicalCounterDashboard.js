@@ -59,6 +59,7 @@ function MedicalCounterDashboard() {
   const [paymentMode, setPaymentMode] = useState('UPI');
   const [selectedLabs, setSelectedLabs] = useState([]);
   const [selectedMedicines, setSelectedMedicines] = useState([]);
+  const [editedMedicines, setEditedMedicines] = useState([]);
 
   // History state removed
 
@@ -162,6 +163,7 @@ function MedicalCounterDashboard() {
     // Initialize all items as selected by default
     setSelectedLabs((patient.lab_tests || []).map((_, i) => i));
     setSelectedMedicines((patient.prescriptions || []).map((_, i) => i));
+    setEditedMedicines(patient.prescriptions ? JSON.parse(JSON.stringify(patient.prescriptions)) : []);
 
     onOpen();
   };
@@ -202,7 +204,7 @@ function MedicalCounterDashboard() {
           visit_id: selectedPatient.visit_id,
           payment_mode: paymentMode,
           selected_labs: selectedLabs,
-          selected_medicines: selectedMedicines,
+          selected_medicines: selectedMedicines.map(idx => editedMedicines[idx]),
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -680,7 +682,7 @@ function MedicalCounterDashboard() {
                       </Tr>
                     </Thead>
                     <Tbody>
-                      {(selectedPatient?.prescriptions || []).map((pres, i) => (
+                      {editedMedicines.map((pres, i) => (
                         <Tr key={`pres-${i}`}>
                           <Td>
                             <Checkbox 
@@ -691,7 +693,23 @@ function MedicalCounterDashboard() {
                               }}
                             />
                           </Td>
-                          <Td>{pres.note}</Td>
+                          <Td>
+                            <Text fontWeight="bold">{pres.note || pres.drug}</Text>
+                            {pres.dose && <Text fontSize="xs" color="gray.500">{pres.dose} | {pres.route} | {pres.frequency} {pres.duration && `| ${pres.duration}`}</Text>}
+                            <Flex align="center" mt={1}>
+                              <Text fontSize="xs" mr={2}>Qty:</Text>
+                              <Input 
+                                size="xs" 
+                                width="60px" 
+                                value={pres.quantity || ''} 
+                                onChange={(e) => {
+                                  const newMeds = [...editedMedicines];
+                                  newMeds[i].quantity = e.target.value;
+                                  setEditedMedicines(newMeds);
+                                }}
+                              />
+                            </Flex>
+                          </Td>
                           <Td>Medicine</Td>
                           <Td isNumeric>0.00</Td>
                         </Tr>

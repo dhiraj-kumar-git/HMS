@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   Box,
   Flex,
-  Grid,
   Text,
   Input,
   Button,
@@ -19,6 +18,12 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  Grid,
   useDisclosure,
   FormControl,
   FormLabel,
@@ -118,6 +123,18 @@ export default function DoctorsDashboard() {
   const [sessionSavedMedicines, setSessionSavedMedicines] = useState([]);
   const [sessionSavedLabTests, setSessionSavedLabTests] = useState([]);
 
+  const [emrData, setEmrData] = useState({
+    subjective: { chief_complaints: '', history_of_present_illness: '', past_medical_history: '', allergies: '' },
+    objective: {
+      vitals: { blood_pressure: '', pulse: '', temperature: '', weight: '', height: '', spO2: '', respiratory_rate: '' },
+      general_examination: '', systemic_examination: '', local_examination: ''
+    },
+    assessment: { provisional_diagnosis: '' },
+    plan: { medications: [], investigations: [], advice: '', follow_up_date: '' }
+  });
+  const [medInput, setMedInput] = useState({ drug: '', dose: '', route: '', frequency: '', duration: '', quantity: '' });
+  const [labInput, setLabInput] = useState('');
+
   // SEARCH PATIENT BOX
   const [searchInstituteId, setSearchInstituteId] = useState("");
   const [filterInstituteId, setFilterInstituteId] = useState("");
@@ -159,8 +176,8 @@ export default function DoctorsDashboard() {
         // Determine duty timing for today
         const schedule = res.data.schedule || [];
         const todayStr = getWeekdayIST(new Date());
-        
-        const todaysShifts = schedule.filter(shift => 
+
+        const todaysShifts = schedule.filter(shift =>
           Array.isArray(shift.duty_days) && shift.duty_days.includes(todayStr)
         );
 
@@ -375,6 +392,87 @@ export default function DoctorsDashboard() {
     setSessionSavedLabTests((prev) => prev.filter((_, i) => i !== idx));
   };
 
+
+  const handleUpdateEmr = (section, field, value) => {
+    setEmrData(prev => ({
+      ...prev,
+      [section]: {
+        ...prev[section],
+        [field]: value
+      }
+    }));
+  };
+
+  const handleUpdateVitals = (field, value) => {
+    setEmrData(prev => ({
+      ...prev,
+      objective: {
+        ...prev.objective,
+        vitals: {
+          ...prev.objective.vitals,
+          [field]: value
+        }
+      }
+    }));
+  };
+
+  const handleAddMedication = () => {
+    if (!medInput.drug) return;
+    setEmrData(prev => ({
+      ...prev,
+      plan: {
+        ...prev.plan,
+        medications: [...prev.plan.medications, medInput]
+      }
+    }));
+    setMedInput({ drug: '', dose: '', route: '', frequency: '', duration: '', quantity: '' });
+  };
+
+  const handleRemoveMedication = (idx) => {
+    setEmrData(prev => {
+      const newMeds = [...prev.plan.medications];
+      newMeds.splice(idx, 1);
+      return { ...prev, plan: { ...prev.plan, medications: newMeds } };
+    });
+  };
+
+  const handleAddInvestigation = () => {
+    if (!labInput) return;
+    setEmrData(prev => ({
+      ...prev,
+      plan: {
+        ...prev.plan,
+        investigations: [...prev.plan.investigations, labInput]
+      }
+    }));
+    setLabInput('');
+  };
+
+  const handleRemoveInvestigation = (idx) => {
+    setEmrData(prev => {
+      const newLabs = [...prev.plan.investigations];
+      newLabs.splice(idx, 1);
+      return { ...prev, plan: { ...prev.plan, investigations: newLabs } };
+    });
+  };
+
+
+  const handleSaveDraft = async () => {
+    if (!selectedPatient) return;
+    try {
+      const token = localStorage.getItem("token");
+      await axios.put(
+        `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.visit_id}`,
+        { prescription_data: emrData },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast({ title: "Draft Saved", description: "Your current notes have been saved.", status: "info", duration: 2000, isClosable: true });
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      toast({ title: "Error", description: "Failed to save draft.", status: "error", duration: 3000, isClosable: true });
+    }
+  };
+
   const handleSaveDetails = async () => {
     if (!selectedPatient) return;
 
@@ -384,17 +482,12 @@ export default function DoctorsDashboard() {
       // Save all details in a single efficient PUT request
       await axios.put(
         `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.visit_id}`,
-        {
-          prescriptions: sessionSavedMedicines,
-          prescription_details: sessionSavedPrescriptions,
-          lab_tests: sessionSavedLabTests,
-          remarks: sessionSavedRemarks
-        },
+        { prescription_data: emrData },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const hasLabs = sessionSavedLabTests.length > 0;
-      const hasMeds = sessionSavedMedicines.length > 0;
+      const hasLabs = emrData.plan.investigations.length > 0;
+      const hasMeds = emrData.plan.medications.length > 0;
 
       if (!hasLabs && !hasMeds) {
         onConfirmOpen();
@@ -485,19 +578,68 @@ export default function DoctorsDashboard() {
   // Open modal
   const openPatientModal = (patient) => {
     setSelectedPatient(patient);
-    
+
     // Find the active appointment to pull drafts from
-    const activeAppt = patient.appointments?.slice().reverse().find(a => 
-      a.doctor_username === patient.doctor_assigned && 
-      (a.status === "upcoming" || a.status === "consultation")
+    const activeAppt = patient.appointments?.slice().reverse().find(a =>
+      a.doctor_username === patient.doctor_assigned &&
+      ["upcoming", "consultation", "checked_in", "confirmed"].includes(a.status)
     ) || {};
 
-    const extractDrafts = (draftArray, key) => (draftArray || []).map(d => d[key]);
+    const defaultEmrData = {
+      subjective: { chief_complaints: '', history_of_present_illness: '', past_medical_history: '', allergies: '' },
+      objective: {
+        vitals: { blood_pressure: '', pulse: '', temperature: '', weight: '', height: '', spO2: '', respiratory_rate: '' },
+        general_examination: '', systemic_examination: '', local_examination: ''
+      },
+      assessment: { provisional_diagnosis: '', final_diagnosis: '' },
+      plan: { medications: [], investigations: [], advice: '', follow_up_date: '' }
+    };
 
-    setSessionSavedPrescriptions(extractDrafts(activeAppt.prescription_details_draft, "prescription_details"));
-    setSessionSavedRemarks(extractDrafts(activeAppt.remarks_draft, "remark"));
-    setSessionSavedMedicines(extractDrafts(activeAppt.prescriptions_draft, "note"));
-    setSessionSavedLabTests(extractDrafts(activeAppt.lab_tests_draft, "lab_test"));
+    if (activeAppt.emr_data && typeof activeAppt.emr_data === 'object' && Object.keys(activeAppt.emr_data).length > 0) {
+      const rawEmr = activeAppt.emr_data || {};
+      const oldVitals = rawEmr.vitals || {};
+      const newVitals = rawEmr.objective?.vitals || {};
+
+      const mappedVitals = {
+        blood_pressure: newVitals.blood_pressure || oldVitals.bp || '',
+        pulse: newVitals.pulse || oldVitals.pulse || '',
+        temperature: newVitals.temperature || oldVitals.temp || '',
+        weight: newVitals.weight || oldVitals.weight || '',
+        height: newVitals.height || oldVitals.height || '',
+        spO2: newVitals.spO2 || oldVitals.oxygen || '',
+        respiratory_rate: newVitals.respiratory_rate || oldVitals.resp_rate || ''
+      };
+
+      const oldSubj = rawEmr.subjective || {};
+      const mappedSubj = {
+        chief_complaints: oldSubj.chief_complaints || '',
+        history_of_present_illness: oldSubj.history_of_present_illness || oldSubj.hpi || '',
+        past_medical_history: oldSubj.past_medical_history || oldSubj.past_history || '',
+        allergies: oldSubj.allergies || ''
+      };
+
+      const oldObj = rawEmr.objective || {};
+      const mappedObj = {
+        vitals: mappedVitals,
+        general_examination: oldObj.general_examination || oldObj.general_exam || '',
+        systemic_examination: oldObj.systemic_examination || oldObj.systemic_exam || '',
+        local_examination: oldObj.local_examination || oldObj.local_exam || ''
+      };
+
+      setEmrData({
+        subjective: { ...defaultEmrData.subjective, ...mappedSubj },
+        objective: { ...defaultEmrData.objective, ...mappedObj },
+        assessment: { ...defaultEmrData.assessment, ...(rawEmr.assessment || {}) },
+        plan: {
+          ...defaultEmrData.plan,
+          ...(rawEmr.plan || {}),
+          medications: rawEmr.plan?.medications || [],
+          investigations: rawEmr.plan?.investigations || []
+        }
+      });
+    } else {
+      setEmrData(defaultEmrData);
+    }
     setPrescriptionDetails("");
     setRemark("");
     onOpen();
@@ -533,7 +675,7 @@ export default function DoctorsDashboard() {
   const getRegistrationTimestamp = (timeStr) => {
     if (!timeStr) return 0;
     // Strip trailing Z if present to prevent UTC shifting, backend time is already local IST
-    const s = timeStr.replace(/Z$/, ''); 
+    const s = timeStr.replace(/Z$/, '');
     const d = new Date(s);
     return isNaN(d.getTime()) ? 0 : d.getTime();
   };
@@ -556,11 +698,11 @@ export default function DoctorsDashboard() {
       if (!p.rawAppointmentTime) return false;
       const ts = getRegistrationTimestamp(p.rawAppointmentTime);
       if (ts === 0) return false;
-      
+
       // Parse directly as local time to match HTML date input format
       const d = new Date(ts);
       const createdDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      
+
       return createdDate === dateFilter;
     });
   }
@@ -581,7 +723,6 @@ export default function DoctorsDashboard() {
   const indexOfFirstPatient = indexOfLastPatient - patientsPerPage;
   const currentPatients = displayedPatients.slice(indexOfFirstPatient, indexOfLastPatient);
   const totalPages = Math.ceil(displayedPatients.length / patientsPerPage);
-
 
   if (loading) {
     return (
@@ -903,306 +1044,212 @@ export default function DoctorsDashboard() {
           <ModalCloseButton />
           <ModalBody p={0} display="flex" minH="500px" maxH="75vh">
 
-            {/* Left Pane - Inputs (Tabs) */}
-            <Box flex="2" bg="white" borderRight="1px solid" borderColor="gray.100" overflowY="auto">
-              <Tabs colorScheme="blue" variant="enclosed" m={4}>
-                <TabList mb="1em">
-                  <Tab fontWeight="medium"><FiFileText style={{ marginRight: "8px" }} /> Prescription & Remarks</Tab>
-                  <Tab fontWeight="medium"><FiPlusCircle style={{ marginRight: "8px" }} /> Medicines</Tab>
-                  <Tab fontWeight="medium"><FiActivity style={{ marginRight: "8px" }} /> Lab Tests</Tab>
-                </TabList>
-                <TabPanels>
-                  {/* Tab 1: Prescription & Remarks */}
-                  <TabPanel>
-                    <FormControl mb={6}>
-                      <FormLabel fontSize="sm" color="gray.600">Add Prescription Point</FormLabel>
-                      <Flex gap={2}>
-                        <Input
-                          placeholder="Type a prescription detail and press Enter..."
-                          value={prescriptionDetails}
-                          onChange={(e) => setPrescriptionDetails(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddPrescription();
-                            }
-                          }}
-                          bg="gray.50"
-                          focusBorderColor="blue.500"
-                        />
-                        <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleAddPrescription}>
-                          Add
-                        </Button>
-                      </Flex>
-                    </FormControl>
+            {/* Main Pane - Inputs */}
+            <Box flex="1" bg="white" overflowY="auto" p={4}>
+              <Accordion allowMultiple defaultIndex={[0, 1, 2, 3]}>
+                {/* Subjective */}
+                <AccordionItem>
+                  <h2>
+                    <AccordionButton>
+                      <Box flex="1" textAlign="left" fontWeight="bold">Subjective (Symptoms & History)</Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel pb={4}>
+                    <VStack align="stretch" spacing={3}>
+                      <FormControl>
+                        <FormLabel fontSize="xs">Chief Complaints</FormLabel>
+                        <Textarea size="sm" value={emrData.subjective.chief_complaints} onChange={(e) => handleUpdateEmr('subjective', 'chief_complaints', e.target.value)} />
+                      </FormControl>
+                      <FormControl>
+                        <FormLabel fontSize="xs">History of Present Illness</FormLabel>
+                        <Textarea size="sm" value={emrData.subjective.history_of_present_illness} onChange={(e) => handleUpdateEmr('subjective', 'history_of_present_illness', e.target.value)} />
+                      </FormControl>
+                      <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
+                        <FormControl>
+                          <FormLabel fontSize="xs">Past Medical History</FormLabel>
+                          <Textarea size="sm" value={emrData.subjective.past_medical_history} onChange={(e) => handleUpdateEmr('subjective', 'past_medical_history', e.target.value)} />
+                        </FormControl>
+                        <FormControl>
+                          <FormLabel fontSize="xs">Allergies</FormLabel>
+                          <Textarea size="sm" value={emrData.subjective.allergies} onChange={(e) => handleUpdateEmr('subjective', 'allergies', e.target.value)} />
+                        </FormControl>
+                      </Grid>
+                    </VStack>
+                  </AccordionPanel>
+                </AccordionItem>
 
+                {/* Objective */}
+                <AccordionItem>
+                  <h2>
+                    <AccordionButton>
+                      <Box flex="1" textAlign="left" fontWeight="bold">Objective (Vitals & Exam)</Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel pb={4}>
+                    <VStack align="stretch" spacing={4}>
+                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
+                        <Text fontSize="sm" fontWeight="bold" mb={3}>Vitals</Text>
+                        <Grid templateColumns={{ base: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }} gap={3}>
+                          <FormControl><FormLabel fontSize="xs">BP (mmHg)</FormLabel><Input size="sm" placeholder="120/80" value={emrData.objective.vitals.blood_pressure} onChange={(e) => handleUpdateVitals('blood_pressure', e.target.value)} /></FormControl>
+                          <FormControl><FormLabel fontSize="xs">Pulse (bpm)</FormLabel><Input size="sm" placeholder="72" value={emrData.objective.vitals.pulse} onChange={(e) => handleUpdateVitals('pulse', e.target.value)} /></FormControl>
+                          <FormControl><FormLabel fontSize="xs">Temp (°F/°C)</FormLabel><Input size="sm" placeholder="98.6" value={emrData.objective.vitals.temperature} onChange={(e) => handleUpdateVitals('temperature', e.target.value)} /></FormControl>
+                          <FormControl><FormLabel fontSize="xs">SpO2 (%)</FormLabel><Input size="sm" placeholder="99" value={emrData.objective.vitals.spO2} onChange={(e) => handleUpdateVitals('spO2', e.target.value)} /></FormControl>
+                          <FormControl><FormLabel fontSize="xs">Weight (kg)</FormLabel><Input size="sm" placeholder="70" value={emrData.objective.vitals.weight} onChange={(e) => handleUpdateVitals('weight', e.target.value)} /></FormControl>
+                          <FormControl><FormLabel fontSize="xs">Height (cm)</FormLabel><Input size="sm" placeholder="175" value={emrData.objective.vitals.height} onChange={(e) => handleUpdateVitals('height', e.target.value)} /></FormControl>
+                          <FormControl><FormLabel fontSize="xs">Resp. Rate (/min)</FormLabel><Input size="sm" placeholder="16" value={emrData.objective.vitals.respiratory_rate} onChange={(e) => handleUpdateVitals('respiratory_rate', e.target.value)} /></FormControl>
+                        </Grid>
+                      </Box>
+                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
+                        <Text fontSize="sm" fontWeight="bold" mb={3}>Examinations</Text>
+                        <VStack align="stretch" spacing={3}>
+                          <FormControl>
+                            <FormLabel fontSize="xs">General Examination</FormLabel>
+                            <Textarea size="sm" value={emrData.objective.general_examination} onChange={(e) => handleUpdateEmr('objective', 'general_examination', e.target.value)} />
+                          </FormControl>
+                          <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
+                            <FormControl>
+                              <FormLabel fontSize="xs">Systemic Examination</FormLabel>
+                              <Textarea size="sm" value={emrData.objective.systemic_examination} onChange={(e) => handleUpdateEmr('objective', 'systemic_examination', e.target.value)} />
+                            </FormControl>
+                            <FormControl>
+                              <FormLabel fontSize="xs">Local Examination</FormLabel>
+                              <Textarea size="sm" value={emrData.objective.local_examination} onChange={(e) => handleUpdateEmr('objective', 'local_examination', e.target.value)} />
+                            </FormControl>
+                          </Grid>
+                        </VStack>
+                      </Box>
+                    </VStack>
+                  </AccordionPanel>
+                </AccordionItem>
+
+                {/* Assessment */}
+                <AccordionItem>
+                  <h2>
+                    <AccordionButton>
+                      <Box flex="1" textAlign="left" fontWeight="bold">Assessment (Diagnosis)</Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel pb={4}>
                     <FormControl>
-                      <FormLabel fontSize="sm" color="gray.600">Add Remark</FormLabel>
-                      <Flex gap={2}>
-                        <Input
-                          placeholder="Type a remark and press Enter..."
-                          value={remark}
-                          onChange={(e) => setRemark(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddRemark();
-                            }
-                          }}
-                          bg="gray.50"
-                          focusBorderColor="blue.500"
-                        />
-                        <Button leftIcon={<FiPlus />} colorScheme="blue" onClick={handleAddRemark}>
-                          Add
-                        </Button>
-                      </Flex>
+                      <FormLabel fontSize="xs">Provisional Diagnosis</FormLabel>
+                      <Textarea size="sm" value={emrData.assessment.provisional_diagnosis} onChange={(e) => handleUpdateEmr('assessment', 'provisional_diagnosis', e.target.value)} />
                     </FormControl>
-                  </TabPanel>
+                  </AccordionPanel>
+                </AccordionItem>
 
-                  {/* Tab 2: Medicines */}
-                  <TabPanel>
-                    <FormControl>
-                      <FormLabel fontSize="sm" color="gray.600">Prescribe Medicines</FormLabel>
-                      <Multiselect
-                        options={filteredMedicineOptions}
-                        selectedValues={selectedMedicines}
-                        onSelect={handleMedicineSelect}
-                        onRemove={handleMedicineRemove}
-                        displayValue="item_name"
-                        placeholder="Search and select medicines"
-                        style={{
-                          chips: { background: "#38A169", color: "white", borderRadius: "8px" },
-                          multiselectContainer: { color: "black" },
-                          searchBox: { background: "#F7FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "12px" },
-                          optionContainer: { zIndex: 1500 },
-                        }}
-                      />
-                      <Button
-                        mt={4}
-                        w="full"
-                        leftIcon={<FiPlus />}
-                        colorScheme="green"
-                        onClick={handleAddMedicines}
-                        isDisabled={!selectedMedicines.length}
-                      >
-                        Add to List
-                      </Button>
+                {/* Plan */}
+                <AccordionItem>
+                  <h2>
+                    <AccordionButton>
+                      <Box flex="1" textAlign="left" fontWeight="bold">Plan (Medications, Labs, Advice)</Box>
+                      <AccordionIcon />
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel pb={4}>
+                    <VStack align="stretch" spacing={6}>
 
-                      <Flex mt={6} gap={2} align="center">
-                        <Input
-                          placeholder="Or type custom medicine..."
-                          value={customMedicine}
-                          onChange={(e) => setCustomMedicine(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddCustomMedicine();
-                            }
-                          }}
-                          bg="gray.50"
-                          focusBorderColor="green.500"
-                        />
-                        <Button colorScheme="green" onClick={handleAddCustomMedicine} variant="outline">
-                          Add Custom
-                        </Button>
-                      </Flex>
-                    </FormControl>
-                  </TabPanel>
+                      <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
+                        {/* Advice */}
+                        <FormControl>
+                          <FormLabel fontSize="xs">Advice / General Instructions</FormLabel>
+                          <Textarea size="sm" placeholder="Rest, drink plenty of fluids..." value={emrData.plan.advice} onChange={(e) => handleUpdateEmr('plan', 'advice', e.target.value)} />
+                        </FormControl>
+                        
+                        {/* Follow Up */}
+                        <FormControl>
+                          <FormLabel fontSize="xs">Follow-up Date</FormLabel>
+                          <Input type="date" size="sm" value={emrData.plan.follow_up_date} onChange={(e) => handleUpdateEmr('plan', 'follow_up_date', e.target.value)} />
+                        </FormControl>
+                      </Grid>
 
-                  {/* Tab 3: Lab Tests */}
-                  <TabPanel>
-                    <FormControl>
-                      <FormLabel fontSize="sm" color="gray.600">Prescribe Lab Tests</FormLabel>
-                      <Multiselect
-                        options={filteredLabTestOptions}
-                        selectedValues={selectedLabTests}
-                        onSelect={handleLabTestSelect}
-                        onRemove={handleLabTestRemove}
-                        displayValue="test_name"
-                        placeholder="Search and select lab tests"
-                        style={{
-                          chips: { background: "#805AD5", color: "white", borderRadius: "8px" },
-                          multiselectContainer: { color: "black" },
-                          searchBox: { background: "#F7FAFC", border: "1px solid #E2E8F0", borderRadius: "6px", padding: "12px" },
-                          optionContainer: { zIndex: 1500 },
-                        }}
-                      />
-                      <Button
-                        mt={4}
-                        w="full"
-                        leftIcon={<FiPlus />}
-                        colorScheme="purple"
-                        onClick={handleAddLabTests}
-                        isDisabled={!selectedLabTests.length}
-                      >
-                        Add to List
-                      </Button>
+                      {/* Medications */}
+                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Medications</Text>
 
-                      <Flex mt={6} gap={2} align="center">
-                        <Input
-                          placeholder="Or type custom lab test..."
-                          value={customLabTest}
-                          onChange={(e) => setCustomLabTest(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddCustomLabTest();
-                            }
-                          }}
-                          bg="gray.50"
-                          focusBorderColor="purple.500"
-                        />
-                        <Button colorScheme="purple" onClick={handleAddCustomLabTest} variant="outline">
-                          Add Custom
-                        </Button>
-                      </Flex>
-                    </FormControl>
-                  </TabPanel>
-                </TabPanels>
-              </Tabs>
+                        {/* Existing Meds */}
+                        {emrData.plan.medications.length > 0 && (
+                          <VStack align="stretch" spacing={2} mb={4}>
+                            {emrData.plan.medications.map((m, idx) => (
+                              <Flex key={idx} justify="space-between" align="center" bg="gray.50" p={2} borderRadius="md" border="1px solid" borderColor="green.100">
+                                <Box>
+                                  <Text fontSize="xs" fontWeight="bold">{m.drug} <Badge colorScheme="gray">{m.quantity}</Badge></Text>
+                                  <Text fontSize="2xs" color="gray.500">{m.dose} | {m.route} | {m.frequency} | {m.duration}</Text>
+                                </Box>
+                                <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemoveMedication(idx)} aria-label="Remove" />
+                              </Flex>
+                            ))}
+                          </VStack>
+                        )}
+
+                        {/* Add Med Form */}
+                        <VStack align="stretch" spacing={3}>
+                          <Grid templateColumns="2fr 1fr 1fr 1fr 1fr 1fr" gap={2}>
+                            <FormControl>
+                              <FormLabel fontSize="xs">Drug Name</FormLabel>
+                              <InputGroup size="sm">
+                                <Input list="med-options" value={medInput.drug} onChange={(e) => setMedInput({ ...medInput, drug: e.target.value })} placeholder="Select or type..." />
+                                <datalist id="med-options">
+                                  {medicineOptions.map((opt, i) => <option key={i} value={opt.item_name} />)}
+                                </datalist>
+                              </InputGroup>
+                            </FormControl>
+                            <FormControl><FormLabel fontSize="xs">Dose</FormLabel><Input size="sm" value={medInput.dose} onChange={(e) => setMedInput({ ...medInput, dose: e.target.value })} placeholder="500mg" /></FormControl>
+                            <FormControl><FormLabel fontSize="xs">Route</FormLabel><Input size="sm" value={medInput.route} onChange={(e) => setMedInput({ ...medInput, route: e.target.value })} placeholder="Oral" /></FormControl>
+                            <FormControl><FormLabel fontSize="xs">Freq</FormLabel><Input size="sm" value={medInput.frequency} onChange={(e) => setMedInput({ ...medInput, frequency: e.target.value })} placeholder="1-0-1" /></FormControl>
+                            <FormControl><FormLabel fontSize="xs">Duration</FormLabel><Input size="sm" value={medInput.duration} onChange={(e) => setMedInput({ ...medInput, duration: e.target.value })} placeholder="5 days" /></FormControl>
+                            <FormControl><FormLabel fontSize="xs">Qty</FormLabel><Input size="sm" value={medInput.quantity} onChange={(e) => setMedInput({ ...medInput, quantity: e.target.value })} placeholder="10 tabs" /></FormControl>
+                          </Grid>
+                          <Button size="sm" colorScheme="green" onClick={handleAddMedication} alignSelf="flex-start" leftIcon={<FiPlus />}>Add Medication</Button>
+                        </VStack>
+                      </Box>
+
+                      {/* Lab Tests */}
+                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
+                        <Text fontSize="sm" fontWeight="bold" mb={2}>Investigations (Lab Tests)</Text>
+
+                        {/* Existing Labs */}
+                        {emrData.plan.investigations.length > 0 && (
+                          <Flex wrap="wrap" gap={2} mb={4}>
+                            {emrData.plan.investigations.map((t, idx) => (
+                              <Badge key={idx} colorScheme="purple" variant="subtle" borderRadius="md" px={2} py={1} display="flex" alignItems="center">
+                                {t}
+                                <Box as={FiX} ml={2} cursor="pointer" onClick={() => handleRemoveInvestigation(idx)} />
+                              </Badge>
+                            ))}
+                          </Flex>
+                        )}
+
+                        <Flex gap={2}>
+                          <InputGroup size="sm" flex="1">
+                            <Input list="lab-options" value={labInput} onChange={(e) => setLabInput(e.target.value)} placeholder="Select or type test..." />
+                            <datalist id="lab-options">
+                              {labTestOptions.map((opt, i) => <option key={i} value={opt.test_name} />)}
+                            </datalist>
+                          </InputGroup>
+                          <Button size="sm" colorScheme="purple" onClick={handleAddInvestigation} leftIcon={<FiPlus />}>Add Test</Button>
+                        </Flex>
+                      </Box>
+
+                    </VStack>
+                  </AccordionPanel>
+                </AccordionItem>
+              </Accordion>
             </Box>
 
-            {/* Right Pane - Summary */}
-            <Box flex="1" bg="gray.50" p={6} overflowY="auto">
-              <Heading as="h4" size="md" mb={6} color="gray.700">
-                Current Session Summary
-              </Heading>
-
-              <VStack align="stretch" spacing={6}>
-                {/* Prescriptions Summary */}
-                <Box>
-                  <Text fontSize="sm" fontWeight="bold" color="blue.800" mb={2}>Prescriptions ({sessionSavedPrescriptions.length})</Text>
-                  {sessionSavedPrescriptions.length === 0 ? (
-                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
-                  ) : (
-                    <VStack align="stretch" spacing={2}>
-                      {sessionSavedPrescriptions.map((p, idx) => (
-                        <Flex key={idx} justify="space-between" align="flex-start" bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid" borderColor="blue.100">
-                          <Text fontSize="sm" color="gray.700">• {p}</Text>
-                          <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemovePrescription(idx)} aria-label="Remove" />
-                        </Flex>
-                      ))}
-                    </VStack>
-                  )}
-                </Box>
-
-                {/* Remarks Summary */}
-                <Box>
-                  <Text fontSize="sm" fontWeight="bold" color="blue.800" mb={2}>Remarks ({sessionSavedRemarks.length})</Text>
-                  {sessionSavedRemarks.length === 0 ? (
-                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
-                  ) : (
-                    <VStack align="stretch" spacing={2}>
-                      {sessionSavedRemarks.map((r, idx) => (
-                        <Flex key={idx} justify="space-between" align="flex-start" bg="white" p={2} borderRadius="md" boxShadow="sm" border="1px solid" borderColor="blue.100">
-                          <Text fontSize="sm" color="gray.700">• {r}</Text>
-                          <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemoveRemark(idx)} aria-label="Remove" />
-                        </Flex>
-                      ))}
-                    </VStack>
-                  )}
-                </Box>
-
-                {/* Medicines Summary */}
-                <Box>
-                  <Text fontSize="sm" fontWeight="bold" color="green.800" mb={2}>Medicines ({sessionSavedMedicines.length})</Text>
-                  {sessionSavedMedicines.length === 0 ? (
-                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
-                  ) : (
-                    <Flex wrap="wrap" gap={2}>
-                      {sessionSavedMedicines.map((m, idx) => (
-                        <Badge key={idx} colorScheme="green" variant="subtle" borderRadius="md" px={2} py={1} display="flex" alignItems="center">
-                          {m}
-                          <Box as={FiX} ml={2} cursor="pointer" onClick={() => handleRemoveMedicine(idx)} />
-                        </Badge>
-                      ))}
-                    </Flex>
-                  )}
-                </Box>
-
-                {/* Lab Tests Summary */}
-                <Box>
-                  <Text fontSize="sm" fontWeight="bold" color="purple.800" mb={2}>Lab Tests ({sessionSavedLabTests.length})</Text>
-                  {sessionSavedLabTests.length === 0 ? (
-                    <Text fontSize="sm" color="gray.400" fontStyle="italic">No items added</Text>
-                  ) : (
-                    <Flex wrap="wrap" gap={2}>
-                      {sessionSavedLabTests.map((t, idx) => (
-                        <Badge key={idx} colorScheme="purple" variant="subtle" borderRadius="md" px={2} py={1} display="flex" alignItems="center">
-                          {t}
-                          <Box as={FiX} ml={2} cursor="pointer" onClick={() => handleRemoveLabTest(idx)} />
-                        </Badge>
-                      ))}
-                    </Flex>
-                  )}
-                </Box>
-              </VStack>
-            </Box>
           </ModalBody>
           <ModalFooter borderTop="1px solid" borderColor="gray.100" bg="white" justifyContent="flex-end">
             <Button variant="ghost" mr={3} onClick={handleAttemptClose}>
-              Cancel
+              Close
             </Button>
             <Button colorScheme="green" size="lg" onClick={handleSaveDetails}>
               Save all Details & Complete
             </Button>
-            <Button colorScheme="blue" variant="outline" size="lg" ml={3} mr={3} onClick={() => {
-              onClose();
-              navigate(`/doctor/patient-history/${selectedPatient.institute_id}`);
-            }}>
-              History
-            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
-
-      {/* CONFIRMATION MODAL */}
-      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} isCentered>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Confirm Status Update</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Text>No medicines or lab tests were assigned to this patient. Proceeding will save this as ready to complete without billing or lab requirements.</Text>
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="gray" mr={3} onClick={onConfirmClose}>
-              Cancel
-            </Button>
-            <Button colorScheme="blue" onClick={() => markAsReady(false, false)}>
-              Confirm & Save
-            </Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* UNSAVED CHANGES MODAL */}
-      <AlertDialog
-        isOpen={isUnsavedOpen}
-        leastDestructiveRef={cancelRef}
-        onClose={onUnsavedClose}
-        isCentered
-      >
-        <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold" display="flex" alignItems="center">
-              <FiAlertTriangle style={{ marginRight: "8px", color: "#DD6B20" }} />
-              Unsaved Changes
-            </AlertDialogHeader>
-            <AlertDialogBody>
-              You have unsaved details in the current session. Are you sure you want to discard them and close?
-            </AlertDialogBody>
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={onUnsavedClose}>
-                Cancel
-              </Button>
-              <Button colorScheme="red" onClick={confirmCloseWithoutSaving} ml={3}>
-                Discard and Close
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialogOverlay>
-      </AlertDialog>
 
     </Flex>
   );
