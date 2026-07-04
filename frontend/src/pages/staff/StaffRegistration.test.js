@@ -171,7 +171,7 @@ describe('StaffRegistration Component', () => {
     fireEvent.click(screen.getByRole('button', { name: /Register Staff & Dependants/i }));
     
     // Confirm Modal
-    await waitFor(() => expect(screen.getByText(/Confirm Registration Details/i)).toBeInTheDocument());
+    await screen.findByText(/Confirm Registration Details/i);
     
     // Mock send OTP
     axios.post.mockResolvedValueOnce({ data: { message: 'OTP Sent' } });
@@ -179,7 +179,7 @@ describe('StaffRegistration Component', () => {
     // Confirm & Send OTP
     fireEvent.click(screen.getByRole('button', { name: /Confirm & Send OTP/i }));
     
-    await waitFor(() => expect(screen.getByText(/Verify Your Identity/i)).toBeInTheDocument());
+    await screen.findByText(/Verify Your Identity/i);
     
     // Mock verify registration OTP & final register
     axios.post.mockResolvedValueOnce({ data: { success: true } }); // verify OTP
@@ -223,7 +223,7 @@ describe('StaffRegistration Component', () => {
     const deleteBtn = screen.getByLabelText('Delete');
     fireEvent.click(deleteBtn);
 
-    await waitFor(() => expect(screen.getByText(/Delete Dependant Details/i)).toBeInTheDocument());
+    await screen.findByText(/Delete Dependant Details/i);
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     await waitFor(() => {
@@ -249,7 +249,7 @@ describe('StaffRegistration Component', () => {
     fireEvent.change(screen.getAllByLabelText(/Full Name/i)[0], { target: { value: 'Custom Dep' } });
     fireEvent.change(screen.getAllByLabelText(/Relation/i)[0], { target: { value: 'Other' } });
     
-    await waitFor(() => expect(screen.getByLabelText(/Specify Relation/i)).toBeInTheDocument());
+    await screen.findByLabelText(/Specify Relation/i);
     fireEvent.change(screen.getByLabelText(/Specify Relation/i), { target: { value: 'Cousin' } });
 
     axios.post.mockResolvedValueOnce({ data: { institute_id: 'DEP2' } });

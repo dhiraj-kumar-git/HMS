@@ -16,7 +16,6 @@ import {
   HStack,
   Input,
   Select,
-  IconButton,
   FormControl,
   FormLabel,
   VStack,
@@ -26,14 +25,12 @@ import {
   ModalHeader,
   ModalFooter,
   ModalBody,
-  ModalCloseButton,
-  Avatar
+  ModalCloseButton
 } from '@chakra-ui/react';
 import { FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { getDateISTString, toTitleCase } from '../../utils/utils';
-import StatusGuideModal from '../../components/StatusGuideModal';
 import PrescriptionModal from '../../components/PrescriptionModal';
 
 export default function ReceptionistQueue() {

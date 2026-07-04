@@ -206,7 +206,7 @@ describe('PatientsList Component', () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
     
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     const johnDoeRow = screen.getByText('John Doe').closest('tr');
     
@@ -228,7 +228,7 @@ describe('PatientsList Component', () => {
     axios.get.mockResolvedValueOnce({ data: unsortedPatients });
     renderComponent();
 
-    await waitFor(() => expect(screen.getByText('Zeta')).toBeInTheDocument());
+    await screen.findByText('Zeta');
     
     const rows = screen.getAllByRole('row');
     // First row is header. Data rows start at 1.

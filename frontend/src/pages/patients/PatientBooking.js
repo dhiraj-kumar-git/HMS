@@ -34,7 +34,7 @@ import {
   IconButton,
   Tooltip
 } from '@chakra-ui/react';
-import { FiUser, FiPhone, FiCalendar, FiClock, FiCheckCircle, FiFileText, FiRefreshCw, FiAlertTriangle, FiArrowLeft } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiRefreshCw, FiAlertTriangle, FiArrowLeft } from "react-icons/fi";
 import BASE_URL from '../../utils/Config';
 import { toTitleCase, formatDateTimeIST, getWeekdayIST } from '../../utils/utils';
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';

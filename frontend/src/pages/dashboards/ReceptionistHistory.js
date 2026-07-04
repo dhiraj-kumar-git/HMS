@@ -19,8 +19,7 @@ import {
   FormLabel,
   VStack,
   Heading,
-  Button,
-  Avatar
+  Button
 } from '@chakra-ui/react';
 import { FiRefreshCw } from 'react-icons/fi';
 import axios from 'axios';

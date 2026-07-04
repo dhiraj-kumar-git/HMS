@@ -73,7 +73,7 @@ describe('MedicalCounterDashboard Component', () => {
   it('opens payment modal and calculates total correctly', async () => {
     renderDashboard();
 
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     fireEvent.click(screen.getByText('John Doe'));
 
@@ -91,10 +91,10 @@ describe('MedicalCounterDashboard Component', () => {
     axios.post.mockResolvedValueOnce({ data: { invoice_no: 'INV-101' } });
 
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Confirm Payment & Mark as Paid')).toBeInTheDocument());
+    await screen.findByText('Confirm Payment & Mark as Paid');
 
     await waitFor(() => {
       const amounts = screen.getAllByText('100.00');
@@ -124,10 +124,10 @@ describe('MedicalCounterDashboard Component', () => {
     axios.post.mockResolvedValueOnce({ data: { message: 'cancelled' } });
 
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Cancel Entire Bill')).toBeInTheDocument());
+    await screen.findByText('Cancel Entire Bill');
 
     const cancelBtn = screen.getByText('Cancel Entire Bill');
     fireEvent.click(cancelBtn);
@@ -146,10 +146,10 @@ describe('MedicalCounterDashboard Component', () => {
 
   it('allows toggling checkboxes for lab tests and medicines', async () => {
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Confirm Payment & Mark as Paid')).toBeInTheDocument());
+    await screen.findByText('Confirm Payment & Mark as Paid');
 
     // Find checkboxes
     const checkboxes = screen.getAllByRole('checkbox');
@@ -182,15 +182,15 @@ describe('MedicalCounterDashboard Component', () => {
     window.open = jest.fn(() => mockWindow);
 
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Confirm Payment & Mark as Paid')).toBeInTheDocument());
+    await screen.findByText('Confirm Payment & Mark as Paid');
 
     const confirmBtn = screen.getByText('Confirm Payment & Mark as Paid');
     fireEvent.click(confirmBtn);
 
-    await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument());
+    await screen.findByText('Print Receipt');
 
     const printBtn = screen.getByText('Print Receipt');
     fireEvent.click(printBtn);

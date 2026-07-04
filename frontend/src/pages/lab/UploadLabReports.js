@@ -13,8 +13,6 @@ import {
   Select,
   Text,
 } from "@chakra-ui/react";
-import axios from "axios";
-import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 
 function UploadLabReports() {

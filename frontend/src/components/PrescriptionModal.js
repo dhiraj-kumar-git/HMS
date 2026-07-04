@@ -9,7 +9,6 @@ import {
   Box,
   Flex,
   useToast,
-  Image,
 } from '@chakra-ui/react';
 import { calculateAge, formatDateTimeIST, toTitleCase } from '../utils/utils';
 
