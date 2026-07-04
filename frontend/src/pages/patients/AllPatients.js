@@ -8,7 +8,6 @@ import {
  Flex,
  Heading,
  Text,
- Spinner,
  Button,
  Table,
  Thead,

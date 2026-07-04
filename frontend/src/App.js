@@ -27,7 +27,6 @@ import AddMedicine from './pages/inventory/AddMedicine';
 import InventoryList from './pages/inventory/InventoryList';
 import LabTest from './pages/lab/LabTest';
 import AllPatients from './pages/patients/AllPatients';
-import PatientsList from './pages/patients/PatientsList';
 import ReceptionistPatientsList from './pages/dashboards/ReceptionistPatientsList';
 import PatientHistory from './pages/patients/PatientHistory';
 import PatientLabReports from "./pages/lab/PatientLabReports";

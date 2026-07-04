@@ -22,7 +22,6 @@ import {
   AlertDescription,
   Flex,
   Icon,
-  Badge,
   Progress,
   Table,
   Thead,

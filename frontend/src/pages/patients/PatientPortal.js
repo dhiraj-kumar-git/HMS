@@ -9,7 +9,7 @@ import {
   useColorModeValue,
   Icon,
 } from '@chakra-ui/react';
-import { FiUserPlus, FiCalendar, FiUsers } from 'react-icons/fi';
+import { FiCalendar } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 
 const PatientPortal = () => {

@@ -9,11 +9,9 @@ import {
   Input,
   Select,
   Button,
-  Text,
   useToast,
   Icon,
-  SimpleGrid,
-  Textarea
+  SimpleGrid
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiUserCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';

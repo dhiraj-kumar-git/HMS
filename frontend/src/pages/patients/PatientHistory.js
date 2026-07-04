@@ -13,14 +13,12 @@ import {
   Spinner,
   Button,
   useColorModeValue,
-  VStack,
   Accordion,
   AccordionItem,
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
-  Badge,
-  Grid
+  Badge
 } from '@chakra-ui/react';
 
 

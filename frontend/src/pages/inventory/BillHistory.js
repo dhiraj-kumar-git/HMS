@@ -5,7 +5,7 @@ import {
     useDisclosure, Divider, Input, InputGroup, InputLeftElement, Table, Thead, Tbody, Tr, Th, Td,
     HStack, Avatar, Menu, MenuButton, MenuList, MenuItem, IconButton, Stat, StatLabel, StatNumber, StatHelpText
 } from '@chakra-ui/react';
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiSearch, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { formatDateIST, formatDateTimeIST, toTitleCase, numberToWords } from '../../utils/utils';

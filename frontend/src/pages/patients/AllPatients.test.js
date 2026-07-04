@@ -138,7 +138,7 @@ describe('AllPatients Component', () => {
   it('filters by date and status', async () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     // Filter by status 'active'
     const statusSelect = screen.getAllByRole('combobox')[0]; // Status
@@ -161,7 +161,7 @@ describe('AllPatients Component', () => {
   it('sorts by date', async () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     // Sort
     const sortSelect = screen.getAllByRole('combobox')[1]; // Sort
@@ -182,7 +182,7 @@ describe('AllPatients Component', () => {
     
     axios.get.mockResolvedValueOnce({ data: manyPatients });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('Patient 0')).toBeInTheDocument());
+    await screen.findByText('Patient 0');
 
     expect(screen.queryByText('Patient 14')).not.toBeInTheDocument();
 
@@ -203,13 +203,13 @@ describe('AllPatients Component', () => {
     renderComponent();
 
     // Just verifying it doesn't crash
-    await waitFor(() => expect(screen.getByText(/No patient history available/i)).toBeInTheDocument());
+    await screen.findByText(/No patient history available/i);
   });
 
   it('handles default logout', async () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     // Original window.location
     const originalLocation = window.location;

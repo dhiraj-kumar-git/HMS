@@ -186,10 +186,10 @@ describe('DoctorsDashboard Component', () => {
     });
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+    await screen.findByText('John Doe (ID: 101)');
 
     // Subjective fields
     const chiefComplaintsInput = screen.getByLabelText(/Chief Complaints/i);
@@ -230,10 +230,10 @@ describe('DoctorsDashboard Component', () => {
     });
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+    await screen.findByText('John Doe (ID: 101)');
 
     // Add Medication
     const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];
@@ -283,7 +283,7 @@ describe('DoctorsDashboard Component', () => {
     axios.post.mockResolvedValueOnce({ data: { message: 'success' } }); // for complete_consultation
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
     
     // Click Complete Consultation (green checkmark) in the table row
     const completeBtn = screen.getByTitle('Complete Consultation');
@@ -324,10 +324,10 @@ describe('DoctorsDashboard Component', () => {
     axios.put.mockResolvedValueOnce({ data: { message: 'success' } });
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+    await screen.findByText('John Doe (ID: 101)');
 
     // Type in advice
     const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
@@ -377,7 +377,7 @@ describe('DoctorsDashboard Component', () => {
     });
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
 
     // Find History button
     const historyBtn = screen.getByRole('button', { name: /History/i });
@@ -417,7 +417,7 @@ describe('DoctorsDashboard Component', () => {
     });
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
 
     const historyBtn = screen.getByRole('button', { name: /History/i });
     fireEvent.click(historyBtn);
@@ -483,10 +483,10 @@ describe('DoctorsDashboard Component', () => {
     });
 
     renderDashboard();
-    await waitFor(() => screen.getByText('John Doe'));
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+    await screen.findByText('John Doe (ID: 101)');
 
     // Add custom medication
     const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];

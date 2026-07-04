@@ -97,6 +97,38 @@ docker compose down
 
 ---
 
+## Linting & Code Quality
+
+Linting tools are configured for both the frontend and backend to check for syntax errors, unused variables, styling issues, and potential bugs.
+
+### 1. Frontend Linting (ESLint)
+To run ESLint on the frontend codebase:
+```bash
+cd frontend
+# Run checks and view warnings/errors
+npm run lint
+
+# Automatically resolve fixable style violations and unused imports
+npm run lint:fix
+```
+
+### 2. Backend Linting (Ruff)
+Ruff is set up to analyze Python files. Config rules (like ignoring line-length checks) are managed in `backend/pyproject.toml`.
+To run checks on the backend:
+```bash
+cd backend
+# Activate virtual environment
+venv\Scripts\activate  # or source venv/bin/activate on Mac/Linux
+
+# Run checks and view issues
+ruff check .
+
+# Automatically fix fixable issues
+ruff check . --fix
+```
+
+---
+
 ## System Architecture
 ```
 HMS/

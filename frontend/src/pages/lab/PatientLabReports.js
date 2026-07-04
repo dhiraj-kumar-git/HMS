@@ -28,7 +28,6 @@ import {
 import { FiMail, FiCopy, FiRefreshCw, FiEye } from "react-icons/fi";
 import axios from "axios";
 import BASE_URL from '../../utils/Config';
-import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 
