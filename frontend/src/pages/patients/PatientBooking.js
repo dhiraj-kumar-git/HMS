@@ -34,11 +34,12 @@ import {
   IconButton,
   Tooltip
 } from '@chakra-ui/react';
-import { FiSearch, FiCalendar, FiClock, FiCheckCircle, FiPlus, FiAlertCircle, FiArrowLeft, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
-import { getWeekdayIST, formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import { FiUser, FiPhone, FiCalendar, FiClock, FiCheckCircle, FiFileText, FiRefreshCw, FiAlertTriangle, FiArrowLeft } from "react-icons/fi";
+import BASE_URL from '../../utils/Config';
+import { toTitleCase, formatDateTimeIST, getWeekdayIST } from '../../utils/utils';
+import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import BASE_URL from '../../utils/Config';
 
 const PatientBooking = () => {
   const navigate = useNavigate();
@@ -695,10 +696,8 @@ const PatientBooking = () => {
                 {/* Visit History Section */}
                 {verifiedPatient.appointments && verifiedPatient.appointments.filter(a =>
                   a.status === 'completed' ||
-                  (a.prescription_summary && a.prescription_summary.length > 0) ||
-                  (a.lab_test_summary && a.lab_test_summary.length > 0) ||
-                  (a.diagnosis_note && a.diagnosis_note.length > 0) ||
-                  (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                  (a.emr_data && Object.keys(a.emr_data).length > 0) ||
+                  (a.prescription_summary && a.prescription_summary.length > 0)
                 ).length > 0 && (
                     <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
                       <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
@@ -707,10 +706,8 @@ const PatientBooking = () => {
                       <Accordion allowMultiple>
                         {verifiedPatient.appointments.filter(a =>
                           a.status === 'completed' ||
-                          (a.prescription_summary && a.prescription_summary.length > 0) ||
-                          (a.lab_test_summary && a.lab_test_summary.length > 0) ||
-                          (a.diagnosis_note && a.diagnosis_note.length > 0) ||
-                          (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
+                          (a.emr_data && Object.keys(a.emr_data).length > 0) ||
+                          (a.prescription_summary && a.prescription_summary.length > 0)
                         ).slice().reverse().map((app, idx) => (
                           <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
                             <h2>
@@ -725,40 +722,7 @@ const PatientBooking = () => {
                               </AccordionButton>
                             </h2>
                             <AccordionPanel pb={4} bg="gray.50">
-                              <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
-                                <Box>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
-                                  {app.prescription_summary && app.prescription_summary.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                                <Box>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
-                                  {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                                <Box gridColumn={{ md: "span 2" }}>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
-                                  {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                                <Box gridColumn={{ md: "span 2" }}>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
-                                  {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                              </Grid>
+                              <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
                             </AccordionPanel>
                           </AccordionItem>
                         ))}

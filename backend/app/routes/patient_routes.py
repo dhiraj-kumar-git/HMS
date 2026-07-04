@@ -118,6 +118,14 @@ def register_patient():
 def get_patient(institute_id):
     patient = database.get_patient_by_id(institute_id)
     if patient:
+        claims = get_jwt()
+        if claims.get("role") == "doctor":
+            username = get_jwt_identity()
+            if "appointments" in patient:
+                patient["appointments"] = [
+                    v for v in patient["appointments"]
+                    if v.get("doctor_username") == username
+                ]
         return jsonify(patient), 200
     return jsonify({"error": "Patient not found"}), 404
 
@@ -189,12 +197,9 @@ def save_consultation_details_route(visit_id):
     data = request.json
     doctor_username = get_jwt_identity()
     
-    prescriptions = data.get("prescriptions", [])
-    prescription_details = data.get("prescription_details", [])
-    lab_tests = data.get("lab_tests", [])
-    remarks = data.get("remarks", [])
+    prescription_data = data.get("prescription_data", {})
 
-    if database.update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+    if database.update_consultation_details(visit_id, doctor_username, prescription_data):
         return jsonify({"message": "Consultation details saved successfully"}), 200
     return jsonify({"error": "Failed to save consultation details"}), 400
 
@@ -574,7 +579,7 @@ def get_receptionist_appointments():
 @jwt_required()
 def update_appointment_status_route(visit_id):
     claims = get_jwt()
-    if claims.get("role") not in ["receptionist", "admin"]:
+    if claims.get("role") not in ["receptionist", "admin", "doctor"]:
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json

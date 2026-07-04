@@ -111,14 +111,25 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
             final_lab_tests.append(t)
         
     final_medicines = []
-    for i, p in enumerate(medicines):
-        if i in selected_medicines:
+    if selected_medicines and isinstance(selected_medicines[0], dict):
+        for m in selected_medicines:
             billed_items.append({
                 "type": "medicine",
-                "name": p.get("note", p) if isinstance(p, dict) else p,
-                "amount": 0 # Assuming medicines are dispensed without extra charge here, or handled separately
+                "name": m.get("note", m.get("drug", "")),
+                "quantity": m.get("quantity", ""),
+                "amount": 0
             })
-            final_medicines.append(p)
+            final_medicines.append(m)
+    else:
+        for i, p in enumerate(medicines):
+            if i in selected_medicines:
+                billed_items.append({
+                    "type": "medicine",
+                    "name": p.get("note", p) if isinstance(p, dict) else p,
+                    "quantity": p.get("quantity", "") if isinstance(p, dict) else "",
+                    "amount": 0
+                })
+                final_medicines.append(p)
             
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)

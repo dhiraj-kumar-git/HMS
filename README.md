@@ -6,6 +6,13 @@ This architecture centralizes patient registration, unifies doctor queue workflo
 
 ---
 
+## Documentation Directory
+- **[Functional Guide (GUIDE.md)](./GUIDE.md)**: A complete walkthrough of user roles, dashboards, and system functionalities.
+- **[Technical Documentation (TECHNICAL_DOC.md)](./TECHNICAL_DOC.md)**: Details on the system architecture, backend routes, directory structure, and onboarding guidelines.
+- **[API Testing Guide (API_TESTING_GUIDE.md)](./API_TESTING_GUIDE.md)**: Instructions for using the built-in Swagger UI sandbox to test HMS APIs.
+
+---
+
 ## Technology Stack
 
 - **Frontend**: React.js, Chakra UI, Tailwind CSS, Framer Motion

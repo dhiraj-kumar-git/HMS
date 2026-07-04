@@ -195,7 +195,7 @@ def test_save_consultation_details(client, mock_db, mocker, app):
     with app.app_context():
         token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
     mocker.patch("database.update_consultation_details", return_value=True)
-    res = client.put("/doctor/save_consultation_details/123", headers={"Authorization": f"Bearer {token}"}, json={"prescriptions": []})
+    res = client.put("/doctor/save_consultation_details/123", headers={"Authorization": f"Bearer {token}"}, json={"prescription_data": {}})
     assert res.status_code == 200
 
 def test_save_consultation(client, mock_db, mocker, app):

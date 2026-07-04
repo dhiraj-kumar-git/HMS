@@ -9,6 +9,14 @@ jest.setTimeout(20000); // Prevent timeouts during full suite run
 // Mock axios
 jest.mock('axios');
 
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
+
+window.scrollTo = jest.fn();
+
 // Mock Multiselect to simplify testing
 jest.mock('multiselect-react-dropdown', () => {
   return function MockMultiselect({ options, onSelect, placeholder }) {
@@ -68,7 +76,7 @@ describe('DoctorsDashboard Component', () => {
               name: 'John Doe',
               age: 30,
               gender: 'Male',
-              workflow_status: 'consultation',
+              workflow_status: 'consultation', appointments: [],
               doctor_assigned: 'doctor1',
               registration_time: '2023-01-01T10:00:00Z',
               visit_id: 'v101',
@@ -110,7 +118,7 @@ describe('DoctorsDashboard Component', () => {
               name: 'John Doe',
               age: 30,
               gender: 'Male',
-              workflow_status: 'consultation',
+              workflow_status: 'consultation', appointments: [],
               doctor_assigned: 'doctor1',
               registration_time: '2023-01-01T10:00:00Z',
               appointments: []
@@ -130,16 +138,48 @@ describe('DoctorsDashboard Component', () => {
     fireEvent.click(screen.getByText('John Doe'));
 
     await waitFor(() => {
-      expect(screen.getByText('John Doe (ID: 101)')).toBeInTheDocument();
-      expect(screen.getByText('Prescription & Remarks')).toBeInTheDocument();
+      expect(screen.getByText(/John Doe \(ID: 101\)/i)).toBeInTheDocument();
+      expect(screen.getByText('Plan (Medications, Labs, Advice)')).toBeInTheDocument();
     });
   });
 
-  it('adds custom prescription and remark in the modal', async () => {
+  it('does not open patient modal when a confirmed patient row is clicked', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [
+            {
+              institute_id: '102',
+              name: 'Jane Doe',
+              age: 25,
+              gender: 'Female',
+              workflow_status: 'confirmed',
+              doctor_assigned: 'doctor1',
+              registration_time: '2023-01-01T10:00:00Z',
+              appointments: []
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Jane Doe'));
+
+    expect(screen.queryByText('Plan (Medications, Labs, Advice)')).not.toBeInTheDocument();
+  });
+
+  it('updates subjective and objective fields in the modal', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -151,71 +191,137 @@ describe('DoctorsDashboard Component', () => {
 
     await waitFor(() => screen.getByText('John Doe (ID: 101)'));
 
-    // Add Prescription
-    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
-    fireEvent.change(prescriptionInput, { target: { value: 'Drink water' } });
-    const addPrescriptionBtn = screen.getAllByRole('button', { name: /Add/i })[0];
-    fireEvent.click(addPrescriptionBtn);
+    // Subjective fields
+    const chiefComplaintsInput = screen.getByLabelText(/Chief Complaints/i);
+    fireEvent.change(chiefComplaintsInput, { target: { value: 'Fever' } });
 
-    expect(screen.getByText('• Drink water')).toBeInTheDocument();
+    const hpiInput = screen.getByLabelText(/History of Present Illness/i);
+    fireEvent.change(hpiInput, { target: { value: 'Since 3 days' } });
 
-    // Add Remark
-    const remarkInput = screen.getByPlaceholderText(/Type a remark/i);
-    fireEvent.change(remarkInput, { target: { value: 'Rest for 2 days' } });
-    const addRemarkBtn = screen.getAllByRole('button', { name: /Add/i })[1];
-    fireEvent.click(addRemarkBtn);
+    const pmhInput = screen.getByLabelText(/Past Medical History/i);
+    fireEvent.change(pmhInput, { target: { value: 'None' } });
 
-    expect(screen.getByText('• Rest for 2 days')).toBeInTheDocument();
+    const allergiesInput = screen.getByLabelText(/Allergies/i);
+    fireEvent.change(allergiesInput, { target: { value: 'Peanuts' } });
+
+    // Objective fields (Vitals)
+    const bpInput = screen.getByLabelText('BP (mmHg)');
+    fireEvent.change(bpInput, { target: { value: '120/80' } });
+
+    const pulseInput = screen.getByLabelText('Pulse (bpm)');
+    fireEvent.change(pulseInput, { target: { value: '72' } });
+
+    expect(chiefComplaintsInput.value).toBe('Fever');
+    expect(hpiInput.value).toBe('Since 3 days');
+    expect(pmhInput.value).toBe('None');
+    expect(allergiesInput.value).toBe('Peanuts');
+    expect(bpInput.value).toBe('120/80');
+    expect(pulseInput.value).toBe('72');
   });
 
-  it('triggers confirmation modal when saving with no meds or labs', async () => {
+  it('adds custom medication and advice in the modal', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
     });
-    
-    axios.put.mockResolvedValueOnce({ data: { message: 'success' } });
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+    fireEvent.click(screen.getByText('John Doe'));
+
+    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+
+    // Add Medication
+    const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];
+    fireEvent.change(drugInput, { target: { value: 'Paracetamol' } });
+    const doseInput = screen.getByPlaceholderText(/500mg/i);
+    fireEvent.change(doseInput, { target: { value: '650mg' } });
+
+    const addMedicationBtn = screen.getByRole('button', { name: /Add Medication/i });
+    fireEvent.click(addMedicationBtn);
+
+    expect(screen.getByText(/Paracetamol/i)).toBeInTheDocument();
+    expect(screen.getByText(/650mg/i)).toBeInTheDocument();
+
+    // Add Advice
+    const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
+    fireEvent.change(adviceInput, { target: { value: 'Rest for 2 days' } });
+
+    expect(adviceInput.value).toBe('Rest for 2 days');
+  });
+
+  it('triggers confirmation modal when completing consultation with no meds or labs', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{
+            institute_id: '101',
+            visit_id: 'v101',
+            name: 'John Doe',
+            age: 30,
+            doctor_assigned: 'doctor_user',
+            workflow_status: 'consultation',
+            appointments: [{
+              doctor_username: 'doctor_user',
+              emr_data: {
+                assessment: { provisional_diagnosis: 'Test Diagnosis' },
+                subjective: { chief_complaints: 'Test Complaints' },
+                plan: { investigations: [], medications: [] }
+              }
+            }]
+          }]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
     axios.post.mockResolvedValueOnce({ data: { message: 'success' } }); // for save_consultation
+    axios.post.mockResolvedValueOnce({ data: { message: 'success' } }); // for complete_consultation
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
-    fireEvent.click(screen.getByText('John Doe'));
+    
+    // Click Complete Consultation (green checkmark) in the table row
+    const completeBtn = screen.getByTitle('Complete Consultation');
+    fireEvent.click(completeBtn);
 
-    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
-    
-    // Click Save all Details & Complete
-    fireEvent.click(screen.getByText('Save all Details & Complete'));
-    
     // Expect confirmation modal to open
     await waitFor(() => {
-      expect(screen.getByText('Confirm Status Update')).toBeInTheDocument();
+      expect(screen.getByText('Patient Prescription Summary')).toBeInTheDocument();
     });
-    
+
     // Confirm and Save
-    fireEvent.click(screen.getByText('Confirm & Save'));
-    
+    fireEvent.click(screen.getByText('Confirm & Complete'));
+
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
         expect.stringContaining('/doctor/save_consultation/v101'),
         expect.objectContaining({ has_labs: false, has_meds: false }),
         expect.any(Object)
       );
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/doctor/complete_consultation/v101'),
+        {},
+        expect.any(Object)
+      );
     });
   });
 
-  it('warns about unsaved changes when closing the modal', async () => {
+  it('autosaves and closes the modal immediately', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
     });
+
+    axios.put.mockResolvedValueOnce({ data: { message: 'success' } });
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
@@ -223,66 +329,102 @@ describe('DoctorsDashboard Component', () => {
 
     await waitFor(() => screen.getByText('John Doe (ID: 101)'));
 
-    // Type in a prescription without adding it
-    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
-    fireEvent.change(prescriptionInput, { target: { value: 'Unsaved prescription' } });
+    // Type in advice
+    const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
+    fireEvent.change(adviceInput, { target: { value: 'Unsaved advice' } });
 
-    // Click Cancel
-    fireEvent.click(screen.getByText('Cancel'));
+    // Click Close
+    fireEvent.click(screen.getByText('Close'));
 
-    // Expect unsaved changes modal
-    await waitFor(() => {
-      expect(screen.getByText('Unsaved Changes')).toBeInTheDocument();
-    });
-
-    // Discard and Close
-    fireEvent.click(screen.getByText('Discard and Close'));
-
+    // Expect modal to close immediately without unsaved changes warning
     await waitFor(() => {
       expect(screen.queryByText('Unsaved Changes')).not.toBeInTheDocument();
       expect(screen.queryByText('John Doe (ID: 101)')).not.toBeInTheDocument(); // main modal closed
     });
+
+    // Expect axios.put to be called
+    expect(axios.put).toHaveBeenCalledWith(
+      expect.stringContaining('/doctor/save_consultation_details/v101'),
+      expect.anything(),
+      expect.anything()
+    );
   }, 10000);
 
-  it('handles viewing lab reports', async () => {
+  it('handles viewing history with past visits', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ 
-            institute_id: '101', 
-            name: 'John Doe', 
-            age: 30, 
-            workflow_status: 'consultation',
-            visit_id: 'v101',
-            lab_reports: [{ s3_key: 'test_report.pdf', file_name: 'report.pdf' }]
+          data: [{
+            institute_id: '101',
+            name: 'John Doe',
+            age: 30,
+            workflow_status: 'consultation', appointments: [],
+            visit_id: 'v101'
           }]
+        });
+      }
+      if (url.includes('/get_patient/')) {
+        return Promise.resolve({
+          data: {
+            institute_id: '101',
+            appointments: [
+              { status: 'completed' }
+            ]
+          }
         });
       }
       return Promise.resolve({ data: [] });
     });
-    
-    axios.post.mockResolvedValueOnce({ data: { url: 'http://fake-s3-url.com/report.pdf' } });
-    
-    // Mock fetch for Blob
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        blob: () => Promise.resolve(new Blob(['mock data'], { type: 'application/pdf' })),
-      })
-    );
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
-    
-    // Find View button
-    const viewBtn = screen.getByRole('button', { name: /View/i });
-    fireEvent.click(viewBtn);
+
+    // Find History button
+    const historyBtn = screen.getByRole('button', { name: /History/i });
+    fireEvent.click(historyBtn);
 
     await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('/s3/view-url'),
-        { s3_key: 'test_report.pdf' },
-        expect.any(Object)
-      );
+      expect(mockNavigate).toHaveBeenCalledWith('/doctor/patient-history/101', {
+        state: { patientData: { institute_id: '101', appointments: [{ status: 'completed' }] } }
+      });
+    });
+  }, 10000);
+
+  it('handles viewing history without past visits', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{
+            institute_id: '101',
+            name: 'John Doe',
+            age: 30,
+            workflow_status: 'consultation', appointments: [],
+            visit_id: 'v101'
+          }]
+        });
+      }
+      if (url.includes('/get_patient/')) {
+        return Promise.resolve({
+          data: {
+            institute_id: '101',
+            appointments: [
+              { status: 'consultation' }
+            ]
+          }
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+
+    const historyBtn = screen.getByRole('button', { name: /History/i });
+    fireEvent.click(historyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('No Past Visits')).toBeInTheDocument();
+      expect(screen.getByText('This patient has not visited you previously for a consultation.')).toBeInTheDocument();
     });
   }, 10000);
 
@@ -293,8 +435,8 @@ describe('DoctorsDashboard Component', () => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
           data: [
-            { institute_id: '101', name: 'John Doe', workflow_status: 'consultation', registration_time: '2023-01-01T10:00:00Z' },
-            { institute_id: '102', name: 'Alice Smith', workflow_status: 'consultation', registration_time: '2023-01-02T10:00:00Z' }
+            { institute_id: '101', name: 'John Doe', workflow_status: 'consultation', appointments: [], registration_time: '2023-01-01T10:00:00Z' },
+            { institute_id: '102', name: 'Alice Smith', workflow_status: 'consultation', appointments: [], registration_time: '2023-01-02T10:00:00Z' }
           ]
         });
       }
@@ -311,12 +453,12 @@ describe('DoctorsDashboard Component', () => {
     // Test Search Filter
     const searchInput = screen.getByPlaceholderText('Search...');
     fireEvent.change(searchInput, { target: { value: '101' } });
-    
+
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
     });
-    
+
     // Clear Search
     fireEvent.change(searchInput, { target: { value: '' } });
 
@@ -330,15 +472,12 @@ describe('DoctorsDashboard Component', () => {
 
 
 
-  it('removes custom prescription and selects dropdown medicine', async () => {
+  it('adds and removes a medication', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', name: 'John Doe', workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', name: 'John Doe', workflow_status: 'consultation', appointments: [] }]
         });
-      }
-      if (url.includes('/dropdown/medicines')) {
-        return Promise.resolve({ data: [{ item_name: 'Paracetamol' }] });
       }
       return Promise.resolve({ data: [] });
     });
@@ -349,18 +488,11 @@ describe('DoctorsDashboard Component', () => {
 
     await waitFor(() => screen.getByText('John Doe (ID: 101)'));
 
-    // Select Dropdown Medicine
-    const selectMockBtn = screen.getByTestId('select-Paracetamol');
-    fireEvent.click(selectMockBtn);
-
-    // It should add to medications table or state
-    // Just verify the button click doesn't throw and adds it
-
-    // Add custom prescription
-    const prescriptionInput = screen.getByPlaceholderText(/Type a prescription detail/i);
-    fireEvent.change(prescriptionInput, { target: { value: 'Drink water' } });
-    const addPrescriptionBtn = screen.getAllByRole('button', { name: /Add/i })[0];
-    fireEvent.click(addPrescriptionBtn);
+    // Add custom medication
+    const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];
+    fireEvent.change(drugInput, { target: { value: 'Drink water' } });
+    const addMedicationBtn = screen.getByRole('button', { name: /Add Medication/i });
+    fireEvent.click(addMedicationBtn);
 
     expect(screen.getByText(/Drink water/i)).toBeInTheDocument();
 
@@ -368,10 +500,57 @@ describe('DoctorsDashboard Component', () => {
     if (removeBtns.length > 0) {
       fireEvent.click(removeBtns[0]);
     }
-    
+
     await waitFor(() => {
       expect(screen.queryByText(/Drink water/i)).not.toBeInTheDocument();
     });
+  });
+
+  it('renders checked-in and confirmed patients in separate lists and verifies order', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: '101',
+              name: 'John Checked',
+              age: 30,
+              workflow_status: 'checked_in',
+              registration_time: '2023-01-01T10:00:00Z',
+              appointments: []
+            },
+            {
+              institute_id: '102',
+              name: 'Alice Confirmed',
+              age: 25,
+              workflow_status: 'confirmed',
+              registration_time: '2023-01-01T11:00:00Z',
+              appointments: []
+            }
+          ]
+        });
+      }
+      if (url.includes('/users/')) {
+        return Promise.resolve({ data: { display_name: 'Dr. Smith', schedule: [] } });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Checked-in Patients/i)).toBeInTheDocument();
+      expect(screen.getByText(/Confirmed Patients/i)).toBeInTheDocument();
+      expect(screen.getByText('John Checked')).toBeInTheDocument();
+      expect(screen.getByText('Alice Confirmed')).toBeInTheDocument();
+    });
+
+    // Check order of headings to ensure Checked-in is above Confirmed
+    const headings = screen.getAllByRole('heading', { level: 4 });
+    const checkedInIndex = headings.findIndex(h => h.textContent.includes('Checked-in Patients'));
+    const confirmedIndex = headings.findIndex(h => h.textContent.includes('Confirmed Patients'));
+
+    expect(checkedInIndex).toBeLessThan(confirmedIndex);
   });
 
 });
