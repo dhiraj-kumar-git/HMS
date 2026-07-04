@@ -53,6 +53,7 @@ const PatientPortal = () => {
           flexDir={{ base: 'column', md: 'row' }}
           gap={8}
           justify="center"
+          align="center"
         >
           {/* Returning Patient Card */}
           <Flex

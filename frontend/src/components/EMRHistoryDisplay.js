@@ -132,9 +132,9 @@ const EMRHistoryDisplay = ({ emrData, legacyApp }) => {
                   <Box key={i} p={2} bg="white" borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
                     <HStack justify="space-between">
                       <Text fontWeight="bold" fontSize="sm" color="green.700">{m.drug}</Text>
-                      <Badge colorScheme="gray">{m.quantity} Qty</Badge>
+                      <Badge colorScheme="gray">{m.quantity || 'N/A'} Qty</Badge>
                     </HStack>
-                    <Text fontSize="xs" color="gray.600">{m.dose} • {m.route} • {m.frequency} {m.duration ? `• ${m.duration}` : ''}</Text>
+                    <Text fontSize="xs" color="gray.600">{m.dose || 'N/A'} • {m.route || 'N/A'} • {m.frequency || 'N/A'} • {m.duration || 'N/A'}</Text>
                   </Box>
                 ))}
               </VStack>

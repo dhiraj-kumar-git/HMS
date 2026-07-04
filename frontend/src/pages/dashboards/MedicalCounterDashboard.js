@@ -138,20 +138,20 @@ function MedicalCounterDashboard() {
   };
 
   // Fetch lab tests configuration from the backend
-    useEffect(() => {
-      const fetchLabTestsConfig = async () => {
-        try {
-          const token = localStorage.getItem('token');
-          const response = await axios.get(`${BASE_URL}/dropdown/labtests`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          setLabTestsConfig(response.data);
-        } catch (error) {
-          console.error('Error fetching lab tests config:', error);
-        }
-      };
-      fetchLabTestsConfig();
-    }, []);
+  useEffect(() => {
+    const fetchLabTestsConfig = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        const response = await axios.get(`${BASE_URL}/dropdown/labtests`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setLabTestsConfig(response.data);
+      } catch (error) {
+        console.error('Error fetching lab tests config:', error);
+      }
+    };
+    fetchLabTestsConfig();
+  }, []);
 
   // When a patient row is clicked, open the modal and reset preview flag
   const handleSelectPatient = (patient) => {
@@ -159,7 +159,7 @@ function MedicalCounterDashboard() {
     setPaymentStatus('pending');
     setPaymentMode('UPI');
     setBillGenerated(false);
-    
+
     // Initialize all items as selected by default
     setSelectedLabs((patient.lab_tests || []).map((_, i) => i));
     setSelectedMedicines((patient.prescriptions || []).map((_, i) => i));
@@ -208,7 +208,7 @@ function MedicalCounterDashboard() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       setSelectedPatient(prev => ({ ...prev, invoice_no: response.data.invoice_no }));
       setPaymentStatus('completed');
       fetchRegistrations(); // Refresh list to remove from queue behind the modal
@@ -237,7 +237,7 @@ function MedicalCounterDashboard() {
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       toast({
         title: 'Bill Cancelled',
         description: 'Patient has been removed from the billing queue.',
@@ -264,17 +264,17 @@ function MedicalCounterDashboard() {
     try {
       let finalInvoiceNo = selectedPatient.invoice_no || '';
       let finalTotal = calculateTotal();
-      
+
       let itemIndex = 1;
       let printItemsHtml = '';
-      
+
       // Map Medicines
       (selectedPatient.prescriptions || []).forEach((med, i) => {
         if (selectedMedicines.includes(i)) {
           printItemsHtml += `<tr><td>${itemIndex++}</td><td>${med.note || med}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
         }
       });
-      
+
       // Map Lab Tests
       (selectedPatient.lab_tests || []).forEach((t, i) => {
         if (selectedLabs.includes(i)) {
@@ -378,78 +378,78 @@ function MedicalCounterDashboard() {
   };
 
   // On-screen receipt preview
-    const ReceiptPreview = () => {
-      const total = calculateTotal();
-      return (
-        <Box p={4} borderWidth="1px" borderRadius="md">
-          <Box textAlign="center" mb={2}>
-            <Heading size="md">Birla Institute of Technology & Science</Heading>
-            <Text>MEDICAL CENTRE, Pilani, Rajasthan</Text>
-            <Text>Date/Time: {formatDateTimeIST(new Date())}</Text>
-            <Divider borderColor="black" borderWidth="1px" my={2} />
-          </Box>
-          <Divider mb={2} />
-          <Text fontWeight="bold" textAlign="center" mb={2}>* PAYMENT RECEIPT *</Text>
+  const ReceiptPreview = () => {
+    const total = calculateTotal();
+    return (
+      <Box p={4} borderWidth="1px" borderRadius="md">
+        <Box textAlign="center" mb={2}>
+          <Heading size="md">Birla Institute of Technology & Science</Heading>
+          <Text>MEDICAL CENTRE, Pilani, Rajasthan</Text>
+          <Text>Date/Time: {formatDateTimeIST(new Date())}</Text>
           <Divider borderColor="black" borderWidth="1px" my={2} />
-          <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm" mb={2}>
-            <Text>Invoice No.: {selectedPatient.invoice_no}</Text>
-            <Text>Institute ID: {selectedPatient.institute_id}</Text>
-            <Text>UMR: {selectedPatient.umrn}</Text>
-            <Text>Age/Gender: {calculateAge(selectedPatient.age)}/{selectedPatient.gender || 'N/A'}</Text>
-            <Text>Patient: {toTitleCase(selectedPatient.name || selectedPatient.patient_name)}</Text>
-            <Text>Payment No.: {selectedPatient.payment_no}</Text>
-            <Text>Ref. Doctor: {selectedPatient.doctor_assigned}</Text>
-          </Grid>
-          <Divider my={4} />
-          <Table size="sm" mb={2}>
-            <Thead>
-              <Tr>
-                <Th>S.No.</Th><Th>Service</Th><Th>Gross</Th>
-                <Th>Disc(%)</Th><Th>Disc</Th><Th>Remb(%)</Th>
-                <Th>Remb Amt</Th><Th>Amt</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {(selectedPatient.prescriptions || []).map((med, i) => (
-                <Tr key={`med-${i}`}>
-                  <Td>{i+1}</Td><Td>{med.note || med}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
-                </Tr>
-              ))}
-              {(selectedPatient.lab_tests || []).map((t,i) => {
-                const gross = getTestPrice(t.lab_test);
-                const discPerc = t.discount || 0;
-                const discAmt = (gross * discPerc / 100).toFixed(2);
-                const rembPerc = t.rembPerc || 0;
-                const rembAmt = (gross * rembPerc / 100).toFixed(2);
-                const amt = (gross - discAmt - rembAmt).toFixed(2);
-                return (
-                  <Tr key={i}>
-                    <Td>{(selectedPatient.prescriptions || []).length + i + 1}</Td>
-                    <Td>{t.lab_test}</Td>
-                    <Td>{gross.toFixed(2)}</Td>
-                    <Td>{discPerc}</Td>
-                    <Td>{discAmt}</Td>
-                    <Td>{rembPerc}</Td>
-                    <Td>{rembAmt}</Td>
-                    <Td>{amt}</Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
-          <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm">
-            <Text>Total :</Text>
-            <Text textAlign="right">{total.toFixed(2)}</Text>
-            <Text>Payment Mode:</Text>
-            <Text textAlign="right">{selectedPatient.payment_mode || 'Cash'}</Text>
-          </Grid>
-          <Text mt={2} fontWeight="bold">
-            {numberToWords(Math.round(total))} Rupees Only
-          </Text>
         </Box>
-      );
-    };
-  
+        <Divider mb={2} />
+        <Text fontWeight="bold" textAlign="center" mb={2}>* PAYMENT RECEIPT *</Text>
+        <Divider borderColor="black" borderWidth="1px" my={2} />
+        <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm" mb={2}>
+          <Text>Invoice No.: {selectedPatient.invoice_no}</Text>
+          <Text>Institute ID: {selectedPatient.institute_id}</Text>
+          <Text>UMR: {selectedPatient.umrn}</Text>
+          <Text>Age/Gender: {calculateAge(selectedPatient.age)}/{selectedPatient.gender || 'N/A'}</Text>
+          <Text>Patient: {toTitleCase(selectedPatient.name || selectedPatient.patient_name)}</Text>
+          <Text>Payment No.: {selectedPatient.payment_no}</Text>
+          <Text>Ref. Doctor: {selectedPatient.doctor_assigned}</Text>
+        </Grid>
+        <Divider my={4} />
+        <Table size="sm" mb={2}>
+          <Thead>
+            <Tr>
+              <Th>S.No.</Th><Th>Service</Th><Th>Gross</Th>
+              <Th>Disc(%)</Th><Th>Disc</Th><Th>Remb(%)</Th>
+              <Th>Remb Amt</Th><Th>Amt</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {(selectedPatient.prescriptions || []).map((med, i) => (
+              <Tr key={`med-${i}`}>
+                <Td>{i + 1}</Td><Td>{med.note || med}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
+              </Tr>
+            ))}
+            {(selectedPatient.lab_tests || []).map((t, i) => {
+              const gross = getTestPrice(t.lab_test);
+              const discPerc = t.discount || 0;
+              const discAmt = (gross * discPerc / 100).toFixed(2);
+              const rembPerc = t.rembPerc || 0;
+              const rembAmt = (gross * rembPerc / 100).toFixed(2);
+              const amt = (gross - discAmt - rembAmt).toFixed(2);
+              return (
+                <Tr key={i}>
+                  <Td>{(selectedPatient.prescriptions || []).length + i + 1}</Td>
+                  <Td>{t.lab_test}</Td>
+                  <Td>{gross.toFixed(2)}</Td>
+                  <Td>{discPerc}</Td>
+                  <Td>{discAmt}</Td>
+                  <Td>{rembPerc}</Td>
+                  <Td>{rembAmt}</Td>
+                  <Td>{amt}</Td>
+                </Tr>
+              );
+            })}
+          </Tbody>
+        </Table>
+        <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm">
+          <Text>Total :</Text>
+          <Text textAlign="right">{total.toFixed(2)}</Text>
+          <Text>Payment Mode:</Text>
+          <Text textAlign="right">{selectedPatient.payment_mode || 'Cash'}</Text>
+        </Grid>
+        <Text mt={2} fontWeight="bold">
+          {numberToWords(Math.round(total))} Rupees Only
+        </Text>
+      </Box>
+    );
+  };
+
 
   if (loading) {
     return (
@@ -508,129 +508,129 @@ function MedicalCounterDashboard() {
 
       {/* Main Content */}
       <Box as="main" flex="1" overflowY="auto" p={{ base: 4, md: 6 }}>
-              <Box
-                w="full"
-                maxW="1200px"
-                mx="auto"
-                bg={cardBg}
-                boxShadow="md"
-                borderRadius="lg"
-                p={{ base: 4, md: 6 }}
-              >
-                <Flex align="center" justify="space-between" mb={4}>
-                  <Flex align="center">
-                    <Heading fontSize="xl" color="blue.800" mr={2}>
-                      Active Patients
-                    </Heading>
-                    <IconButton
-                      aria-label="Refresh patients"
-                      icon={<FiRefreshCw />}
-                      variant="ghost"
-                      size="sm"
-                      onClick={fetchRegistrations}
-                    />
-                  </Flex>
-                  <Button
-                    leftIcon={<FiHelpCircle />}
-                    variant="ghost"
-                    colorScheme="blue"
-                    size="sm"
-                    onClick={onGuideOpen}
+        <Box
+          w="full"
+          maxW="1200px"
+          mx="auto"
+          bg={cardBg}
+          boxShadow="md"
+          borderRadius="lg"
+          p={{ base: 4, md: 6 }}
+        >
+          <Flex align="center" justify="space-between" mb={4}>
+            <Flex align="center">
+              <Heading fontSize="xl" color="blue.800" mr={2}>
+                Active Patients
+              </Heading>
+              <IconButton
+                aria-label="Refresh patients"
+                icon={<FiRefreshCw />}
+                variant="ghost"
+                size="sm"
+                onClick={fetchRegistrations}
+              />
+            </Flex>
+            <Button
+              leftIcon={<FiHelpCircle />}
+              variant="ghost"
+              colorScheme="blue"
+              size="sm"
+              onClick={onGuideOpen}
+            >
+              Status Guide
+            </Button>
+          </Flex>
+
+          {/* Search Bar */}
+          <InputGroup mb={4} maxW="300px">
+            <InputLeftElement pointerEvents="none">
+              <FiSearch color="gray" />
+            </InputLeftElement>
+            <Input
+              placeholder="Search by name, Institute ID or age"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </InputGroup>
+
+          {/* Table list of patients with Full Status details */}
+          <Box overflowX="auto">
+            <Table variant="simple" size="sm" fontSize="sm">
+              <Thead bg={tableHeaderBg}>
+                <Tr>
+                  <Th>Institute ID</Th>
+                  <Th>Name</Th>
+                  <Th>Age</Th>
+                  <Th>Type</Th>
+                  <Th>Status</Th>
+                  <Th>Bill</Th>
+                  <Th>Lab</Th>
+                  <Th>Completed Time</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {filteredRegistrations.map((patient) => (
+                  <Tr
+                    key={patient.institute_id}
+                    _hover={{ bg: 'gray.50', cursor: 'pointer' }}
+                    onClick={() => handleSelectPatient(patient)}
                   >
-                    Status Guide
-                  </Button>
-                </Flex>
-
-                {/* Search Bar */}
-                <InputGroup mb={4} maxW="300px">
-                  <InputLeftElement pointerEvents="none">
-                    <FiSearch color="gray" />
-                  </InputLeftElement>
-                  <Input
-                    placeholder="Search by name, Institute ID or age"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </InputGroup>
-
-                {/* Table list of patients with Full Status details */}
-                <Box overflowX="auto">
-                  <Table variant="simple" size="sm" fontSize="sm">
-                    <Thead bg={tableHeaderBg}>
-                      <Tr>
-                        <Th>Institute ID</Th>
-                        <Th>Name</Th>
-                        <Th>Age</Th>
-                        <Th>Type</Th>
-                        <Th>Status</Th>
-                        <Th>Bill</Th>
-                        <Th>Lab</Th>
-                        <Th>Completed Time</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {filteredRegistrations.map((patient) => (
-                        <Tr
-                          key={patient.institute_id}
-                          _hover={{ bg: 'gray.50', cursor: 'pointer' }}
-                          onClick={() => handleSelectPatient(patient)}
-                        >
-                          <Td>{patient.institute_id}</Td>
-                          <Td>{toTitleCase(patient.name)}</Td>
-                          <Td>{calculateAge(patient.age)}</Td>
-                          <Td>
-                            <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
-                              {patient.patient_type}
-                            </Badge>
-                          </Td>
-                          <Td>
-                            <Badge 
-                              variant="subtle"
-                              fontSize="10px"
-                              colorScheme={
-                                patient.workflow_status === 'active' ? 'green' : 
-                                patient.workflow_status === 'consultation' ? 'orange' : 
-                                patient.workflow_status === 'consultation completed' ? 'blue' : 
+                    <Td>{patient.institute_id}</Td>
+                    <Td>{toTitleCase(patient.name)}</Td>
+                    <Td>{calculateAge(patient.age)}</Td>
+                    <Td>
+                      <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
+                        {patient.patient_type}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant="subtle"
+                        fontSize="10px"
+                        colorScheme={
+                          patient.workflow_status === 'active' ? 'green' :
+                            patient.workflow_status === 'consultation' ? 'orange' :
+                              patient.workflow_status === 'consultation completed' ? 'blue' :
                                 patient.workflow_status === 'lab test pending' ? 'purple' : 'gray'
-                              }
-                            >
-                              {patient.workflow_status}
-                            </Badge>
-                          </Td>
-                          <Td>
-                            <Badge 
-                              variant="outline"
-                              fontSize="10px"
-                              colorScheme={patient.bill_status === 'paid' ? 'green' : patient.bill_status === 'pending' ? 'red' : 'gray'}
-                            >
-                              {patient.bill_status}
-                            </Badge>
-                          </Td>
-                          <Td>
-                            <Badge 
-                              variant="outline"
-                              fontSize="10px"
-                              colorScheme={patient.lab_status === 'completed' ? 'green' : patient.lab_status === 'pending' ? 'blue' : patient.lab_status === 'active' ? 'orange' : 'gray'}
-                            >
-                              {patient.lab_status}
-                            </Badge>
-                          </Td>
-                          <Td fontSize="xs">
-                            {patient.consultation_completed_time ? formatDateTimeIST(patient.consultation_completed_time) : formatDateTimeIST(patient.booked_at || Date.now())}
-                          </Td>
-                        </Tr>
-                      ))}
-                      {filteredRegistrations.length === 0 && (
-                        <Tr>
-                          <Td colSpan={8} textAlign="center">
-                            No active patients found.
-                          </Td>
-                        </Tr>
-                      )}
-                    </Tbody>
-                  </Table>
-                </Box>
-              </Box>
+                        }
+                      >
+                        {patient.workflow_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={patient.bill_status === 'paid' ? 'green' : patient.bill_status === 'pending' ? 'red' : 'gray'}
+                      >
+                        {patient.bill_status}
+                      </Badge>
+                    </Td>
+                    <Td>
+                      <Badge
+                        variant="outline"
+                        fontSize="10px"
+                        colorScheme={patient.lab_status === 'completed' ? 'green' : patient.lab_status === 'pending' ? 'blue' : patient.lab_status === 'active' ? 'orange' : 'gray'}
+                      >
+                        {patient.lab_status}
+                      </Badge>
+                    </Td>
+                    <Td fontSize="xs">
+                      {patient.consultation_completed_time ? formatDateTimeIST(patient.consultation_completed_time) : formatDateTimeIST(patient.booked_at || Date.now())}
+                    </Td>
+                  </Tr>
+                ))}
+                {filteredRegistrations.length === 0 && (
+                  <Tr>
+                    <Td colSpan={8} textAlign="center">
+                      No active patients found.
+                    </Td>
+                  </Tr>
+                )}
+              </Tbody>
+            </Table>
+          </Box>
+        </Box>
 
         {/* Redesigned Modal */}
         <Modal
@@ -685,7 +685,7 @@ function MedicalCounterDashboard() {
                       {editedMedicines.map((pres, i) => (
                         <Tr key={`pres-${i}`}>
                           <Td>
-                            <Checkbox 
+                            <Checkbox
                               isChecked={selectedMedicines.includes(i)}
                               onChange={(e) => {
                                 if (e.target.checked) setSelectedMedicines(prev => [...prev, i]);
@@ -698,10 +698,10 @@ function MedicalCounterDashboard() {
                             {pres.dose && <Text fontSize="xs" color="gray.500">{pres.dose} | {pres.route} | {pres.frequency} {pres.duration && `| ${pres.duration}`}</Text>}
                             <Flex align="center" mt={1}>
                               <Text fontSize="xs" mr={2}>Qty:</Text>
-                              <Input 
-                                size="xs" 
-                                width="60px" 
-                                value={pres.quantity || ''} 
+                              <Input
+                                size="xs"
+                                width="60px"
+                                value={pres.quantity || ''}
                                 onChange={(e) => {
                                   const newMeds = [...editedMedicines];
                                   newMeds[i].quantity = e.target.value;
@@ -717,7 +717,7 @@ function MedicalCounterDashboard() {
                       {(selectedPatient?.lab_tests || []).map((test, i) => (
                         <Tr key={`test-${i}`}>
                           <Td>
-                            <Checkbox 
+                            <Checkbox
                               isChecked={selectedLabs.includes(i)}
                               onChange={(e) => {
                                 if (e.target.checked) setSelectedLabs(prev => [...prev, i]);
@@ -746,8 +746,8 @@ function MedicalCounterDashboard() {
                     <Heading size="sm" mb={3} color="blue.800">Payment Collection</Heading>
                     <Flex align="center" gap={4}>
                       <Text fontWeight="bold" whiteSpace="nowrap">Payment Mode:</Text>
-                      <Select 
-                        value={paymentMode} 
+                      <Select
+                        value={paymentMode}
                         onChange={(e) => setPaymentMode(e.target.value)}
                         bg="white"
                         size="md"
@@ -777,12 +777,12 @@ function MedicalCounterDashboard() {
                   >
                     Confirm Payment & Mark as Paid
                   </Button>
-                  <Button 
-                    colorScheme="red" 
-                    onClick={handleCancelBill} 
+                  <Button
+                    colorScheme="red"
+                    onClick={handleCancelBill}
                     isLoading={paymentStatus === 'processing'}
-                    fontSize="md" 
-                    px={4} 
+                    fontSize="md"
+                    px={4}
                     py={2}
                     mr={3}
                   >
@@ -795,7 +795,7 @@ function MedicalCounterDashboard() {
               )}
               {paymentStatus === 'completed' && (
                 <Button variant="ghost" onClick={onClose} colorScheme="blue">
-                  Close & Next Patient
+                  Close
                 </Button>
               )}
             </ModalFooter>

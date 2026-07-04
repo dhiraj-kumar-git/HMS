@@ -58,6 +58,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import axios from "axios";
+import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, getWeekdayIST, toTitleCase } from '../../utils/utils';
 
@@ -75,10 +76,15 @@ export default function DoctorsDashboard() {
   // MODAL & SELECTION
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
-  const { isOpen: isUnsavedOpen, onOpen: onUnsavedOpen, onClose: onUnsavedClose } = useDisclosure();
+  const [completionState, setCompletionState] = useState({ hasLabs: false, hasMeds: false });
+  const { isOpen: isSaveConfirmOpen, onOpen: onSaveConfirmOpen, onClose: onSaveConfirmClose } = useDisclosure();
+
   const { isOpen: isNoHistoryOpen, onOpen: onNoHistoryOpen, onClose: onNoHistoryClose } = useDisclosure();
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [readyToComplete, setReadyToComplete] = useState({}); // { institute_id: { hasLabs, hasMeds } }
+
+  const [isNoShowModalOpen, setIsNoShowModalOpen] = useState(false);
+  const [selectedVisitIdForNoShow, setSelectedVisitIdForNoShow] = useState(null);
 
   // MEDICINES & LAB TESTS
   const [medicineOptions, setMedicineOptions] = useState([]);
@@ -193,6 +199,7 @@ export default function DoctorsDashboard() {
     fetchUserDetails();
   }, []);
 
+
   /** FETCH PATIENTS HELPERS **/
   const fetchPatients = async () => {
     setListLoading(true);
@@ -215,11 +222,18 @@ export default function DoctorsDashboard() {
       });
       setPatients(patientsWithDetails);
 
-      // Derive readyToComplete from workflow_status
+      // Derive readyToComplete from workflow_status and mandatory fields
       const readyMap = {};
       patientsWithDetails.forEach(p => {
-        // Patients in 'consultation' or 'lab test pending' are ready for the doctor to finalize
-        if (p.workflow_status === "consultation" || p.workflow_status === "lab test pending") {
+        const doctorAppointments = p.appointments?.filter(a => a.doctor_username === p.doctor_assigned) || [];
+        const activeAppt = doctorAppointments[doctorAppointments.length - 1] || {};
+        const eData = activeAppt.emr_data || {};
+        const diagnosis = eData.assessment?.provisional_diagnosis?.trim() || "";
+        const complaints = eData.subjective?.chief_complaints?.trim() || "";
+        const hasMandatoryFields = diagnosis.length > 0 && complaints.length > 0;
+
+        // Patients in 'checked_in', 'consultation' or 'lab test pending' are ready for the doctor to finalize ONLY IF mandatory fields are filled
+        if ((p.workflow_status === "checked_in" || p.workflow_status === "consultation" || p.workflow_status === "lab test pending") && hasMandatoryFields) {
           readyMap[p.visit_id] = true;
         }
       });
@@ -300,8 +314,50 @@ export default function DoctorsDashboard() {
     }));
   };
 
+  const handleNoShowStatus = async (visitId) => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${BASE_URL}/api/receptionist/appointment/${visitId}/status`,
+        { status: 'no_show' },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast({
+        title: `Patient marked as no show`,
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+      });
+      setIsNoShowModalOpen(false);
+      fetchPatients();
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Failed to update status",
+        status: "error",
+        duration: 2000,
+        isClosable: true,
+      });
+    }
+  };
+
   const handleAddMedication = () => {
     if (!medInput.drug) return;
+
+    const isDuplicate = emrData.plan.medications.some(
+      m => m.drug.toLowerCase().trim() === medInput.drug.toLowerCase().trim()
+    );
+
+    if (isDuplicate) {
+      toast({
+        title: "Medication already added",
+        description: "You have already added this medication.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true
+      });
+      return;
+    }
+
     setEmrData(prev => ({
       ...prev,
       plan: {
@@ -322,6 +378,22 @@ export default function DoctorsDashboard() {
 
   const handleAddInvestigation = () => {
     if (!labInput) return;
+
+    const isDuplicate = emrData.plan.investigations.some(
+      t => t.toLowerCase().trim() === labInput.toLowerCase().trim()
+    );
+
+    if (isDuplicate) {
+      toast({
+        title: "Lab test already added",
+        description: "You have already added this lab test.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true
+      });
+      return;
+    }
+
     setEmrData(prev => ({
       ...prev,
       plan: {
@@ -340,12 +412,26 @@ export default function DoctorsDashboard() {
     });
   };
 
+  const handleSaveDetails = () => {
+    const diagnosis = emrData.assessment?.provisional_diagnosis?.trim() || "";
+    const complaints = emrData.subjective?.chief_complaints?.trim() || "";
 
+    if (!diagnosis || !complaints) {
+      toast({
+        title: "Mandatory Fields Missing",
+        description: "Please provide both Chief Complaints and Provisional Diagnosis before saving.",
+        status: "warning",
+        duration: 4000,
+        isClosable: true
+      });
+      return;
+    }
 
+    onSaveConfirmOpen();
+  };
 
-  const handleSaveDetails = async () => {
-    if (!selectedPatient) return;
-
+  const executeSaveDetails = async () => {
+    onSaveConfirmClose();
     try {
       const token = localStorage.getItem("token");
 
@@ -356,37 +442,13 @@ export default function DoctorsDashboard() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const hasLabs = emrData.plan.investigations.length > 0;
-      const hasMeds = emrData.plan.medications.length > 0;
-
-      if (!hasLabs && !hasMeds) {
-        onConfirmOpen();
-        return;
-      }
-
-      await markAsReady(hasLabs, hasMeds);
-    } catch (e) {
-      toast({ title: "Error saving details", description: e.message, status: "error" });
-    }
-  };
-
-  const markAsReady = async (hasLabs, hasMeds) => {
-    if (!selectedPatient) return;
-    try {
-      const token = localStorage.getItem("token");
-      await axios.post(
-        `${BASE_URL}/doctor/save_consultation/${selectedPatient.visit_id}`,
-        { has_labs: hasLabs, has_meds: hasMeds },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
       toast({
-        title: "Consultation details saved",
-        description: "Please click the green tick icon in the patient list to complete this consultation.",
+        title: "Details Saved",
+        description: "Precription details saved successfully. Use the Complete Consultation action to finalize.",
         status: "success",
-        duration: 5000,
+        duration: 3000,
         isClosable: true
       });
-      onConfirmClose();
       onClose();
       await fetchPatients();
     } catch (e) {
@@ -394,46 +456,77 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const executeSaveAndUpdate = async (visitId) => {
+  const finalizeConsultation = async (visitId, hasLabs, hasMeds) => {
     try {
       const token = localStorage.getItem("token");
+      // 1. Mark as ready (set bill/lab statuses)
+      await axios.post(
+        `${BASE_URL}/doctor/save_consultation/${visitId}`,
+        { has_labs: hasLabs, has_meds: hasMeds },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // 2. Complete the consultation
       await axios.post(
         `${BASE_URL}/doctor/complete_consultation/${visitId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast({ title: "Consultation Completed", status: "success" });
 
-      await fetchPatients();
+      toast({ title: "Consultation Completed", status: "success" });
       onConfirmClose();
-      if (selectedPatient?.visit_id === visitId) {
-        onClose();
-        setSelectedPatient(null);
-      }
+      await fetchPatients();
     } catch (e) {
       toast({ title: "Error completing consultation", description: e.message, status: "error" });
     }
   };
 
-  const handleAttemptClose = () => {
-    const hasUnsavedItems =
-      emrData.plan.medications.length > 0 ||
-      emrData.plan.investigations.length > 0 ||
-      emrData.plan.advice.trim() !== "" ||
-      emrData.subjective.chief_complaints.trim() !== "" ||
-      medInput.drug.trim() !== "" ||
-      labInput.trim() !== "";
+  const handleActionCompleteClick = (patient) => {
+    setSelectedPatient(patient);
+    const doctorAppointments = patient.appointments?.filter(a => a.doctor_username === patient.doctor_assigned) || [];
+    const activeAppt = doctorAppointments[doctorAppointments.length - 1] || {};
+    const eData = activeAppt.emr_data || {};
+    const plan = eData.plan || {};
+    const investigations = plan.investigations || [];
+    const medications = plan.medications || [];
 
-    if (hasUnsavedItems) {
-      onUnsavedOpen();
-    } else {
-      onClose();
+    const diagnosis = eData.assessment?.provisional_diagnosis?.trim() || "";
+    const complaints = eData.subjective?.chief_complaints?.trim() || "";
+
+    if (!diagnosis || !complaints) {
+      toast({
+        title: "Missing Information",
+        description: "Please provide the patient's symptoms (Chief Complaints) and a Diagnosis before completing the consultation.",
+        status: "warning",
+        duration: 4000,
+        isClosable: true,
+      });
+      return;
     }
+
+    const hasLabs = investigations.length > 0;
+    const hasMeds = medications.length > 0;
+
+    setCompletionState({ hasLabs, hasMeds, emrData: eData });
+    onConfirmOpen();
   };
 
-  const confirmCloseWithoutSaving = () => {
-    onUnsavedClose();
+  const handleAttemptClose = async () => {
+    // Perform a final immediate save on close
+    if (selectedPatient) {
+      try {
+        const token = localStorage.getItem("token");
+        await axios.put(
+          `${BASE_URL}/doctor/save_consultation_details/${selectedPatient.visit_id}`,
+          { prescription_data: emrData },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      } catch (e) {
+        console.error("Final auto-save failed:", e);
+      }
+    }
     onClose();
+    await fetchPatients();
   };
 
   // Open modal
@@ -654,7 +747,8 @@ export default function DoctorsDashboard() {
                     <Td textAlign="center">
                       <Button
                         size="sm"
-                        colorScheme="teal"
+                        colorScheme="blue"
+                        variant="outline"
                         isLoading={historyLoading && selectedPatient?.institute_id === p.institute_id}
                         onClick={(e) => {
                           e.stopPropagation(); // prevents modal open
@@ -666,14 +760,22 @@ export default function DoctorsDashboard() {
                       </Button>
                     </Td>
                     <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                      {readyToComplete[p.visit_id] ? (
+                      {p.workflow_status === 'confirmed' ? (
+                        <Button size="xs" colorScheme="orange" onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedVisitIdForNoShow(p.visit_id);
+                          setIsNoShowModalOpen(true);
+                        }}>
+                          No Show
+                        </Button>
+                      ) : readyToComplete[p.visit_id] ? (
                         <IconButton
-                          aria-label="Complete consultation"
+                          aria-label="Complete Consultation"
                           icon={<FiCheckCircle />}
-                          colorScheme="green"
+                          colorScheme="yellow"
                           size="sm"
-                          onClick={() => executeSaveAndUpdate(p.visit_id)}
-                          title="Complete consultation"
+                          onClick={() => handleActionCompleteClick(p)}
+                          title="Complete Consultation"
                         />
                       ) : (
                         <Text color="gray.500">-</Text>
@@ -932,7 +1034,7 @@ export default function DoctorsDashboard() {
                   </h2>
                   <AccordionPanel pb={4}>
                     <VStack align="stretch" spacing={3}>
-                      <FormControl>
+                      <FormControl isRequired>
                         <FormLabel fontSize="xs">Chief Complaints</FormLabel>
                         <Textarea size="sm" value={emrData.subjective.chief_complaints} onChange={(e) => handleUpdateEmr('subjective', 'chief_complaints', e.target.value)} />
                       </FormControl>
@@ -1008,7 +1110,7 @@ export default function DoctorsDashboard() {
                     </AccordionButton>
                   </h2>
                   <AccordionPanel pb={4}>
-                    <FormControl>
+                    <FormControl isRequired>
                       <FormLabel fontSize="xs">Provisional Diagnosis</FormLabel>
                       <Textarea size="sm" value={emrData.assessment.provisional_diagnosis} onChange={(e) => handleUpdateEmr('assessment', 'provisional_diagnosis', e.target.value)} />
                     </FormControl>
@@ -1046,17 +1148,17 @@ export default function DoctorsDashboard() {
 
                         {/* Existing Meds */}
                         {emrData.plan.medications.length > 0 && (
-                          <VStack align="stretch" spacing={2} mb={4}>
+                          <Flex wrap="wrap" gap={3} mb={4}>
                             {emrData.plan.medications.map((m, idx) => (
-                              <Flex key={idx} justify="space-between" align="center" bg="gray.50" p={2} borderRadius="md" border="1px solid" borderColor="green.100">
-                                <Box>
-                                  <Text fontSize="xs" fontWeight="bold">{m.drug} <Badge colorScheme="gray">{m.quantity}</Badge></Text>
-                                  <Text fontSize="2xs" color="gray.500">{m.dose} | {m.route} | {m.frequency} | {m.duration}</Text>
+                              <Flex key={idx} justify="space-between" align="center" bg="gray.50" p={2} borderRadius="md" border="1px solid" borderColor="green.100" minW="max-content">
+                                <Box mr={3}>
+                                  <Text fontSize="xs" fontWeight="bold">{m.drug} <Badge colorScheme="gray">{m.quantity || 'N/A'}</Badge></Text>
+                                  <Text fontSize="2xs" color="gray.500">{m.dose || 'N/A'} | {m.route || 'N/A'} | {m.frequency || 'N/A'} | {m.duration || 'N/A'}</Text>
                                 </Box>
                                 <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemoveMedication(idx)} aria-label="Remove" />
                               </Flex>
                             ))}
-                          </VStack>
+                          </Flex>
                         )}
 
                         {/* Add Med Form */}
@@ -1067,7 +1169,9 @@ export default function DoctorsDashboard() {
                               <InputGroup size="sm">
                                 <Input list="med-options" value={medInput.drug} onChange={(e) => setMedInput({ ...medInput, drug: e.target.value })} placeholder="Select or type..." />
                                 <datalist id="med-options">
-                                  {medicineOptions.map((opt, i) => <option key={i} value={opt.item_name} />)}
+                                  {medicineOptions
+                                    .filter(opt => !emrData.plan.medications.some(m => m.drug.toLowerCase().trim() === opt.item_name.toLowerCase().trim()))
+                                    .map((opt, i) => <option key={i} value={opt.item_name} />)}
                                 </datalist>
                               </InputGroup>
                             </FormControl>
@@ -1075,7 +1179,7 @@ export default function DoctorsDashboard() {
                             <FormControl><FormLabel fontSize="xs">Route</FormLabel><Input size="sm" value={medInput.route} onChange={(e) => setMedInput({ ...medInput, route: e.target.value })} placeholder="Oral" /></FormControl>
                             <FormControl><FormLabel fontSize="xs">Freq</FormLabel><Input size="sm" value={medInput.frequency} onChange={(e) => setMedInput({ ...medInput, frequency: e.target.value })} placeholder="1-0-1" /></FormControl>
                             <FormControl><FormLabel fontSize="xs">Duration</FormLabel><Input size="sm" value={medInput.duration} onChange={(e) => setMedInput({ ...medInput, duration: e.target.value })} placeholder="5 days" /></FormControl>
-                            <FormControl><FormLabel fontSize="xs">Qty</FormLabel><Input size="sm" value={medInput.quantity} onChange={(e) => setMedInput({ ...medInput, quantity: e.target.value })} placeholder="10 tabs" /></FormControl>
+                            <FormControl><FormLabel fontSize="xs">Qty</FormLabel><Input type="number" size="sm" value={medInput.quantity} onChange={(e) => setMedInput({ ...medInput, quantity: e.target.value })} placeholder="10" /></FormControl>
                           </Grid>
                           <Button size="sm" colorScheme="green" onClick={handleAddMedication} alignSelf="flex-start" leftIcon={<FiPlus />}>Add Medication</Button>
                         </VStack>
@@ -1101,7 +1205,9 @@ export default function DoctorsDashboard() {
                           <InputGroup size="sm" flex="1">
                             <Input list="lab-options" value={labInput} onChange={(e) => setLabInput(e.target.value)} placeholder="Select or type test..." />
                             <datalist id="lab-options">
-                              {labTestOptions.map((opt, i) => <option key={i} value={opt.test_name} />)}
+                              {labTestOptions
+                                .filter(opt => !emrData.plan.investigations.some(t => t.toLowerCase().trim() === opt.test_name.toLowerCase().trim()))
+                                .map((opt, i) => <option key={i} value={opt.test_name} />)}
                             </datalist>
                           </InputGroup>
                           <Button size="sm" colorScheme="purple" onClick={handleAddInvestigation} leftIcon={<FiPlus />}>Add Test</Button>
@@ -1120,51 +1226,70 @@ export default function DoctorsDashboard() {
               Close
             </Button>
             <Button colorScheme="green" size="lg" onClick={handleSaveDetails}>
-              Save all Details & Complete
+              Save all Details
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
       {/* CONFIRMATION MODAL */}
-      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} isCentered>
+      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} size="4xl" scrollBehavior="inside" isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Confirm Status Update</ModalHeader>
+          <ModalHeader>Patient Prescription Summary</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            You are completing the consultation without prescribing any medicines or lab tests. Are you sure you want to proceed?
+            <Text fontWeight="bold" color="blue.600" mb={3}>
+              Please Review the Prescription Summary
+            </Text>
+            {(!completionState.hasLabs && !completionState.hasMeds) && (
+              <Text fontSize="sm" mb={3} color="orange.600" fontWeight="medium">
+                Note: You are completing this consultation without prescribing any medicines or lab tests.
+              </Text>
+            )}
+            <Text fontSize="sm" mb={4}>
+              If anything looks incorrect, you can click "Cancel" to go back and edit the details. However, once you click "Confirm & Complete", the consultation will be finalized and changes can no longer be made.
+            </Text>
+
+            <Box p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+              <EMRHistoryDisplay emrData={completionState.emrData} />
+            </Box>
           </ModalBody>
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={onConfirmClose}>
               Cancel
             </Button>
-            <Button colorScheme="blue" onClick={() => markAsReady(false, false)}>
-              Confirm & Save
+            <Button colorScheme="green" onClick={() => {
+              if (selectedPatient) {
+                finalizeConsultation(selectedPatient.visit_id, completionState.hasLabs, completionState.hasMeds);
+              }
+            }}>
+              Confirm & Complete
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* UNSAVED CHANGES MODAL */}
-      <Modal isOpen={isUnsavedOpen} onClose={onUnsavedClose} isCentered>
+      {/* SAVE ALL DETAILS CONFIRMATION MODAL */}
+      <Modal isOpen={isSaveConfirmOpen} onClose={onSaveConfirmClose} isCentered>
         <ModalOverlay />
         <ModalContent>
-          <ModalHeader>Unsaved Changes</ModalHeader>
+          <ModalHeader>Confirm Save Details</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            You have unsaved changes. If you close now, they will be lost. Are you sure you want to close?
+            Are you sure all the necessary details (such as history, vitals, examinations, medications, and investigations) have been entered correctly?
           </ModalBody>
           <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onUnsavedClose}>
+            <Button variant="ghost" mr={3} onClick={onSaveConfirmClose}>
               Cancel
             </Button>
-            <Button colorScheme="red" onClick={confirmCloseWithoutSaving}>
-              Discard and Close
+            <Button colorScheme="teal" onClick={executeSaveDetails}>
+              Yes, Save Details
             </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
+
 
       {/* NO HISTORY MODAL */}
       <Modal isOpen={isNoHistoryOpen} onClose={onNoHistoryClose} isCentered>
@@ -1178,6 +1303,26 @@ export default function DoctorsDashboard() {
           <ModalFooter>
             <Button colorScheme="blue" onClick={onNoHistoryClose}>
               Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* No Show Confirmation Modal */}
+      <Modal isOpen={isNoShowModalOpen} onClose={() => setIsNoShowModalOpen(false)} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>Confirm No Show</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text>Are you sure you want to mark this patient as a No Show? This will remove them from the active queue.</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={() => setIsNoShowModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button colorScheme="orange" onClick={() => handleNoShowStatus(selectedVisitIdForNoShow)}>
+              Confirm No Show
             </Button>
           </ModalFooter>
         </ModalContent>

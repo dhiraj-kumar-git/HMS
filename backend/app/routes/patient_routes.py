@@ -579,7 +579,7 @@ def get_receptionist_appointments():
 @jwt_required()
 def update_appointment_status_route(visit_id):
     claims = get_jwt()
-    if claims.get("role") not in ["receptionist", "admin"]:
+    if claims.get("role") not in ["receptionist", "admin", "doctor"]:
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json

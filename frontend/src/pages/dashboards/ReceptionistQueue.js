@@ -148,8 +148,8 @@ export default function ReceptionistQueue() {
                   <Th w="25%">Patient Info</Th>
                   <Th w="15%">Institute ID</Th>
                   <Th w="15%">Doctor</Th>
-                  <Th w="10%">Status</Th>
-                  <Th w="20%">Actions</Th>
+                  <Th w="10%" textAlign="center">Status</Th>
+                  <Th w="20%" textAlign="center">Actions</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -172,13 +172,13 @@ export default function ReceptionistQueue() {
                     </Td>
                     <Td>{appointment.institute_id}</Td>
                     <Td>{appointment.doctor_name || appointment.doctor_username}</Td>
-                    <Td>
+                    <Td textAlign="center">
                       <Badge colorScheme={getStatusBadgeColor(appointment.status)}>
                         {appointment.status.replace('_', ' ').toUpperCase()}
                       </Badge>
                     </Td>
-                    <Td>
-                      <HStack spacing={2}>
+                    <Td textAlign="center">
+                      <HStack spacing={2} justify="center">
                         {appointment.status === 'booked' && (
                           <Button size="xs" colorScheme="blue" onClick={() => handleStatusChange(appointment.visit_id, 'confirmed')}>
                             Confirm

@@ -194,20 +194,20 @@ describe('DoctorsDashboard Component', () => {
     // Subjective fields
     const chiefComplaintsInput = screen.getByLabelText(/Chief Complaints/i);
     fireEvent.change(chiefComplaintsInput, { target: { value: 'Fever' } });
-    
+
     const hpiInput = screen.getByLabelText(/History of Present Illness/i);
     fireEvent.change(hpiInput, { target: { value: 'Since 3 days' } });
-    
+
     const pmhInput = screen.getByLabelText(/Past Medical History/i);
     fireEvent.change(pmhInput, { target: { value: 'None' } });
-    
+
     const allergiesInput = screen.getByLabelText(/Allergies/i);
     fireEvent.change(allergiesInput, { target: { value: 'Peanuts' } });
 
     // Objective fields (Vitals)
     const bpInput = screen.getByLabelText('BP (mmHg)');
     fireEvent.change(bpInput, { target: { value: '120/80' } });
-    
+
     const pulseInput = screen.getByLabelText('Pulse (bpm)');
     fireEvent.change(pulseInput, { target: { value: '72' } });
 
@@ -240,7 +240,7 @@ describe('DoctorsDashboard Component', () => {
     fireEvent.change(drugInput, { target: { value: 'Paracetamol' } });
     const doseInput = screen.getByPlaceholderText(/500mg/i);
     fireEvent.change(doseInput, { target: { value: '650mg' } });
-    
+
     const addMedicationBtn = screen.getByRole('button', { name: /Add Medication/i });
     fireEvent.click(addMedicationBtn);
 
@@ -254,46 +254,64 @@ describe('DoctorsDashboard Component', () => {
     expect(adviceInput.value).toBe('Rest for 2 days');
   });
 
-  it('triggers confirmation modal when saving with no meds or labs', async () => {
+  it('triggers confirmation modal when completing consultation with no meds or labs', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
+          data: [{
+            institute_id: '101',
+            visit_id: 'v101',
+            name: 'John Doe',
+            age: 30,
+            doctor_assigned: 'doctor_user',
+            workflow_status: 'consultation',
+            appointments: [{
+              doctor_username: 'doctor_user',
+              emr_data: {
+                assessment: { provisional_diagnosis: 'Test Diagnosis' },
+                subjective: { chief_complaints: 'Test Complaints' },
+                plan: { investigations: [], medications: [] }
+              }
+            }]
+          }]
         });
       }
       return Promise.resolve({ data: [] });
     });
-    
-    axios.put.mockResolvedValueOnce({ data: { message: 'success' } });
+
     axios.post.mockResolvedValueOnce({ data: { message: 'success' } }); // for save_consultation
+    axios.post.mockResolvedValueOnce({ data: { message: 'success' } }); // for complete_consultation
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
-    fireEvent.click(screen.getByText('John Doe'));
+    
+    // Click Complete Consultation (green checkmark) in the table row
+    const completeBtn = screen.getByTitle('Complete Consultation');
+    fireEvent.click(completeBtn);
 
-    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
-    
-    // Click Save all Details & Complete
-    fireEvent.click(screen.getByText('Save all Details & Complete'));
-    
     // Expect confirmation modal to open
     await waitFor(() => {
-      expect(screen.getByText('Confirm Status Update')).toBeInTheDocument();
+      expect(screen.getByText('Patient Prescription Summary')).toBeInTheDocument();
     });
-    
+
     // Confirm and Save
-    fireEvent.click(screen.getByText('Confirm & Save'));
-    
+    fireEvent.click(screen.getByText('Confirm & Complete'));
+
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
         expect.stringContaining('/doctor/save_consultation/v101'),
         expect.objectContaining({ has_labs: false, has_meds: false }),
         expect.any(Object)
       );
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/doctor/complete_consultation/v101'),
+        {},
+        expect.any(Object)
+      );
     });
   });
 
-  it('warns about unsaved changes when closing the modal', async () => {
+  it('autosaves and closes the modal immediately', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
@@ -302,6 +320,8 @@ describe('DoctorsDashboard Component', () => {
       }
       return Promise.resolve({ data: [] });
     });
+
+    axios.put.mockResolvedValueOnce({ data: { message: 'success' } });
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
@@ -316,28 +336,28 @@ describe('DoctorsDashboard Component', () => {
     // Click Close
     fireEvent.click(screen.getByText('Close'));
 
-    // Expect unsaved changes modal
-    await waitFor(() => {
-      expect(screen.getByText('Unsaved Changes')).toBeInTheDocument();
-    });
-
-    // Discard and Close
-    fireEvent.click(screen.getByText('Discard and Close'));
-
+    // Expect modal to close immediately without unsaved changes warning
     await waitFor(() => {
       expect(screen.queryByText('Unsaved Changes')).not.toBeInTheDocument();
       expect(screen.queryByText('John Doe (ID: 101)')).not.toBeInTheDocument(); // main modal closed
     });
+
+    // Expect axios.put to be called
+    expect(axios.put).toHaveBeenCalledWith(
+      expect.stringContaining('/doctor/save_consultation_details/v101'),
+      expect.anything(),
+      expect.anything()
+    );
   }, 10000);
 
   it('handles viewing history with past visits', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ 
-            institute_id: '101', 
-            name: 'John Doe', 
-            age: 30, 
+          data: [{
+            institute_id: '101',
+            name: 'John Doe',
+            age: 30,
             workflow_status: 'consultation', appointments: [],
             visit_id: 'v101'
           }]
@@ -358,7 +378,7 @@ describe('DoctorsDashboard Component', () => {
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
-    
+
     // Find History button
     const historyBtn = screen.getByRole('button', { name: /History/i });
     fireEvent.click(historyBtn);
@@ -374,10 +394,10 @@ describe('DoctorsDashboard Component', () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ 
-            institute_id: '101', 
-            name: 'John Doe', 
-            age: 30, 
+          data: [{
+            institute_id: '101',
+            name: 'John Doe',
+            age: 30,
             workflow_status: 'consultation', appointments: [],
             visit_id: 'v101'
           }]
@@ -398,7 +418,7 @@ describe('DoctorsDashboard Component', () => {
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
-    
+
     const historyBtn = screen.getByRole('button', { name: /History/i });
     fireEvent.click(historyBtn);
 
@@ -433,12 +453,12 @@ describe('DoctorsDashboard Component', () => {
     // Test Search Filter
     const searchInput = screen.getByPlaceholderText('Search...');
     fireEvent.change(searchInput, { target: { value: '101' } });
-    
+
     await waitFor(() => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
       expect(screen.queryByText('Alice Smith')).not.toBeInTheDocument();
     });
-    
+
     // Clear Search
     fireEvent.change(searchInput, { target: { value: '' } });
 
@@ -480,7 +500,7 @@ describe('DoctorsDashboard Component', () => {
     if (removeBtns.length > 0) {
       fireEvent.click(removeBtns[0]);
     }
-    
+
     await waitFor(() => {
       expect(screen.queryByText(/Drink water/i)).not.toBeInTheDocument();
     });
@@ -529,7 +549,7 @@ describe('DoctorsDashboard Component', () => {
     const headings = screen.getAllByRole('heading', { level: 4 });
     const checkedInIndex = headings.findIndex(h => h.textContent.includes('Checked-in Patients'));
     const confirmedIndex = headings.findIndex(h => h.textContent.includes('Confirmed Patients'));
-    
+
     expect(checkedInIndex).toBeLessThan(confirmedIndex);
   });
 
