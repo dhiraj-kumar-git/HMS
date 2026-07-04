@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
   Flex,
@@ -61,6 +62,7 @@ import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, getWeekdayIST, toTitleCase } from '../../utils/utils';
 
 export default function DoctorsDashboard() {
+  const navigate = useNavigate();
   const toast = useToast();
   const username = localStorage.getItem("username");
   const [displayName, setDisplayName] = useState(localStorage.getItem("display_name") || "");
@@ -74,6 +76,7 @@ export default function DoctorsDashboard() {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const { isOpen: isConfirmOpen, onOpen: onConfirmOpen, onClose: onConfirmClose } = useDisclosure();
   const { isOpen: isUnsavedOpen, onOpen: onUnsavedOpen, onClose: onUnsavedClose } = useDisclosure();
+  const { isOpen: isNoHistoryOpen, onOpen: onNoHistoryOpen, onClose: onNoHistoryClose } = useDisclosure();
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [readyToComplete, setReadyToComplete] = useState({}); // { institute_id: { hasLabs, hasMeds } }
 
@@ -101,7 +104,44 @@ export default function DoctorsDashboard() {
   const [dateFilter, setDateFilter] = useState('');
   const [sortBy, setSortBy] = useState('date');
 
-  // PAGINATION
+  // ==========================================
+  // VIEW HISTORY LOGIC
+  // ==========================================
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const handleViewHistory = async (patient) => {
+    try {
+      setHistoryLoading(true);
+      const token = localStorage.getItem("token");
+      const res = await axios.get(`${BASE_URL}/get_patient/${patient.institute_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const visits = res.data.appointments || [];
+      // A past visit is one that is completed (since active visits are currently in the queue)
+      const hasPastVisit = visits.some(v => v.status === 'completed');
+
+      if (hasPastVisit) {
+        navigate(`/doctor/patient-history/${patient.institute_id}`, { state: { patientData: res.data } });
+      } else {
+        onNoHistoryOpen();
+      }
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error checking patient history",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  // ==========================================
+  // PAGINATION LOGIC
+  // ==========================================
   const [currentPage, setCurrentPage] = useState(1);
   const patientsPerPage = 10;
 
@@ -233,52 +273,6 @@ export default function DoctorsDashboard() {
 
 
   // LOCAL ACTIONS (Batched)
-  const handleViewReports = async (reports) => {
-    try {
-      const token = localStorage.getItem("token");
-
-      const s3Reports = reports.filter((r) => r && r.s3_key);
-
-      if (!s3Reports.length) {
-        toast({
-          title: "No file reports available",
-          status: "info",
-        });
-        return;
-      }
-
-      const r = s3Reports[0]; // only latest report
-      const res = await axios.post(
-        `${BASE_URL}/s3/view-url`,
-        { s3_key: r.s3_key },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      if (res.data?.url) {
-        const url = res.data.url;
-        const response = await fetch(url);
-        const blob = await response.blob();
-
-        const blobUrl = window.URL.createObjectURL(blob);
-
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = r.file_name || "LabReport.pdf";
-
-        document.body.appendChild(link);
-        link.click();
-
-        link.remove();
-        window.URL.revokeObjectURL(blobUrl);
-      }
-    } catch (err) {
-      toast({
-        title: "Error opening report",
-        description: err.message,
-        status: "error",
-      });
-    }
-  };
 
 
 
@@ -586,6 +580,115 @@ export default function DoctorsDashboard() {
   const currentPatients = displayedPatients.slice(indexOfFirstPatient, indexOfLastPatient);
   const totalPages = Math.ceil(displayedPatients.length / patientsPerPage);
 
+  const renderTable = (title, patientsList) => {
+    return (
+      <Box mb="6">
+        <Heading as="h4" size="sm" mb="4" color="gray.700">
+          {title} ({patientsList.length})
+        </Heading>
+        {patientsList.length === 0 ? (
+          <Flex h="100px" align="center" justify="center" bg="gray.50" borderRadius="md">
+            <Text color="gray.500" fontSize="md">
+              No patients right now.
+            </Text>
+          </Flex>
+        ) : (
+          <Box overflowX="auto">
+            <Table variant="simple">
+              <Thead bg="gray.100">
+                <Tr>
+                  <Th w="20%">Institute ID</Th>
+                  <Th w="25%">Patient</Th>
+                  <Th w="25%" textAlign="center">Appointment Time</Th>
+                  <Th w="15%" textAlign="center">Visit History</Th>
+                  <Th w="15%" textAlign="center">Actions</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {patientsList.map((p) => (
+                  <Tr
+                    key={p.institute_id}
+                    _hover={{ bg: 'gray.50', cursor: p.workflow_status === 'confirmed' ? 'default' : 'pointer' }}
+                    onClick={() => {
+                      if (p.workflow_status !== 'confirmed') {
+                        openPatientModal(p);
+                      }
+                    }}
+                  >
+                    <Td>
+                      <Flex align="center" justify="flex-start">
+                        <Text fontSize="sm" color="gray.600">{p.institute_id}</Text>
+                        <IconButton
+                          aria-label="Copy PSRN"
+                          icon={<FiCopy size={14} />}
+                          size="xs"
+                          ml="2"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(p.institute_id);
+                            toast({
+                              title: "Copied to clipboard",
+                              status: "success",
+                              duration: 1200,
+                              isClosable: true,
+                            });
+                          }}
+                        />
+                      </Flex>
+                    </Td>
+                    <Td>
+                      <Flex align="center" justify="flex-start">
+                        <Avatar size="sm" name={toTitleCase(p.name)} mr="3" />
+                        <Box textAlign="left">
+                          <Text fontWeight="bold">{toTitleCase(p.name)}</Text>
+                          {p.age && p.gender ? (
+                            <Text fontSize="sm" color="gray.500">{p.age} yrs • {p.gender}</Text>
+                          ) : (
+                            <Text fontSize="sm" color="gray.500">Info not available</Text>
+                          )}
+                        </Box>
+                      </Flex>
+                    </Td>
+                    <Td textAlign="center"><Text fontSize="sm">{p.visitingTime}</Text></Td>
+                    <Td textAlign="center">
+                      <Button
+                        size="sm"
+                        colorScheme="teal"
+                        isLoading={historyLoading && selectedPatient?.institute_id === p.institute_id}
+                        onClick={(e) => {
+                          e.stopPropagation(); // prevents modal open
+                          setSelectedPatient(p);
+                          handleViewHistory(p);
+                        }}
+                      >
+                        History
+                      </Button>
+                    </Td>
+                    <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                      {readyToComplete[p.visit_id] ? (
+                        <IconButton
+                          aria-label="Complete consultation"
+                          icon={<FiCheckCircle />}
+                          colorScheme="green"
+                          size="sm"
+                          onClick={() => executeSaveAndUpdate(p.visit_id)}
+                          title="Complete consultation"
+                        />
+                      ) : (
+                        <Text color="gray.500">-</Text>
+                      )}
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
+        )}
+      </Box>
+    );
+  };
+
   if (loading) {
     return (
       <Flex h="100vh" align="center" justify="center" bg="gray.50">
@@ -768,98 +871,8 @@ export default function DoctorsDashboard() {
             </Flex>
           ) : (
             <>
-              {currentPatients.length === 0 ? (
-                <Flex h="100px" align="center" justify="center">
-                  <Text color="gray.500" fontSize="lg">
-                    No patients right now.
-                  </Text>
-                </Flex>
-              ) : (
-                <Box overflowX="auto">
-                  <Table variant="simple">
-                    <Thead bg="gray.100">
-                      <Tr>
-                        <Th textAlign="center">Institute ID</Th>
-                        <Th textAlign="center">Name</Th>
-                        <Th textAlign="center">Age</Th>
-                        <Th textAlign="center">Gender</Th>
-                        <Th textAlign="center">Appointment Time</Th>
-                        <Th textAlign="center">Lab Reports</Th>
-                        <Th textAlign="center">Actions</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {currentPatients.map((p) => (
-                        <Tr
-                          key={p.institute_id}
-                          _hover={{ bg: 'gray.50', cursor: 'pointer' }}
-                          onClick={() => openPatientModal(p)}
-                        >
-                          <Td textAlign="center">
-                            <Flex align="center" justify="center">
-                              <Text fontSize="sm" color="gray.600">{p.institute_id}</Text>
-                              <IconButton
-                                aria-label="Copy PSRN"
-                                icon={<FiCopy size={14} />}
-                                size="xs"
-                                ml="2"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigator.clipboard.writeText(p.institute_id);
-                                  toast({
-                                    title: "Copied to clipboard",
-                                    status: "success",
-                                    duration: 1200,
-                                    isClosable: true,
-                                  });
-                                }}
-                              />
-                            </Flex>
-                          </Td>
-                          <Td textAlign="center">
-                            <Flex align="center" justify="center">
-                              <Avatar size="sm" name={toTitleCase(p.name)} mr="2" />
-                              <Text fontSize="sm" color="gray.800">{toTitleCase(p.name)}</Text>
-                            </Flex>
-                          </Td>
-                          <Td textAlign="center"><Text fontSize="sm">{p.age}</Text></Td>
-                          <Td textAlign="center"><Text fontSize="sm">{p.gender}</Text></Td>
-                          <Td textAlign="center"><Text fontSize="sm">{p.visitingTime}</Text></Td>
-                          <Td textAlign="center">
-                            {Array.isArray(p.lab_reports) && p.lab_reports.some((r) => r && r.s3_key) ? (
-                              <Button
-                                size="sm"
-                                colorScheme="blue"
-                                onClick={(e) => {
-                                  e.stopPropagation(); // prevents modal open
-                                  handleViewReports(p.lab_reports);
-                                }}
-                              >
-                                View
-                              </Button>
-                            ) : (
-                              <Text fontSize="sm">—</Text>
-                            )}
-                          </Td>
-                          <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                            {readyToComplete[p.visit_id] && (
-                              <IconButton
-                                aria-label="Complete consultation"
-                                icon={<FiCheckCircle />}
-                                colorScheme="green"
-                                size="sm"
-                                onClick={() => executeSaveAndUpdate(p.visit_id)}
-                                title="Complete consultation"
-                              />
-                            )}
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </Box>
-              )}
+              {renderTable("Checked-in Patients", currentPatients.filter(p => p.workflow_status === 'checked_in' || p.workflow_status === 'consultation'))}
+              {renderTable("Confirmed Patients", currentPatients.filter(p => p.workflow_status === 'confirmed'))}
               {totalPages > 1 && (
                 <Flex justify="center" mt="4" mb="4" align="center" gap="4">
                   <Button
@@ -1019,7 +1032,7 @@ export default function DoctorsDashboard() {
                           <FormLabel fontSize="xs">Advice / General Instructions</FormLabel>
                           <Textarea size="sm" placeholder="Rest, drink plenty of fluids..." value={emrData.plan.advice} onChange={(e) => handleUpdateEmr('plan', 'advice', e.target.value)} />
                         </FormControl>
-                        
+
                         {/* Follow Up */}
                         <FormControl>
                           <FormLabel fontSize="xs">Follow-up Date</FormLabel>
@@ -1148,6 +1161,23 @@ export default function DoctorsDashboard() {
             </Button>
             <Button colorScheme="red" onClick={confirmCloseWithoutSaving}>
               Discard and Close
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* NO HISTORY MODAL */}
+      <Modal isOpen={isNoHistoryOpen} onClose={onNoHistoryClose} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>No Past Visits</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Text>This patient has not visited you previously for a consultation.</Text>
+          </ModalBody>
+          <ModalFooter>
+            <Button colorScheme="blue" onClick={onNoHistoryClose}>
+              Close
             </Button>
           </ModalFooter>
         </ModalContent>

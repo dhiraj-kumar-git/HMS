@@ -118,6 +118,14 @@ def register_patient():
 def get_patient(institute_id):
     patient = database.get_patient_by_id(institute_id)
     if patient:
+        claims = get_jwt()
+        if claims.get("role") == "doctor":
+            username = get_jwt_identity()
+            if "appointments" in patient:
+                patient["appointments"] = [
+                    v for v in patient["appointments"]
+                    if v.get("doctor_username") == username
+                ]
         return jsonify(patient), 200
     return jsonify({"error": "Patient not found"}), 404
 

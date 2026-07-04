@@ -9,6 +9,14 @@ jest.setTimeout(20000); // Prevent timeouts during full suite run
 // Mock axios
 jest.mock('axios');
 
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
+
+window.scrollTo = jest.fn();
+
 // Mock Multiselect to simplify testing
 jest.mock('multiselect-react-dropdown', () => {
   return function MockMultiselect({ options, onSelect, placeholder }) {
@@ -68,7 +76,7 @@ describe('DoctorsDashboard Component', () => {
               name: 'John Doe',
               age: 30,
               gender: 'Male',
-              workflow_status: 'consultation',
+              workflow_status: 'consultation', appointments: [],
               doctor_assigned: 'doctor1',
               registration_time: '2023-01-01T10:00:00Z',
               visit_id: 'v101',
@@ -110,7 +118,7 @@ describe('DoctorsDashboard Component', () => {
               name: 'John Doe',
               age: 30,
               gender: 'Male',
-              workflow_status: 'consultation',
+              workflow_status: 'consultation', appointments: [],
               doctor_assigned: 'doctor1',
               registration_time: '2023-01-01T10:00:00Z',
               appointments: []
@@ -135,11 +143,87 @@ describe('DoctorsDashboard Component', () => {
     });
   });
 
+  it('does not open patient modal when a confirmed patient row is clicked', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: '102',
+              name: 'Jane Doe',
+              age: 25,
+              gender: 'Female',
+              workflow_status: 'confirmed',
+              doctor_assigned: 'doctor1',
+              registration_time: '2023-01-01T10:00:00Z',
+              appointments: []
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Jane Doe'));
+
+    expect(screen.queryByText('Plan (Medications, Labs, Advice)')).not.toBeInTheDocument();
+  });
+
+  it('updates subjective and objective fields in the modal', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+    fireEvent.click(screen.getByText('John Doe'));
+
+    await waitFor(() => screen.getByText('John Doe (ID: 101)'));
+
+    // Subjective fields
+    const chiefComplaintsInput = screen.getByLabelText(/Chief Complaints/i);
+    fireEvent.change(chiefComplaintsInput, { target: { value: 'Fever' } });
+    
+    const hpiInput = screen.getByLabelText(/History of Present Illness/i);
+    fireEvent.change(hpiInput, { target: { value: 'Since 3 days' } });
+    
+    const pmhInput = screen.getByLabelText(/Past Medical History/i);
+    fireEvent.change(pmhInput, { target: { value: 'None' } });
+    
+    const allergiesInput = screen.getByLabelText(/Allergies/i);
+    fireEvent.change(allergiesInput, { target: { value: 'Peanuts' } });
+
+    // Objective fields (Vitals)
+    const bpInput = screen.getByLabelText('BP (mmHg)');
+    fireEvent.change(bpInput, { target: { value: '120/80' } });
+    
+    const pulseInput = screen.getByLabelText('Pulse (bpm)');
+    fireEvent.change(pulseInput, { target: { value: '72' } });
+
+    expect(chiefComplaintsInput.value).toBe('Fever');
+    expect(hpiInput.value).toBe('Since 3 days');
+    expect(pmhInput.value).toBe('None');
+    expect(allergiesInput.value).toBe('Peanuts');
+    expect(bpInput.value).toBe('120/80');
+    expect(pulseInput.value).toBe('72');
+  });
+
   it('adds custom medication and advice in the modal', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -174,7 +258,7 @@ describe('DoctorsDashboard Component', () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -213,7 +297,7 @@ describe('DoctorsDashboard Component', () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', visit_id: 'v101', name: 'John Doe', age: 30, workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -246,7 +330,7 @@ describe('DoctorsDashboard Component', () => {
     });
   }, 10000);
 
-  it('handles viewing lab reports', async () => {
+  it('handles viewing history with past visits', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
@@ -254,37 +338,73 @@ describe('DoctorsDashboard Component', () => {
             institute_id: '101', 
             name: 'John Doe', 
             age: 30, 
-            workflow_status: 'consultation',
-            visit_id: 'v101',
-            lab_reports: [{ s3_key: 'test_report.pdf', file_name: 'report.pdf' }]
+            workflow_status: 'consultation', appointments: [],
+            visit_id: 'v101'
           }]
+        });
+      }
+      if (url.includes('/get_patient/')) {
+        return Promise.resolve({
+          data: {
+            institute_id: '101',
+            appointments: [
+              { status: 'completed' }
+            ]
+          }
         });
       }
       return Promise.resolve({ data: [] });
     });
-    
-    axios.post.mockResolvedValueOnce({ data: { url: 'http://fake-s3-url.com/report.pdf' } });
-    
-    // Mock fetch for Blob
-    global.fetch = jest.fn(() =>
-      Promise.resolve({
-        blob: () => Promise.resolve(new Blob(['mock data'], { type: 'application/pdf' })),
-      })
-    );
 
     renderDashboard();
     await waitFor(() => screen.getByText('John Doe'));
     
-    // Find View button
-    const viewBtn = screen.getByRole('button', { name: /View/i });
-    fireEvent.click(viewBtn);
+    // Find History button
+    const historyBtn = screen.getByRole('button', { name: /History/i });
+    fireEvent.click(historyBtn);
 
     await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('/s3/view-url'),
-        { s3_key: 'test_report.pdf' },
-        expect.any(Object)
-      );
+      expect(mockNavigate).toHaveBeenCalledWith('/doctor/patient-history/101', {
+        state: { patientData: { institute_id: '101', appointments: [{ status: 'completed' }] } }
+      });
+    });
+  }, 10000);
+
+  it('handles viewing history without past visits', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [{ 
+            institute_id: '101', 
+            name: 'John Doe', 
+            age: 30, 
+            workflow_status: 'consultation', appointments: [],
+            visit_id: 'v101'
+          }]
+        });
+      }
+      if (url.includes('/get_patient/')) {
+        return Promise.resolve({
+          data: {
+            institute_id: '101',
+            appointments: [
+              { status: 'consultation' }
+            ]
+          }
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+    await waitFor(() => screen.getByText('John Doe'));
+    
+    const historyBtn = screen.getByRole('button', { name: /History/i });
+    fireEvent.click(historyBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('No Past Visits')).toBeInTheDocument();
+      expect(screen.getByText('This patient has not visited you previously for a consultation.')).toBeInTheDocument();
     });
   }, 10000);
 
@@ -295,8 +415,8 @@ describe('DoctorsDashboard Component', () => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
           data: [
-            { institute_id: '101', name: 'John Doe', workflow_status: 'consultation', registration_time: '2023-01-01T10:00:00Z' },
-            { institute_id: '102', name: 'Alice Smith', workflow_status: 'consultation', registration_time: '2023-01-02T10:00:00Z' }
+            { institute_id: '101', name: 'John Doe', workflow_status: 'consultation', appointments: [], registration_time: '2023-01-01T10:00:00Z' },
+            { institute_id: '102', name: 'Alice Smith', workflow_status: 'consultation', appointments: [], registration_time: '2023-01-02T10:00:00Z' }
           ]
         });
       }
@@ -336,7 +456,7 @@ describe('DoctorsDashboard Component', () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/doctor/patients')) {
         return Promise.resolve({
-          data: [{ institute_id: '101', name: 'John Doe', workflow_status: 'consultation' }]
+          data: [{ institute_id: '101', name: 'John Doe', workflow_status: 'consultation', appointments: [] }]
         });
       }
       return Promise.resolve({ data: [] });
@@ -364,6 +484,53 @@ describe('DoctorsDashboard Component', () => {
     await waitFor(() => {
       expect(screen.queryByText(/Drink water/i)).not.toBeInTheDocument();
     });
+  });
+
+  it('renders checked-in and confirmed patients in separate lists and verifies order', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/doctor/patients')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: '101',
+              name: 'John Checked',
+              age: 30,
+              workflow_status: 'checked_in',
+              registration_time: '2023-01-01T10:00:00Z',
+              appointments: []
+            },
+            {
+              institute_id: '102',
+              name: 'Alice Confirmed',
+              age: 25,
+              workflow_status: 'confirmed',
+              registration_time: '2023-01-01T11:00:00Z',
+              appointments: []
+            }
+          ]
+        });
+      }
+      if (url.includes('/users/')) {
+        return Promise.resolve({ data: { display_name: 'Dr. Smith', schedule: [] } });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Checked-in Patients/i)).toBeInTheDocument();
+      expect(screen.getByText(/Confirmed Patients/i)).toBeInTheDocument();
+      expect(screen.getByText('John Checked')).toBeInTheDocument();
+      expect(screen.getByText('Alice Confirmed')).toBeInTheDocument();
+    });
+
+    // Check order of headings to ensure Checked-in is above Confirmed
+    const headings = screen.getAllByRole('heading', { level: 4 });
+    const checkedInIndex = headings.findIndex(h => h.textContent.includes('Checked-in Patients'));
+    const confirmedIndex = headings.findIndex(h => h.textContent.includes('Confirmed Patients'));
+    
+    expect(checkedInIndex).toBeLessThan(confirmedIndex);
   });
 
 });

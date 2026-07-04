@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
@@ -80,9 +80,10 @@ function CustomSpinner() {
 export default function PatientHistory() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [patient, setPatient] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [patient, setPatient] = useState(location.state?.patientData || null);
+  const [loading, setLoading] = useState(!location.state?.patientData);
 
   const cardBg = useColorModeValue("white", "gray.700");
   const timelineColor = useColorModeValue("blue.500", "blue.300");
@@ -92,6 +93,9 @@ export default function PatientHistory() {
   const subTextColor = useColorModeValue("gray.600", "gray.300");
 
   useEffect(() => {
+    // If we already received data from the navigation state, skip the API call.
+    if (patient) return;
+
     const fetchPatientHistory = async () => {
       try {
         const token = localStorage.getItem("token");
@@ -114,7 +118,7 @@ export default function PatientHistory() {
     };
 
     fetchPatientHistory();
-  }, [id]);
+  }, [id, patient]);
 
   // 🔷 Loading State
   if (loading) {
