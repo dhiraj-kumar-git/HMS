@@ -68,8 +68,45 @@ def get_lab_reports():
 # Mark a patient as complete (workflow_status "completed") when no meds/labs are given
 # (This is now largely replaced by the two-step consultation flow)
 
+def _process_lab_orders(raw_orders, is_confirmed):
+    result = []
+    for order in raw_orders:
+        patient = order["patient_info"]
+        patient["_id"] = str(patient["_id"])
+        
+        # Override root properties with this specific order's details
+        patient["prescriptions"] = order.get("prescriptions", [])
+        patient["prescription_details"] = order.get("prescription_details", [])
+        patient["lab_tests"] = order.get("lab_tests", [])
+        patient["lab_reports"] = order.get("lab_reports", [])
+        patient["remarks"] = order.get("remarks", [])
+        
+        # Override global statuses with order-specific logical statuses
+        patient["bill_status"] = "paid" if is_confirmed else "pending"
+        patient["lab_status"] = "pending"
+        patient["workflow_status"] = "lab test pending" if is_confirmed else "consultation completed"
+        
+        # Calculate age
+        if "date_of_birth" in patient and isinstance(patient["date_of_birth"], datetime):
+            dob = patient["date_of_birth"]
+            now = datetime.now(timezone.utc)
+            patient["age"] = now.year - dob.year - ((now.month, now.day) < (dob.month, dob.day))
+            patient["date_of_birth"] = dob.isoformat()
+            
+        patient["visit_id"] = order.get("visit_id")
+        patient["invoice_no"] = order.get("invoice_no")
+        patient["consultation_completed_time"] = order.get("consultation_completed_time")
+        
+        # Convert any other dates
+        if "registration_time" in patient and isinstance(patient["registration_time"], datetime):
+            patient["registration_time"] = patient["registration_time"].isoformat()
+            
+        result.append(patient)
+    return result
+
 def get_lab_patients():
-    pipeline = [
+    # 1. Confirmed Pipeline (invoice_no exists, pending lab tests)
+    confirmed_pipeline = [
         {"$match": {
             "invoice_no": {"$exists": True},
             "lab_tests.status": "pending"
@@ -84,41 +121,33 @@ def get_lab_patients():
         },
         {"$unwind": "$patient_info"}
     ]
-    raw_orders = list(visits.aggregate(pipeline))
-    result = []
-    for order in raw_orders:
-        patient = order["patient_info"]
-        patient["_id"] = str(patient["_id"])
-        
-        # Override root properties with this specific order's details
-        patient["prescriptions"] = order.get("prescriptions", [])
-        patient["prescription_details"] = order.get("prescription_details", [])
-        patient["lab_tests"] = order.get("lab_tests", [])
-        patient["lab_reports"] = order.get("lab_reports", [])
-        patient["remarks"] = order.get("remarks", [])
-        
-        # Override global statuses with order-specific logical statuses
-        # The lab queue only fetches billed orders with pending labs
-        patient["bill_status"] = "paid"
-        patient["lab_status"] = "pending"
-        patient["workflow_status"] = "lab test pending"
-        
-        # Calculate age
-        if "date_of_birth" in patient and isinstance(patient["date_of_birth"], datetime):
-            dob = patient["date_of_birth"]
-            now = datetime.now(timezone.utc)
-            patient["age"] = now.year - dob.year - ((now.month, now.day) < (dob.month, dob.day))
-            patient["date_of_birth"] = dob.isoformat()
-            
-        patient["visit_id"] = order.get("visit_id")
-        patient["invoice_no"] = order.get("invoice_no")
-        
-        # Convert any other dates
-        if "registration_time" in patient and isinstance(patient["registration_time"], datetime):
-            patient["registration_time"] = patient["registration_time"].isoformat()
-            
-        result.append(patient)
-    return result
+    raw_confirmed = list(visits.aggregate(confirmed_pipeline))
+    confirmed = _process_lab_orders(raw_confirmed, is_confirmed=True)
+
+    # 2. Upcoming Pipeline (invoice_no does not exist, status completed, pending lab tests)
+    upcoming_pipeline = [
+        {"$match": {
+            "invoice_no": {"$exists": False},
+            "status": "completed",
+            "lab_tests.status": "pending"
+        }},
+        {
+            "$lookup": {
+                "from": "patients",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_info"
+            }
+        },
+        {"$unwind": "$patient_info"}
+    ]
+    raw_upcoming = list(visits.aggregate(upcoming_pipeline))
+    upcoming = _process_lab_orders(raw_upcoming, is_confirmed=False)
+
+    return {
+        "confirmed": confirmed,
+        "upcoming": upcoming
+    }
 
 # ---- BULK REGISTRATION FUNCTIONS ----
 

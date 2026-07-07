@@ -691,7 +691,7 @@ export default function DoctorsDashboard() {
               <Thead bg="gray.100">
                 <Tr>
                   <Th w="20%">Institute ID</Th>
-                  <Th w="25%">Patient</Th>
+                  <Th w="25%">Patient Details</Th>
                   <Th w="25%" textAlign="center">Appointment Time</Th>
                   <Th w="15%" textAlign="center">Visit History</Th>
                   <Th w="15%" textAlign="center">Actions</Th>

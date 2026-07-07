@@ -28,7 +28,10 @@ def test_get_lab_patients(mocker):
     mock_visits = mocker.patch.object(lab_db, 'visits')
     mock_visits.aggregate.return_value = [{"patient_info": {"institute_id": "123", "_id": "1"}}]
     res = get_lab_patients()
-    assert len(res) == 1
+    assert "confirmed" in res
+    assert "upcoming" in res
+    assert len(res["confirmed"]) == 1
+    assert len(res["upcoming"]) == 1
 
 def test_submit_lab_results(mocker):
     mock_patients = mocker.patch.object(lab_db, 'patients')

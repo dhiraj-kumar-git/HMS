@@ -45,6 +45,7 @@
               "example": {
                 "username": "admin",
                 "password": "password123",
+                "POST": "string_value",
                 "role": "string_value"
               }
             }
@@ -83,7 +84,8 @@
               "example": {
                 "session_id": 123,
                 "jti": "string_value",
-                "exp": "string_value"
+                "exp": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -130,7 +132,8 @@
               },
               "example": {
                 "role": "string_value",
-                "new_password": "password123"
+                "new_password": "password123",
+                "PUT": "string_value"
               }
             }
           }
@@ -172,7 +175,8 @@
                 "selected_labs": "string_value",
                 "selected_medicines": "string_value",
                 "success": "string_value",
-                "invoice_no": "string_value"
+                "invoice_no": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -211,7 +215,8 @@
                 "role": "string_value",
                 "institute_id": 123,
                 "visit_id": 123,
-                "success": "string_value"
+                "success": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -322,7 +327,8 @@
                 "manufacture_date": "string_value",
                 "expiry_date": "string_value",
                 "batch_number": "string_value",
-                "storage_conditions": 30
+                "storage_conditions": 30,
+                "POST": "string_value"
               }
             }
           }
@@ -411,7 +417,8 @@
                 "visit_id": 123,
                 "test_name": "string_value",
                 "results": "string_value",
-                "remarks": "string_value"
+                "remarks": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -474,7 +481,8 @@
                 "recipient_email": "string_value",
                 "subject": "string_value",
                 "body": "string_value",
-                "pdf_base64": "string_value"
+                "pdf_base64": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -536,7 +544,8 @@
               "example": {
                 "role": "string_value",
                 "institute_id": 123,
-                "results": "string_value"
+                "results": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -606,6 +615,9 @@
                 "address": "string_value",
                 "patient_type": "string_value",
                 "institute_id": 123,
+                "appointment_time": "string_value",
+                "display_name": "string_value",
+                "POST": "string_value",
                 "doctor_name": "string_value"
               }
             }
@@ -719,12 +731,12 @@
         ]
       }
     },
-    "/doctor/save_consultation_details/{institute_id}": {
+    "/doctor/save_consultation_details/{visit_id}": {
       "put": {
         "tags": [
           "Patient"
         ],
-        "summary": "Patient - /doctor/save_consultation_details/{institute_id}",
+        "summary": "Patient - /doctor/save_consultation_details/{visit_id}",
         "responses": {
           "200": {
             "description": "Successful Operation"
@@ -743,7 +755,7 @@
         ],
         "parameters": [
           {
-            "name": "institute_id",
+            "name": "visit_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -758,19 +770,20 @@
                 "type": "object"
               },
               "example": {
-                "role": "string_value"
+                "role": "string_value",
+                "PUT": "string_value"
               }
             }
           }
         }
       }
     },
-    "/doctor/save_consultation/{institute_id}": {
+    "/doctor/save_consultation/{visit_id}": {
       "post": {
         "tags": [
           "Patient"
         ],
-        "summary": "Patient - /doctor/save_consultation/{institute_id}",
+        "summary": "Patient - /doctor/save_consultation/{visit_id}",
         "responses": {
           "200": {
             "description": "Successful Operation"
@@ -789,7 +802,7 @@
         ],
         "parameters": [
           {
-            "name": "institute_id",
+            "name": "visit_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -804,19 +817,20 @@
                 "type": "object"
               },
               "example": {
-                "role": "string_value"
+                "role": "string_value",
+                "POST": "string_value"
               }
             }
           }
         }
       }
     },
-    "/doctor/complete_consultation/{institute_id}": {
+    "/doctor/complete_consultation/{visit_id}": {
       "post": {
         "tags": [
           "Patient"
         ],
-        "summary": "Patient - /doctor/complete_consultation/{institute_id}",
+        "summary": "Patient - /doctor/complete_consultation/{visit_id}",
         "responses": {
           "200": {
             "description": "Successful Operation"
@@ -835,7 +849,7 @@
         ],
         "parameters": [
           {
-            "name": "institute_id",
+            "name": "visit_id",
             "in": "path",
             "required": true,
             "schema": {
@@ -850,7 +864,8 @@
                 "type": "object"
               },
               "example": {
-                "role": "string_value"
+                "role": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -914,7 +929,8 @@
                 "name": "string_value",
                 "date_of_birth": "string_value",
                 "gender": "string_value",
-                "relation": "string_value"
+                "relation": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -983,7 +999,9 @@
               "schema": {
                 "type": "object"
               },
-              "example": {}
+              "example": {
+                "PUT": "string_value"
+              }
             }
           }
         }
@@ -1055,7 +1073,8 @@
                 "type": "object"
               },
               "example": {
-                "role": "string_value"
+                "role": "string_value",
+                "PUT": "string_value"
               }
             }
           }
@@ -1116,6 +1135,7 @@
               },
               "example": {
                 "role": "string_value",
+                "POST": "string_value",
                 "file": "string_value",
                 "total": "string_value"
               }
@@ -1178,6 +1198,7 @@
               },
               "example": {
                 "role": "string_value",
+                "POST": "string_value",
                 "file": "string_value",
                 "total": "string_value"
               }
@@ -1236,7 +1257,8 @@
               "example": {
                 "instituteId": "string_value",
                 "filename": "string_value",
-                "content_type": "string_value"
+                "content_type": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1274,7 +1296,8 @@
               "example": {
                 "instituteId": "string_value",
                 "key": "string_value",
-                "filename": "string_value"
+                "filename": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1310,7 +1333,122 @@
                 "type": "object"
               },
               "example": {
-                "s3_key": "string_value"
+                "s3_key": "string_value",
+                "POST": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receptionist/queue": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/receptionist/queue",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
+    "/api/receptionist/appointment/{visit_id}/status": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/receptionist/appointment/{visit_id}/status",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "visit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "status": "string_value",
+                "POST": "string_value"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/receptionist/book-appointment": {
+      "post": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /api/receptionist/book-appointment",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              },
+              "example": {
+                "role": "string_value",
+                "institute_id": 123,
+                "doctor_username": "admin",
+                "time": "string_value",
+                "account_status": "string_value",
+                "display_name": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1367,7 +1505,8 @@
                 "institute_id": 123,
                 "address": "string_value",
                 "email": "string_value",
-                "patient_type": "string_value"
+                "patient_type": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1406,7 +1545,8 @@
                 "contact_no": "string_value",
                 "email": "string_value",
                 "address": "string_value",
-                "relation": "string_value"
+                "relation": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1437,7 +1577,8 @@
                 "type": "object"
               },
               "example": {
-                "email": "string_value"
+                "email": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1469,7 +1610,8 @@
               },
               "example": {
                 "email": "string_value",
-                "otp": "string_value"
+                "otp": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1503,7 +1645,8 @@
                 "institute_id": 123,
                 "account_status": "string_value",
                 "email": "string_value",
-                "name": "string_value"
+                "name": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1538,11 +1681,41 @@
                 "otp": "string_value",
                 "name": "string_value",
                 "psrn_id": 123,
-                "doctor_assigned": "string_value"
+                "doctor_assigned": "string_value",
+                "POST": "string_value"
               }
             }
           }
         }
+      }
+    },
+    "/api/public/doctor-availability/{doctor_username}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Public - /api/public/doctor-availability/{doctor_username}",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "parameters": [
+          {
+            "name": "doctor_username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
       }
     },
     "/api/public/book-appointment": {
@@ -1573,7 +1746,8 @@
                 "doctor_username": "admin",
                 "time": "string_value",
                 "account_status": "string_value",
-                "display_name": "string_value"
+                "display_name": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1724,7 +1898,8 @@
                 "username": "admin",
                 "password": "password123",
                 "display_name": "string_value",
-                "department": "string_value"
+                "department": "string_value",
+                "POST": "string_value"
               }
             }
           }
@@ -1771,7 +1946,8 @@
               },
               "example": {
                 "role": "string_value",
-                "schedule": "string_value"
+                "schedule": "string_value",
+                "PUT": "string_value"
               }
             }
           }
