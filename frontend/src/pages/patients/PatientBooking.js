@@ -219,7 +219,9 @@ const PatientBooking = () => {
     setVerifying(true);
     try {
       const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id });
-      if (response.data.requires_otp) {
+      const userRole = localStorage.getItem('role');
+      const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
+      if (response.data.requires_otp && !isReceptionist) {
         setMaskedEmail(response.data.email);
         setShowOtpModal(true);
       } else {
@@ -448,7 +450,8 @@ const PatientBooking = () => {
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
     try {
-      const isReceptionist = location.state?.skipOtp;
+      const userRole = localStorage.getItem('role');
+      const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
       
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
@@ -472,7 +475,7 @@ const PatientBooking = () => {
       setBookingFlow('dashboard');
       setIsRedirecting(true);
       setTimeout(() => {
-        if (location.state?.skipOtp) {
+        if (isReceptionist) {
           navigate('/receptionist');
         } else {
           navigate('/portal');
@@ -706,6 +709,7 @@ const PatientBooking = () => {
                       <Accordion allowMultiple>
                         {verifiedPatient.appointments.filter(a =>
                           a.status === 'completed' ||
+                          a.status === 'cancelled' ||
                           (a.emr_data && Object.keys(a.emr_data).length > 0) ||
                           (a.prescription_summary && a.prescription_summary.length > 0)
                         ).slice().reverse().map((app, idx) => (
@@ -715,8 +719,16 @@ const PatientBooking = () => {
                                 <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
                                   {formatDateTimeIST(app.time)} - {toTitleCase(app.doctor_name)}
                                 </Box>
-                                <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
-                                  {app.status === 'completed' ? "Completed" : "In Progress"}
+                                <Badge
+                                  colorScheme={
+                                    app.status === 'completed' ? "green" :
+                                      app.status === 'cancelled' ? "red" : "blue"
+                                  }
+                                  mr={3}
+                                  textTransform="none"
+                                >
+                                  {app.status === 'completed' ? "Completed" :
+                                    app.status === 'cancelled' ? "Cancelled" : "In Progress"}
                                 </Badge>
                                 <AccordionIcon />
                               </AccordionButton>

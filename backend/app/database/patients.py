@@ -146,6 +146,9 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
     patient["lab_reports"] = []
     patient["remarks"] = []
     
+    any_bill_pending = False
+    any_lab_pending = False
+    
     for v in patient_visits:
         has_labs = len(v.get("lab_tests", [])) > 0
         has_prescriptions = len(v.get("prescriptions", [])) > 0
@@ -153,17 +156,25 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
         visit_status = v.get("status", "upcoming")
         
         # Calculate bill status
-        if has_invoice:
+        if visit_status == "cancelled" and (has_labs or has_prescriptions):
+            v_bill = "cancelled"
+        elif has_invoice:
             v_bill = "paid"
         elif visit_status == "completed" and (has_labs or has_prescriptions):
             v_bill = "pending"
+            any_bill_pending = True
         else:
             v_bill = "none"
             
         # Calculate lab status
         if has_labs:
-            labs_pending = any(lt.get("status") == "pending" for lt in v.get("lab_tests", []))
-            v_lab = "pending" if labs_pending else "completed"
+            if visit_status == "cancelled":
+                v_lab = "cancelled"
+            else:
+                labs_pending = any(lt.get("status") == "pending" for lt in v.get("lab_tests", []))
+                v_lab = "pending" if labs_pending else "completed"
+                if labs_pending:
+                    any_lab_pending = True
         else:
             v_lab = "none"
             
@@ -227,7 +238,9 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
         has_invoice = bool(latest_visit.get("invoice_no"))
         visit_status = latest_visit.get("status", "upcoming")
         
-        if has_invoice:
+        if visit_status == "cancelled" and (has_labs or has_prescriptions):
+            v_bill = "cancelled"
+        elif has_invoice:
             v_bill = "paid"
         elif visit_status == "completed" and (has_labs or has_prescriptions):
             v_bill = "pending"
@@ -235,8 +248,11 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
             v_bill = "none"
             
         if has_labs:
-            labs_pending = any(lt.get("status") == "pending" for lt in latest_visit.get("lab_tests", []))
-            v_lab = "pending" if labs_pending else "completed"
+            if visit_status == "cancelled":
+                v_lab = "cancelled"
+            else:
+                labs_pending = any(lt.get("status") == "pending" for lt in latest_visit.get("lab_tests", []))
+                v_lab = "pending" if labs_pending else "completed"
         else:
             v_lab = "none"
             
@@ -262,8 +278,8 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
             v_workflow = visit_status
             
         patient["workflow_status"] = v_workflow
-        patient["bill_status"] = v_bill
-        patient["lab_status"] = v_lab
+        patient["bill_status"] = "pending" if any_bill_pending else v_bill
+        patient["lab_status"] = "pending" if any_lab_pending else v_lab
         patient["doctor_assigned"] = latest_visit.get("doctor_username")
         
     return patient
@@ -462,7 +478,7 @@ def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0,
                             {"doctor_username": doctor_username},
                             {"doctor_name": doctor_display_name}
                         ],
-                        "status": "completed"
+                        "status": {"$in": ["completed", "cancelled"]}
                     }
                 }
             }

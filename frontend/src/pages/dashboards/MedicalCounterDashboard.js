@@ -99,14 +99,14 @@ function MedicalCounterDashboard() {
       const sorted = filtered.sort((a, b) => {
         const timeA = new Date(a.consultation_completed_time || a.booked_at || 0).getTime();
         const timeB = new Date(b.consultation_completed_time || b.booked_at || 0).getTime();
-        return timeB - timeA;
+        return timeA - timeB;
       });
       setFilteredRegistrations(sorted);
     } else {
       const sorted = [...registrations].sort((a, b) => {
         const timeA = new Date(a.consultation_completed_time || a.booked_at || 0).getTime();
         const timeB = new Date(b.consultation_completed_time || b.booked_at || 0).getTime();
-        return timeB - timeA;
+        return timeA - timeB;
       });
       setFilteredRegistrations(sorted);
     }

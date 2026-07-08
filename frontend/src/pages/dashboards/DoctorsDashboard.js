@@ -124,8 +124,8 @@ export default function DoctorsDashboard() {
       });
 
       const visits = res.data.appointments || [];
-      // A past visit is one that is completed (since active visits are currently in the queue)
-      const hasPastVisit = visits.some(v => v.status === 'completed');
+      // A past visit is one that is completed or cancelled (since active visits are currently in the queue)
+      const hasPastVisit = visits.some(v => v.status === 'completed' || v.status === 'cancelled');
 
       if (hasPastVisit) {
         navigate(`/doctor/patient-history/${patient.institute_id}`, { state: { patientData: res.data } });

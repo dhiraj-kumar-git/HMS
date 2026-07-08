@@ -128,4 +128,37 @@ describe('PatientHistory Component', () => {
     fireEvent.click(backButton);
     expect(mockNavigate).toHaveBeenCalledWith(-1);
   });
+
+  it('renders cancelled appointments as completed and hides the cancelled alert banner', async () => {
+    const mockDataWithCancelled = {
+      institute_id: 'INST001',
+      name: 'John Doe',
+      appointments: [
+        {
+          status: 'cancelled',
+          time: new Date('2023-01-01T10:00:00Z').toISOString(),
+          doctor_name: 'Dr. Smith',
+          prescription_summary: ['Paracetamol 500mg']
+        }
+      ]
+    };
+    axios.get.mockResolvedValueOnce({ data: mockDataWithCancelled });
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+    });
+
+    // Cancelled appointment should render as Completed
+    expect(screen.getByText(/Dr. Smith/i)).toBeInTheDocument();
+    expect(screen.getByText('Completed')).toBeInTheDocument();
+
+    // Expand accordion to see details
+    const accordionButton = screen.getByRole('button', { name: /Dr. Smith/i });
+    fireEvent.click(accordionButton);
+
+    // Cancelled banner should not be present
+    expect(screen.queryByText('Bill Cancelled')).not.toBeInTheDocument();
+    expect(screen.getByText('• Paracetamol 500mg')).toBeInTheDocument();
+  });
 });

@@ -98,6 +98,11 @@ def test_get_patient_history_for_doctor(mocker):
     mock_patients.aggregate.return_value = [{"institute_id": "123", "patient_visits": []}]
     res = get_patient_history_for_doctor("doc1", "Dr. One")
     assert len(res) == 1
+    
+    # Verify pipeline match status in aggregate call
+    pipeline = mock_patients.aggregate.call_args[0][0]
+    match_stage = pipeline[1]["$match"]
+    assert match_stage["patient_visits"]["$elemMatch"]["status"] == {"$in": ["completed", "cancelled"]}
 
 def test_update_consultation_details(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
@@ -257,6 +262,42 @@ def test_map_aggregated_patient_other_statuses():
     }
     res = _map_aggregated_patient(p)
     assert res["workflow_status"] == "completed"
+
+def test_map_aggregated_patient_visit_independence():
+    p = {
+        "institute_id": "123",
+        "patient_visits": [
+            {
+                "visit_id": "v1", "status": "completed", "invoice_no": None,
+                "lab_tests": [{"status": "pending"}], "prescriptions": [{"medicine": "A"}]
+            },
+            {
+                "visit_id": "v2", "status": "confirmed", "doctor_username": "doc2"
+            }
+        ]
+    }
+    res = _map_aggregated_patient(p)
+    # The root workflow_status should represent the latest active visit's workflow
+    assert res["workflow_status"] == "confirmed"
+    # Root bill_status must aggregate globally and remain "pending" because v1 has an unpaid bill
+    assert res["bill_status"] == "pending"
+    # Root lab_status must aggregate globally and remain "pending" because v1 has a pending lab
+    assert res["lab_status"] == "pending"
+
+def test_map_aggregated_patient_cancelled_visit():
+    p = {
+        "institute_id": "123",
+        "patient_visits": [
+            {
+                "visit_id": "v1", "status": "cancelled", "invoice_no": None,
+                "lab_tests": [{"status": "cancelled"}], "prescriptions": [{"medicine": "A"}]
+            }
+        ]
+    }
+    res = _map_aggregated_patient(p)
+    assert res["workflow_status"] == "cancelled"
+    assert res["bill_status"] == "cancelled"
+    assert res["lab_status"] == "cancelled"
 
 def test_get_active_visit_id(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')

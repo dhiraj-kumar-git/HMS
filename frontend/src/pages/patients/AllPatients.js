@@ -191,7 +191,7 @@ export default function AllPatients({ onLogout }) {
   // Helper to get the last visit time for a patient
   const getLastVisitTime = (p) => {
    const completedAppts = p.appointments?.filter(a =>
-    a.status === 'completed' &&
+    (a.status === 'completed' || a.status === 'cancelled') &&
     (a.doctor_username === loginUsername || a.doctor_name === displayName)
    ) || [];
    if (completedAppts.length === 0) return 0;
@@ -398,10 +398,10 @@ export default function AllPatients({ onLogout }) {
           </Tr>
          ) : (
           filteredPatients.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((patient) => {
-           const completedAppts = patient.appointments?.filter(a =>
-            a.status === 'completed' &&
-            (a.doctor_username === loginUsername || a.doctor_name === displayName)
-           ) || [];
+            const completedAppts = patient.appointments?.filter(a =>
+             (a.status === 'completed' || a.status === 'cancelled') &&
+             (a.doctor_username === loginUsername || a.doctor_name === displayName)
+            ) || [];
            let lastVisit = 'No History';
            if (completedAppts.length > 0) {
             const latest = completedAppts[completedAppts.length - 1];
