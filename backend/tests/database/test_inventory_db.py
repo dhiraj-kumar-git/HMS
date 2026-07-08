@@ -89,11 +89,45 @@ def test_cancel_bill_patient_not_found(mocker):
 
 def test_cancel_bill_success(mocker):
     mock_patients = mocker.patch("app.database.inventory.patients")
+    mock_visits = mocker.patch("app.database.inventory.visits")
     mock_patients.find_one.return_value = {"institute_id": "I123"}
     mock_patients.update_one.return_value.modified_count = 1
+    mock_visits.find_one.return_value = None
     
     res = inv.cancel_bill("I123")
     assert res["success"] is True
+
+def test_cancel_bill_success_with_lab_tests(mocker):
+    mock_patients = mocker.patch("app.database.inventory.patients")
+    mock_visits = mocker.patch("app.database.inventory.visits")
+    mock_patients.find_one.return_value = {"institute_id": "I123"}
+    mock_patients.update_one.return_value.modified_count = 1
+    
+    mock_visits.find_one.return_value = {
+        "visit_id": 456,
+        "institute_id": "I123",
+        "status": "completed",
+        "lab_tests": [
+            {"lab_test": "Hemoglobin", "status": "pending"},
+            {"lab_test": "Blood Sugar", "status": "pending"},
+            {"lab_test": "X-Ray", "status": "completed"}
+        ]
+    }
+    
+    res = inv.cancel_bill("I123", visit_id=456)
+    assert res["success"] is True
+    
+    mock_visits.update_one.assert_called_once_with(
+        {"visit_id": 456},
+        {"$set": {
+            "status": "cancelled",
+            "lab_tests": [
+                {"lab_test": "Hemoglobin", "status": "cancelled"},
+                {"lab_test": "Blood Sugar", "status": "cancelled"},
+                {"lab_test": "X-Ray", "status": "completed"}
+            ]
+        }}
+    )
 
 def test_generate_medicine_id(mocker):
     mock_inventory = mocker.patch("app.database.inventory.inventory")

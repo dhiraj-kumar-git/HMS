@@ -7,7 +7,11 @@ import {
   HStack,
   Divider,
   SimpleGrid,
-  GridItem
+  GridItem,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription
 } from '@chakra-ui/react';
 
 const Field = ({ label, value, isDiagnosis }) => (
@@ -17,44 +21,55 @@ const Field = ({ label, value, isDiagnosis }) => (
   </Box>
 );
 
-const EMRHistoryDisplay = ({ emrData, legacyApp }) => {
+const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) => {
   // Graceful fallback for legacy appointments without emrData
   if (!emrData || Object.keys(emrData).length === 0) {
     return (
-      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-        <Box>
-          <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
-          {legacyApp?.prescription_summary && legacyApp.prescription_summary.length > 0 ? (
-            <VStack align="start" spacing={1}>
-              {legacyApp.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
-            </VStack>
-          ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-        </Box>
-        <Box>
-          <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
-          {legacyApp?.prescription_remarks_summary && legacyApp.prescription_remarks_summary.length > 0 ? (
-            <VStack align="start" spacing={1}>
-              {legacyApp.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
-            </VStack>
-          ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-        </Box>
-        <Box gridColumn={{ md: "span 2" }}>
-          <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
-          {legacyApp?.diagnosis_note && legacyApp.diagnosis_note.length > 0 ? (
-            <VStack align="start" spacing={1}>
-              {legacyApp.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {typeof d === 'string' ? d : d.note || JSON.stringify(d)}</Text>)}
-            </VStack>
-          ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-        </Box>
-        <Box gridColumn={{ md: "span 2" }}>
-          <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
-          {legacyApp?.lab_test_summary && legacyApp.lab_test_summary.length > 0 ? (
-            <VStack align="start" spacing={1}>
-              {legacyApp.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
-            </VStack>
-          ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-        </Box>
-      </SimpleGrid>
+      <VStack align="stretch" spacing={4} w="100%">
+        {legacyApp?.status === 'cancelled' && !hideCancelledAlert && (
+          <Alert status="error" borderRadius="md">
+            <AlertIcon />
+            <Box>
+              <AlertTitle mr={2}>Bill Cancelled</AlertTitle>
+              <AlertDescription>The entire bill for this visit has been cancelled.</AlertDescription>
+            </Box>
+          </Alert>
+        )}
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} w="100%">
+          <Box>
+            <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
+            {legacyApp?.prescription_summary && legacyApp.prescription_summary.length > 0 ? (
+              <VStack align="start" spacing={1}>
+                {legacyApp.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
+              </VStack>
+            ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+          </Box>
+          <Box>
+            <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
+            {legacyApp?.prescription_remarks_summary && legacyApp.prescription_remarks_summary.length > 0 ? (
+              <VStack align="start" spacing={1}>
+                {legacyApp.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
+              </VStack>
+            ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+          </Box>
+          <Box gridColumn={{ md: "span 2" }}>
+            <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
+            {legacyApp?.diagnosis_note && legacyApp.diagnosis_note.length > 0 ? (
+              <VStack align="start" spacing={1}>
+                {legacyApp.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {typeof d === 'string' ? d : d.note || JSON.stringify(d)}</Text>)}
+              </VStack>
+            ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+          </Box>
+          <Box gridColumn={{ md: "span 2" }}>
+            <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
+            {legacyApp?.lab_test_summary && legacyApp.lab_test_summary.length > 0 ? (
+              <VStack align="start" spacing={1}>
+                {legacyApp.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
+              </VStack>
+            ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
+          </Box>
+        </SimpleGrid>
+      </VStack>
     );
   }
 
@@ -83,6 +98,15 @@ const EMRHistoryDisplay = ({ emrData, legacyApp }) => {
 
   return (
     <VStack align="stretch" spacing={4}>
+      {legacyApp?.status === 'cancelled' && !hideCancelledAlert && (
+        <Alert status="error" borderRadius="md">
+          <AlertIcon />
+          <Box>
+            <AlertTitle mr={2}>Bill Cancelled</AlertTitle>
+            <AlertDescription>The entire bill for this visit has been cancelled.</AlertDescription>
+          </Box>
+        </Alert>
+      )}
       {/* Vitals */}
       {hasVitals && (
         <Box>

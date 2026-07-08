@@ -124,8 +124,8 @@ export default function DoctorsDashboard() {
       });
 
       const visits = res.data.appointments || [];
-      // A past visit is one that is completed (since active visits are currently in the queue)
-      const hasPastVisit = visits.some(v => v.status === 'completed');
+      // A past visit is one that is completed or cancelled (since active visits are currently in the queue)
+      const hasPastVisit = visits.some(v => v.status === 'completed' || v.status === 'cancelled');
 
       if (hasPastVisit) {
         navigate(`/doctor/patient-history/${patient.institute_id}`, { state: { patientData: res.data } });
@@ -691,7 +691,7 @@ export default function DoctorsDashboard() {
               <Thead bg="gray.100">
                 <Tr>
                   <Th w="20%">Institute ID</Th>
-                  <Th w="25%">Patient</Th>
+                  <Th w="25%">Patient Details</Th>
                   <Th w="25%" textAlign="center">Appointment Time</Th>
                   <Th w="15%" textAlign="center">Visit History</Th>
                   <Th w="15%" textAlign="center">Actions</Th>

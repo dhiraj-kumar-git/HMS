@@ -199,6 +199,44 @@ describe('MedicalCounterDashboard Component', () => {
     expect(mockWindow.print).toHaveBeenCalled();
   });
 
+  it('sorts patients in ascending order of Completed Time (earliest first)', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/active_registrations')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: 'OPD-102',
+              name: 'Jane Smith',
+              age: 30,
+              workflow_status: 'consultation completed',
+              consultation_completed_time: '2026-07-08T10:30:00Z',
+              visit_id: 'VIS-002'
+            },
+            {
+              institute_id: 'OPD-101',
+              name: 'John Doe',
+              age: 25,
+              workflow_status: 'consultation completed',
+              consultation_completed_time: '2026-07-08T10:00:00Z',
+              visit_id: 'VIS-001'
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await screen.findByText('John Doe');
+    await screen.findByText('Jane Smith');
+
+    const rows = screen.getAllByRole('row');
+    // Row 0 is the table header, Row 1 should be John Doe (10:00), Row 2 should be Jane Smith (10:30)
+    expect(rows[1]).toHaveTextContent('John Doe');
+    expect(rows[2]).toHaveTextContent('Jane Smith');
+  });
+
   it('renders correctly when no patients are active', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/active_registrations')) {

@@ -230,4 +230,29 @@ describe('AllPatients Component', () => {
     // Restore window.location
     window.location = originalLocation;
   });
+
+  it('shows patients with cancelled visits in the list and formats last visit date', async () => {
+    const mockCancelledData = [
+      {
+        institute_id: 'INST003',
+        name: 'Bob Ross',
+        age: 40,
+        gender: 'Male',
+        workflow_status: 'completed',
+        appointments: [
+          {
+            status: 'cancelled',
+            time: '2023-03-01T10:00:00Z',
+            doctor_username: 'doc1',
+            doctor_name: 'Dr. Test'
+          }
+        ]
+      }
+    ];
+    axios.get.mockResolvedValueOnce({ data: mockCancelledData });
+    renderComponent();
+
+    await screen.findByText('Bob Ross');
+    expect(screen.getByText('01/03/2023')).toBeInTheDocument();
+  });
 });

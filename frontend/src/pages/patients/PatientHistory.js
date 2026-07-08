@@ -167,9 +167,9 @@ export default function PatientHistory() {
 
       {/* 🔷 Accordion History */}
       <Box>
-        {patient.appointments && patient.appointments.filter(a => a.status === 'completed').length > 0 ? (
+        {patient.appointments && patient.appointments.filter(a => a.status === 'completed' || a.status === 'cancelled').length > 0 ? (
           <Accordion allowMultiple>
-            {patient.appointments.filter(a => a.status === 'completed').slice().reverse().map((app, idx) => (
+            {patient.appointments.filter(a => a.status === 'completed' || a.status === 'cancelled').slice().reverse().map((app, idx) => (
               <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3} bg={cardBg}>
                 <h2>
                   <AccordionButton _expanded={{ bg: expandedBg }}>
@@ -181,7 +181,7 @@ export default function PatientHistory() {
                   </AccordionButton>
                 </h2>
                 <AccordionPanel pb={4} bg={panelBg}>
-                  <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
+                  <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} hideCancelledAlert={true} />
                 </AccordionPanel>
               </AccordionItem>
             ))}

@@ -193,7 +193,7 @@ def cancel_bill(institute_id, visit_id=None):
     if not patient:
         return {"success": False, "error": "Patient not found"}
         
-    result = patients.update_one(
+    patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
             "bill_status": "cancelled",
@@ -201,7 +201,27 @@ def cancel_bill(institute_id, visit_id=None):
             "lab_status": "cancelled",
         }}
     )
-    return {"success": result.modified_count > 0}
+
+    if visit_id:
+        visit = visits.find_one({"visit_id": visit_id})
+    else:
+        visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+
+    if visit:
+        updated_lab_tests = visit.get("lab_tests", [])
+        for lt in updated_lab_tests:
+            if lt.get("status") == "pending":
+                lt["status"] = "cancelled"
+
+        visits.update_one(
+            {"visit_id": visit["visit_id"]},
+            {"$set": {
+                "status": "cancelled",
+                "lab_tests": updated_lab_tests
+            }}
+        )
+
+    return {"success": True}
 
 # def add_lab_test(psr_no, lab_test, doctor_username):
 #     # Define reference ranges based on test type

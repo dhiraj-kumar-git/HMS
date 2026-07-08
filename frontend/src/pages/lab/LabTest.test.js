@@ -20,6 +20,8 @@ const mockPatients = [
     institute_id: 'P123',
     visit_id: 1,
     name: 'John Doe',
+    age: 30,
+    gender: 'Male',
     lab_tests: [
       { lab_test: 'Hemoglobin' },
       { lab_test: 'group_1' },
@@ -57,7 +59,7 @@ describe('LabTest Component', () => {
         return Promise.resolve({ data: mockLabTestsConfig });
       }
       if (url.includes('/lab/patients')) {
-        return Promise.resolve({ data: mockPatients });
+        return Promise.resolve({ data: { confirmed: mockPatients, upcoming: [] } });
       }
       return Promise.reject(new Error('not found'));
     });
@@ -67,7 +69,7 @@ describe('LabTest Component', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Test Request Overview')).toBeInTheDocument();
+      expect(screen.getByText('Confirmed Lab Test Orders (1)')).toBeInTheDocument();
       expect(screen.getByText('John Doe')).toBeInTheDocument();
       expect(screen.getByText('P123')).toBeInTheDocument();
     });
@@ -76,8 +78,8 @@ describe('LabTest Component', () => {
   it('opens patient modal and displays test inputs correctly', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: mockLabTestsConfig });
-      if (url.includes('/lab/patients')) return Promise.resolve({ data: mockPatients });
-      return Promise.resolve({ data: [] });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: mockPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
     });
 
     await act(async () => {
@@ -88,10 +90,10 @@ describe('LabTest Component', () => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
     });
 
-    // Click on the patient row
-    const patientRow = screen.getByText('John Doe').closest('div').parentElement;
+    // Click on the View Lab Order button
+    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
     await act(async () => {
-      fireEvent.click(patientRow);
+      fireEvent.click(viewBtn);
     });
 
     await waitFor(() => {
@@ -113,8 +115,8 @@ describe('LabTest Component', () => {
   it('handles input changes and submits report', async () => {
     axios.get.mockImplementation((url) => {
       if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: mockLabTestsConfig });
-      if (url.includes('/lab/patients')) return Promise.resolve({ data: mockPatients });
-      return Promise.resolve({ data: [] });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: mockPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
     });
 
     await act(async () => {
@@ -125,9 +127,9 @@ describe('LabTest Component', () => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
     });
 
-    const patientRow = screen.getByText('John Doe').closest('div').parentElement;
+    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
     await act(async () => {
-      fireEvent.click(patientRow);
+      fireEvent.click(viewBtn);
     });
 
     await waitFor(() => {
@@ -162,12 +164,22 @@ describe('LabTest Component', () => {
     });
   });
 
-  it('handles emailing report', async () => {
+  it('renders upcoming (unpaid) patients list with disabled action button', async () => {
+    const mockUpcomingPatients = [
+      {
+        institute_id: 'P999',
+        visit_id: 2,
+        name: 'Jane Smith',
+        age: 28,
+        gender: 'Female',
+        lab_tests: [{ lab_test: 'Hemoglobin' }]
+      }
+    ];
+
     axios.get.mockImplementation((url) => {
       if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: mockLabTestsConfig });
-      if (url.includes('/lab/patients')) return Promise.resolve({ data: mockPatients });
-      if (url.includes('/get_patient/P123')) return Promise.resolve({ data: { email: 'john@example.com', name: 'John Doe' } });
-      return Promise.resolve({ data: [] });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: [], upcoming: mockUpcomingPatients } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
     });
 
     await act(async () => {
@@ -175,65 +187,12 @@ describe('LabTest Component', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('John Doe')).toBeInTheDocument();
+      expect(screen.getByText('Jane Smith')).toBeInTheDocument();
+      expect(screen.getByText('P999')).toBeInTheDocument();
+      expect(screen.getByText('28 yrs • Female')).toBeInTheDocument();
     });
 
-    const patientRow = screen.getByText('John Doe').closest('div').parentElement;
-    await act(async () => {
-      fireEvent.click(patientRow);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/John Doe \(ID: P123\)/i)).toBeInTheDocument();
-    });
-
-    // Mock post for send_email
-    axios.post.mockResolvedValueOnce({ data: { message: 'success' } });
-
-    const emailBtn = screen.getByRole('button', { name: /Email Report/i });
-    await act(async () => {
-      fireEvent.click(emailBtn);
-    });
-
-    await waitFor(() => {
-      expect(axios.get).toHaveBeenCalledWith(expect.stringContaining('/get_patient/P123'), expect.any(Object));
-      expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('/lab/send_email'),
-        expect.objectContaining({ to_email: 'john@example.com' }),
-        expect.any(Object)
-      );
-    });
-  });
-
-  it('handles printing report', async () => {
-    axios.get.mockImplementation((url) => {
-      if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: mockLabTestsConfig });
-      if (url.includes('/lab/patients')) return Promise.resolve({ data: mockPatients });
-      return Promise.resolve({ data: [] });
-    });
-
-    await act(async () => {
-      renderComponent();
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('John Doe')).toBeInTheDocument();
-    });
-
-    const patientRow = screen.getByText('John Doe').closest('div').parentElement;
-    await act(async () => {
-      fireEvent.click(patientRow);
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText(/John Doe \(ID: P123\)/i)).toBeInTheDocument();
-    });
-
-    const printBtn = screen.getByRole('button', { name: /Print Report/i });
-    await act(async () => {
-      fireEvent.click(printBtn);
-    });
-
-    expect(window.open).toHaveBeenCalledWith('', '_blank');
+    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
+    expect(viewBtn).toBeDisabled();
   });
 });

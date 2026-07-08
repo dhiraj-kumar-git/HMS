@@ -75,4 +75,27 @@ describe('EMRHistoryDisplay', () => {
     const dashes = screen.getAllByText("-");
     expect(dashes.length).toBeGreaterThan(5);
   });
+
+  it('renders a warning banner if the legacy visit has cancelled status', () => {
+    const legacyApp = {
+      doctor_name: "Dr. Smith",
+      status: "cancelled",
+      prescription_summary: ["Paracetamol"]
+    };
+    renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
+    expect(screen.getByText("Bill Cancelled")).toBeInTheDocument();
+    expect(screen.getByText("The entire bill for this visit has been cancelled.")).toBeInTheDocument();
+  });
+
+  it('renders a warning banner in EMR data view if the visit has cancelled status', () => {
+    const emrData = {
+      subjective: { chief_complaints: "Fever" }
+    };
+    const legacyApp = {
+      status: "cancelled"
+    };
+    renderWithChakra(<EMRHistoryDisplay emrData={emrData} legacyApp={legacyApp} />);
+    expect(screen.getByText("Bill Cancelled")).toBeInTheDocument();
+    expect(screen.getByText("The entire bill for this visit has been cancelled.")).toBeInTheDocument();
+  });
 });

@@ -49,7 +49,7 @@ def test_lab_send_email_missing_fields(client, app):
 def test_get_lab_patients_success(client, mocker, app):
     with app.app_context():
         token = create_access_token(identity="lab1", additional_claims={"role": "lab_staff"})
-    mocker.patch("database.get_lab_patients", return_value=[{"institute_id": "123"}])
+    mocker.patch("database.get_lab_patients", return_value={"confirmed": [{"institute_id": "123"}], "upcoming": []})
     res = client.get("/lab/patients", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
 

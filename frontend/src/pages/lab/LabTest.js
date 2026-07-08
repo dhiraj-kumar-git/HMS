@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import {
   Box,
   Flex,
-  Grid,
   Text,
   Button,
   Avatar,
@@ -23,9 +22,6 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  Image,
-  Icon,
-  Progress,
   Table,
   Thead,
   Tbody,
@@ -35,17 +31,12 @@ import {
   Input,
 } from "@chakra-ui/react";
 import {
-  FiCalendar,
   FiBell,
   FiMail,
   FiUser,
   FiLogOut,
   FiCopy,
   FiRefreshCw,
-  FiMoreHorizontal,
-  FiChevronDown,
-  FiArrowUp,
-  FiArrowDown,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -57,32 +48,46 @@ export default function LabTestDashboard() {
   const navigate = useNavigate();
   const toast = useToast();
 
-  const [emailLoading, setEmailLoading] = useState(false);
-  const [patients, setPatients] = useState([]);
+  const [patients, setPatients] = useState({ confirmed: [], upcoming: [] });
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const filterAndSort = (list) => {
+    if (!list) return [];
+    let filtered = list.filter((p) => {
+      const matchesSearch =
+        (p.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.institute_id || "").toLowerCase().includes(searchQuery.toLowerCase());
+
+      let matchesDate = true;
+      const orderTimeStr = p.consultation_completed_time || p.visitingTime;
+      if (orderTimeStr) {
+        const orderDateStr = orderTimeStr.split("T")[0];
+        if (startDate && orderDateStr < startDate) matchesDate = false;
+        if (endDate && orderDateStr > endDate) matchesDate = false;
+      } else {
+        if (startDate || endDate) matchesDate = false;
+      }
+
+      return matchesSearch && matchesDate;
+    });
+
+    filtered.sort((a, b) => {
+      const timeA = new Date(a.consultation_completed_time || a.visitingTime || 0);
+      const timeB = new Date(b.consultation_completed_time || b.visitingTime || 0);
+      return timeA - timeB;
+    });
+
+    return filtered;
+  };
 
   const [configTests, setConfigTests] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [tests, setTests] = useState([]);
   const [testsLoading, setTestsLoading] = useState(false);
-
-  const [timeframe, setTimeframe] = useState("last_month");
-  const [selectedTab, setSelectedTab] = useState("All");
-  const [workload, setWorkload] = useState(88);
-  const workloadChange = 5; // example +5%
-  const [stats, setStats] = useState({
-    Urgent: 0,
-    Pending: 4,
-    "In-Progress": 38,
-    Completed: 265,
-  });
-  const [percent, setPercent] = useState({
-    Urgent: -10,
-    Pending: 2,
-    "In-Progress": 14,
-    Completed: 8,
-  });
 
   const currentTime = formatDateTimeIST(new Date());
 
@@ -110,7 +115,7 @@ export default function LabTestDashboard() {
     try {
       const token = localStorage.getItem("token");
       const res = await axios.get(`${BASE_URL}/lab/patients`, { headers: { Authorization: `Bearer ${token}` } });
-      setPatients(res.data);
+      setPatients(res.data || { confirmed: [], upcoming: [] });
     } catch (e) {
       toast({
         title: "Error fetching lab patients",
@@ -132,7 +137,7 @@ export default function LabTestDashboard() {
           axios.get(`${BASE_URL}/lab/patients`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
         setConfigTests(labRes.data);
-        setPatients(patRes.data);
+        setPatients(patRes.data || { confirmed: [], upcoming: [] });
       } catch (e) {
         toast({
           title: "Error loading data",
@@ -325,215 +330,7 @@ export default function LabTestDashboard() {
     }
   };
 
-  // Email Report
-  const handleMailing = async () => {
-    if (!selectedPatient?.institute_id) {
-      toast({
-        title: "No patient selected",
-        description: "Please open a patient report first.",
-        status: "warning",
-        duration: 3000,
-        isClosable: true,
-      });
-      return;
-    }
 
-    setEmailLoading(true);
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`${BASE_URL}/get_patient/${selectedPatient.institute_id}`, { headers: { Authorization: `Bearer ${token}` } });
-
-      const patientData = res.data;
-      const recipientEmail = patientData.email;
-
-      if (!recipientEmail) {
-        toast({
-          title: "Email not found",
-          description: "This patient does not have an email registered.",
-          status: "error",
-          duration: 3000,
-          isClosable: true,
-        });
-        return;
-      }
-
-      const latestResults = tests
-        .map((t) => {
-          if (t.type === "individual") return `${t.lab_test}: ${t.result}`;
-          if (t.type === "group")
-            return t.subTestNames
-              .map((n, i) => `${n}: ${t.subResults[i]}`)
-              .join(", ");
-          if (t.type === "multi")
-            return t.reference_ranges
-              .map(
-                (r, i) => `${r.split(":")[0]}: ${t.multiResults[i] || "N/A"}`
-              )
-              .join(", ");
-          return "";
-        })
-        .join("\n");
-
-      const subject = `Lab Report for ${toTitleCase(patientData.name)} (ID ${selectedPatient.institute_id})`;
-      const body = `Dear ${toTitleCase(patientData.name)},
-
-Your lab test report is now available.
-
-${latestResults}
-
-Best regards,
-Medical Centre Team
-BITS Pilani
-`;
-
-      await axios.post(
-        `${BASE_URL}/lab/send_email`,
-        { to_email: recipientEmail, subject, body },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      toast({
-        title: "Email sent successfully",
-        description: `Report sent to ${recipientEmail}`,
-        status: "success",
-      });
-    } catch (err) {
-      console.error("Error emailing report:", err);
-      toast({
-        title: "Error emailing report",
-        description: err.message || "Unable to send email.",
-        status: "error",
-      });
-    } finally {
-      setEmailLoading(false);
-    }
-  };
-
-  // Print Report
-  const handlePrint = () => {
-    const currentDateTime = formatDateTimeIST(new Date());
-
-    let rows = "";
-    tests.forEach((test) => {
-      if (test.type === "individual") {
-        rows += `<tr>
-          <td style="background:#FFFBCC;font-weight:bold;">${test.lab_test}</td>
-          <td>${test.result || "Pending"}</td>
-          <td>${test.reference_range}</td>
-          <td>${test.units}</td>
-        </tr>`;
-      } else if (test.type === "group") {
-        rows += `<tr><td colspan="4" style="font-weight:bold;">
-          ${test.lab_test} (Overall Ref: ${test.groupReference}, Units: ${test.groupUnits})
-        </td></tr>`;
-        test.subTestNames.forEach((n, idx) => {
-          const det = test.subTestDetails[idx] || {};
-          rows += `<tr>
-            <td>${n}</td>
-            <td>${test.subResults[idx] || "Pending"}</td>
-            <td>${det.reference_range || "N/A"}</td>
-            <td>${det.units || "N/A"}</td>
-          </tr>`;
-        });
-      } else if (test.type === "multi") {
-        rows += `<tr><td colspan="4" style="background:#FFFBCC;font-weight:bold;">
-          ${test.lab_test}
-        </td></tr>`;
-        test.reference_ranges.forEach((r, idx) => {
-          const label = r.split(":")[0];
-          rows += `<tr>
-            <td>${label}</td>
-            <td>${test.multiResults[idx] || "Pending"}</td>
-            <td>${r}</td>
-            <td>${test.unitsArray[idx] || "N/A"}</td>
-          </tr>`;
-        });
-      }
-    });
-
-    const win = window.open("", "_blank");
-    win.document.write(`
-      <html>
-        <head>
-          <title>Lab Report</title>
-          <style>
-            body { font-family: Arial; margin: 20px; }
-            .header-box { text-align: center; border-bottom: 1px solid black; padding-bottom: 8px; }
-            .header-box h2 { margin: 0; font-size: 18px; font-weight: bold; }
-            .header-box p { margin: 2px 0; font-size: 14px; }
-            .header-box h3 { margin: 4px 0; font-size: 16px; font-weight: bold; }
-            .header-flex { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
-            .patient-info { border: 1px solid black; border-radius: 4px; padding: 10px; margin-top: 10px; }
-            .patient-row { display: flex; justify-content: space-between; align-items: flex-start; }
-            .patient-left, .patient-right { width: 48%; }
-            .patient-left div, .patient-right div { margin-bottom: 4px; display: flex; }
-            .patient-left div span:first-child, .patient-right div span:first-child { display: inline-block; width: 100px; font-weight: 500; }
-
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #000; padding: 8px; text-align: left; }
-            th { background: #f0f0f0; }
-            .sig { margin-top: 30px; text-align: right; }
-          </style>
-        </head>
-        <body>
-
-          <div class="header-box">
-            <h2>Birla Institute of Technology & Science</h2>
-            <p>Pilani (Rajasthan) 333 031, India</p>
-            <h3>MEDICAL CENTRE</h3>
-            <p>Vidya Vihar, Pilani, RAJASTHAN</p>
-            <div class="header-flex">
-              <div style="text-align:left;">
-                <div>Contact No.: 01596-515525</div>
-                <div>Email: medc@pilani.bits-pilani.ac.in</div>
-                <div>Website: www.bits-pilani.ac.in</div>
-              </div>
-              <div style="text-align:right;">
-                <div>Fax: 01596-244183</div>
-                <div>Date & Time: ${currentDateTime}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="patient-info">
-            <div class="patient-row">
-              <div class="patient-left">
-                <div><span>Name</span><span>: ${toTitleCase(selectedPatient?.name) || ""
-      }</span></div>
-                <div><span>Sex & Age</span><span>: ${selectedPatient?.gender?.toUpperCase() || ""
-      } / ${selectedPatient?.age || ""}Yr</span></div>
-                <div><span>Ph/Mob No</span><span>: ${selectedPatient?.contact_no || "/"
-      }</span></div>
-                <div><span>Email ID</span><span>: ${selectedPatient?.email || "/"
-      }</span></div>
-                <div><span>Address</span><span>: ${selectedPatient?.address || ""
-      }</span></div>
-              </div>
-              <div class="patient-right">
-                <div><span>Institute ID</span><span>: ${selectedPatient?.institute_id || ""
-      }</span></div>
-                <div><span>Date & Time</span><span>: ${currentDateTime}</span></div>
-              </div>
-            </div>
-          </div>
-
-          <h3 style="text-align:center;margin:20px 0;">LAB TEST REPORT</h3>
-          <table>
-            <thead>
-              <tr><th>Test Name</th><th>Result</th><th>Reference Range</th><th>Units</th></tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div class="sig">
-            <p>Lab Technician Signature: ____________</p>
-            <p>Date: ${currentDateTime}</p>
-          </div>
-        </body>
-      </html>
-    `);
-    win.document.close();
-    win.print();
-  };
 
   const handleLogout = () => {
     localStorage.clear();
@@ -548,7 +345,7 @@ BITS Pilani
     );
   }
 
-  const displayedPatients = patients;
+
 
   return (
     <Flex direction="column" h="100vh" bg="gray.50" overflow="hidden">
@@ -563,17 +360,6 @@ BITS Pilani
         px="4"
         position="relative"
       >
-        <Flex
-          position="absolute"
-          left="50%"
-          transform="translateX(-50%)"
-          align="center"
-        >
-          <FiCalendar size={18} />
-          <Text ml="2" fontSize="sm" color="gray.600">
-            {currentTime}
-          </Text>
-        </Flex>
         <HStack spacing="4" position="absolute" right="4">
           <IconButton
             icon={<FiBell />}
@@ -621,384 +407,262 @@ BITS Pilani
         overflow="hidden"
         overflowY="auto"
       >
-        {/* ─── Test Request Overview ─── */}
-        <Flex mb="8" gap="6" flexWrap="wrap">
-          {/* ─────────── Left: single blue‑background overview card ─────────── */}
-          <Box flex="3" bg="blue.50" borderRadius="2xl" boxShadow="md" p="2">
-            <Flex justify="space-between" align="center">
-              <Text fontSize="xl" fontWeight="bold" color="gray.800">
-                Test Request Overview
-              </Text>
-              <Menu>
-                <MenuButton
-                  as={Button}
-                  rightIcon={<Icon as={FiChevronDown} />}
-                  size="sm"
-                  variant="outline"
-                  borderRadius="full"
-                >
-                  {timeframe === "last_month" ? "Last Month" : "This Week"}
-                </MenuButton>
-                <MenuList>
-                  <MenuItem onClick={() => setTimeframe("last_month")}>
-                    Last Month
-                  </MenuItem>
-                  <MenuItem onClick={() => setTimeframe("this_week")}>
-                    This Week
-                  </MenuItem>
-                </MenuList>
-              </Menu>
-            </Flex>
+        {/* Filter Toolbar */}
+        <Flex
+          bg="white"
+          p="4"
+          borderRadius="xl"
+          boxShadow="sm"
+          mb="6"
+          align="center"
+          gap="4"
+          flexWrap="wrap"
+        >
+          <HStack spacing="2">
+            <Text fontWeight="semibold" color="gray.600" fontSize="sm">
+              FILTER
+            </Text>
+            <Input
+              placeholder="Search..."
+              size="sm"
+              borderRadius="md"
+              w="200px"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </HStack>
 
-            <HStack spacing="3" mt="4">
-              {["All", "Urgent", "Pending", "In-Progress", "Completed"].map(
-                (tab) => (
-                  <Button
-                    key={tab}
-                    size="sm"
-                    onClick={() => setSelectedTab(tab)}
-                    borderRadius="full"
-                    bg={selectedTab === tab ? "purple.100" : "white"}
-                    _hover={{ bg: "gray.100" }}
-                    border="1px solid"
-                    borderColor={
-                      selectedTab === tab ? "purple.200" : "gray.200"
-                    }
-                  >
-                    {tab}
-                  </Button>
-                )
-              )}
-            </HStack>
+          <HStack spacing="2">
+            <Text fontWeight="semibold" color="gray.600" fontSize="sm">
+              Date
+            </Text>
+            <Input
+              type="date"
+              size="sm"
+              borderRadius="md"
+              w="150px"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+            />
+            <Text fontSize="xs" color="gray.400">
+              to
+            </Text>
+            <Input
+              type="date"
+              size="sm"
+              borderRadius="md"
+              w="150px"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </HStack>
 
-            <Grid
-              templateColumns="2fr repeat(2,1fr)"
-              templateRows="repeat(2,1fr)"
-              gap={0}
-              mt="6"
-            >
-              {/* Laboratory workload (spans 2 rows) */}
-              <Box
-                gridRow="1 / span 2"
-                gridColumn="1 / 2"
-                p="4"
-                borderRight="1px solid"
-                borderColor="blue.100"
-              >
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="md" fontWeight="medium" color="blue.600">
-                    Laboratory workload
-                  </Text>
-                  <Flex align="center">
-                    <Icon as={FiArrowUp} boxSize="4" color="blue.500" />
-                    <Text ml="1" fontSize="sm" color="blue.500">
-                      {workloadChange}%
-                    </Text>
-                  </Flex>
-                </Flex>
-
-                <Text fontSize="4xl" fontWeight="bold" color="blue.600" mt="2">
-                  {workload}%
-                </Text>
-                <Progress
-                  value={workload}
-                  size="xs"
-                  colorScheme="blue"
-                  borderRadius="sm"
-                  mt="2"
-                />
-
-                <Text fontSize="sm" color="gray.600" mt="3">
-                  Laboratory utilization rates have shown an increase—boosting
-                  efficiency and resource optimization.
-                </Text>
-
-                <Button size="sm" mt="4" variant="outline" borderRadius="full">
-                  Detailed Data Analysis
-                </Button>
-              </Box>
-
-              {/* Urgent */}
-              <Box
-                gridRow="1"
-                gridColumn="2"
-                p="4"
-                bg="blue.50"
-                borderRight="1px solid"
-                borderBottom="1px solid"
-                borderColor="blue.100"
-              >
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="gray.500">
-                    Urgent
-                  </Text>
-                  <Flex align="center">
-                    <Icon as={FiArrowDown} boxSize="4" color="red.500" />
-                    <Text ml="1" fontSize="xs" color="red.500">
-                      {percent.Urgent}%
-                    </Text>
-                  </Flex>
-                </Flex>
-                <Text
-                  fontSize="2xl"
-                  fontWeight="bold"
-                  color="orange.400"
-                  mt="2"
-                >
-                  {stats.Urgent}
-                </Text>
-              </Box>
-
-              {/* Pending */}
-              <Box
-                gridRow="1"
-                gridColumn="3"
-                p="4"
-                bg="blue.50"
-                borderBottom="1px solid"
-                borderColor="blue.100"
-              >
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="gray.500">
-                    Pending
-                  </Text>
-                  <Flex align="center">
-                    <Icon as={FiArrowUp} boxSize="4" color="green.400" />
-                    <Text ml="1" fontSize="xs" color="green.400">
-                      {percent.Pending}%
-                    </Text>
-                  </Flex>
-                </Flex>
-                <Text fontSize="2xl" fontWeight="bold" color="green.400" mt="2">
-                  {stats.Pending}
-                </Text>
-              </Box>
-
-              {/* In-Progress */}
-              <Box
-                gridRow="2"
-                gridColumn="2"
-                p="4"
-                bg="blue.50"
-                borderRight="1px solid"
-                borderColor="blue.100"
-              >
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="gray.500">
-                    In-Progress
-                  </Text>
-                  <Flex align="center">
-                    <Icon as={FiArrowUp} boxSize="4" color="blue.400" />
-                    <Text ml="1" fontSize="xs" color="blue.400">
-                      {percent["In-Progress"]}%
-                    </Text>
-                  </Flex>
-                </Flex>
-                <Text fontSize="2xl" fontWeight="bold" color="blue.400" mt="2">
-                  {stats["In-Progress"]}
-                </Text>
-              </Box>
-
-              {/* Completed */}
-              <Box gridRow="2" gridColumn="3" p="4" bg="blue.50">
-                <Flex justify="space-between" align="center">
-                  <Text fontSize="sm" color="gray.500">
-                    Completed
-                  </Text>
-                  <Flex align="center">
-                    <Icon as={FiArrowUp} boxSize="4" color="purple.400" />
-                    <Text ml="1" fontSize="xs" color="purple.400">
-                      {percent.Completed}%
-                    </Text>
-                  </Flex>
-                </Flex>
-                <Text
-                  fontSize="2xl"
-                  fontWeight="bold"
-                  color="purple.400"
-                  mt="2"
-                >
-                  {stats.Completed}
-                </Text>
-              </Box>
-            </Grid>
+          <Box
+            bg="blue.100"
+            color="blue.800"
+            px="3"
+            py="1"
+            borderRadius="full"
+            fontSize="xs"
+            fontWeight="bold"
+          >
+            Pending Lab Orders: {filterAndSort(patients.confirmed).length}
           </Box>
 
-          {/* ── Right: revenue + ENLARGED maintenance ── */}
-          <Box flex="1" display="flex" flexDirection="column">
-            {/* ─── Maintenance card (image on top, text below) ─── */}
-            <Box
-              bg="white"
-              p="6"
-              flex="1"
-              borderRadius="lg"
-              boxShadow="sm"
-              position="relative"
-            >
-              {/* top‑right “more” icon */}
-              <IconButton
-                icon={<FiMoreHorizontal />}
-                aria-label="More options"
-                variant="ghost"
-                size="sm"
-                position="absolute"
-                top="2"
-                right="2"
-              />
-
-              {/* image on top, full width */}
-              <Image
-                src="/images/LabTest.jpg"
-                alt="Maintenance"
-                w="full"
-                h="140px"
-                objectFit="cover"
-                borderRadius="md"
-                mb="4"
-              />
-
-              {/* text below */}
-              <Text fontSize="sm" color="gray.600" mb="2">
-                Equipment maintenance is due for the Hematology Analyzer.
-                Schedule maintenance to avoid disruptions.
-              </Text>
-              <Button variant="link" size="sm">
-                View Details &gt;&gt;
-              </Button>
-            </Box>
-          </Box>
-        </Flex>
-
-        {/* ─── Upcoming Lab Tests & Refresh ─── */}
-        <Flex align="center" mb="4">
-          <Heading as="h3" size="md" color="gray.800" mr="2">
-            Upcoming Lab Tests
-          </Heading>
-          <IconButton
+          <Button
             aria-label="Refresh"
-            icon={<FiRefreshCw />}
-            variant="ghost"
+            leftIcon={<FiRefreshCw />}
+            colorScheme="blue"
             size="sm"
             onClick={fetchPatients}
-          />
+            isLoading={listLoading}
+            variant="outline"
+            bg="white"
+            ml="auto"
+          >
+            Refresh
+          </Button>
         </Flex>
 
-        <Box maxH="60vh" overflowY="auto" position="relative" pb="12">
-          {listLoading ? (
-            <Flex position="absolute" inset="0" align="center" justify="center">
-              <Spinner size="lg" color="blue.500" />
-            </Flex>
-          ) : (
-            <>
-              <Flex
-                position="sticky"
-                top="0"
-                bg="gray.50"
-                zIndex="1"
-                px="3"
-                py="1"
-                fontSize="xs"
-                fontWeight="semibold"
-                color="gray.600"
-                mb="3"
-              >
-                <Box w="22%" minW="150px">
-                  Name
-                </Box>
-                <Box w="16%" minW="120px">
-                  Institute ID
-                </Box>
-                <Box w="10%" minW="40px">
-                  Age
-                </Box>
-                <Box w="10%" minW="40px">
-                  Gender
-                </Box>
-                <Box w="22%" minW="140px">
-                  Visiting Time
-                </Box>
-              </Flex>
-
-              {displayedPatients.length === 0 ? (
+        {listLoading ? (
+          <Flex align="center" justify="center" py="10">
+            <Spinner size="lg" color="blue.500" />
+          </Flex>
+        ) : (
+          <>
+            {/* Confirmed Lab Test Orders Table */}
+            <Heading as="h3" size="md" color="gray.800" mb="4">
+              Confirmed Lab Test Orders ({filterAndSort(patients.confirmed).length})
+            </Heading>
+            <Box bg="white" borderRadius="xl" boxShadow="sm" p="4" mb="8" overflowX="auto">
+              {filterAndSort(patients.confirmed).length === 0 ? (
                 <Flex h="100px" align="center" justify="center">
-                  <Text color="gray.500" fontSize="lg">
-                    No lab tests right now.
+                  <Text color="gray.500" fontSize="sm">
+                    No confirmed lab orders found.
                   </Text>
                 </Flex>
               ) : (
-                displayedPatients.map((p, i) => (
-                  <Flex
-                    key={i}
-                    p="3"
-                    mb="3"
-                    bg="white"
-                    border="1px solid"
-                    borderColor="gray.200"
-                    borderRadius="lg"
-                    _hover={{ borderColor: "blue.600" }}
-                    cursor="pointer"
-                    align="center"
-                    px="3"
-                    onClick={() => openPatientModal(p)}
-                  >
-                    <Box
-                      w="22%"
-                      minW="150px"
-                      display="flex"
-                      alignItems="center"
-                    >
-                      <Avatar size="sm" name={toTitleCase(p.name)} mr="2" />
-                      <Text fontSize="sm" color="gray.800">
-                        {toTitleCase(p.name)}
-                      </Text>
-                    </Box>
-                    <Box
-                      w="16%"
-                      minW="120px"
-                      display="flex"
-                      alignItems="center"
-                    >
-                      <Text fontSize="sm" color="gray.600">
-                        {p.institute_id}
-                      </Text>
-                      <IconButton
-                        aria-label="Copy PSRN"
-                        icon={<FiCopy size={14} />}
-                        size="xs"
-                        ml="2"
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(p.institute_id);
-                          toast({
-                            title: "Copied!",
-                            status: "success",
-                            duration: 1000,
-                          });
-                        }}
-                      />
-                    </Box>
-                    <Box w="10%" minW="40px">
-                      <Text fontSize="sm" color="gray.600">
-                        {p.age}
-                      </Text>
-                    </Box>
-                    <Box w="10%" minW="40px">
-                      <Text fontSize="sm" color="gray.600">
-                        {p.gender}
-                      </Text>
-                    </Box>
-                    <Box w="22%" minW="140px">
-                      <Text fontSize="sm" color="gray.600">
-                        {p.visitingTime || "TBD"}
-                      </Text>
-                    </Box>
-                  </Flex>
-                ))
+                <Table variant="simple" size="sm">
+                  <Thead bg="gray.50">
+                    <Tr>
+                      <Th w="20%">Institute ID</Th>
+                      <Th w="35%">Patient Details</Th>
+                      <Th w="25%" textAlign="center">Lab Test Order Time</Th>
+                      <Th w="20%" textAlign="center">Actions</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {filterAndSort(patients.confirmed).map((p, idx) => (
+                      <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                        <Td>
+                          <Flex align="center">
+                            <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                              {p.institute_id}
+                            </Text>
+                            <IconButton
+                              aria-label="Copy ID"
+                              icon={<FiCopy size={12} />}
+                              size="xs"
+                              ml="2"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(p.institute_id);
+                                toast({
+                                  title: "Copied!",
+                                  status: "success",
+                                  duration: 1000,
+                                });
+                              }}
+                            />
+                          </Flex>
+                        </Td>
+                        <Td>
+                          <Flex align="center">
+                            <Avatar size="sm" name={toTitleCase(p.name)} mr="3" />
+                            <Box>
+                              <Text fontWeight="bold" fontSize="sm">
+                                {toTitleCase(p.name)}
+                              </Text>
+                              <Text fontSize="xs" color="gray.500">
+                                {p.age} yrs • {p.gender}
+                              </Text>
+                            </Box>
+                          </Flex>
+                        </Td>
+                        <Td textAlign="center">
+                          <Text fontSize="sm" color="gray.600">
+                            {p.consultation_completed_time
+                              ? formatDateTimeIST(p.consultation_completed_time)
+                              : p.visitingTime
+                                ? formatDateTimeIST(p.visitingTime)
+                                : "TBD"}
+                          </Text>
+                        </Td>
+                        <Td textAlign="center">
+                          <Button
+                            colorScheme="blue"
+                            size="sm"
+                            borderRadius="full"
+                            onClick={() => openPatientModal(p)}
+                          >
+                            View Lab Order
+                          </Button>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
               )}
-            </>
-          )}
-        </Box>
+            </Box>
+
+            {/* Upcoming Lab Test Orders Table */}
+            <Heading as="h3" size="md" color="gray.800" mb="4">
+              Upcoming Lab Test Orders ({filterAndSort(patients.upcoming).length})
+            </Heading>
+            <Box bg="white" borderRadius="xl" boxShadow="sm" p="4" mb="8" overflowX="auto">
+              {filterAndSort(patients.upcoming).length === 0 ? (
+                <Flex h="100px" align="center" justify="center">
+                  <Text color="gray.500" fontSize="sm">
+                    No upcoming lab orders found.
+                  </Text>
+                </Flex>
+              ) : (
+                <Table variant="simple" size="sm">
+                  <Thead bg="gray.50">
+                    <Tr>
+                      <Th w="20%">Institute ID</Th>
+                      <Th w="35%">Patient Details</Th>
+                      <Th w="25%" textAlign="center">Lab Test Order Time</Th>
+                      <Th w="20%" textAlign="center">Actions</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {filterAndSort(patients.upcoming).map((p, idx) => (
+                      <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                        <Td>
+                          <Flex align="center">
+                            <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                              {p.institute_id}
+                            </Text>
+                            <IconButton
+                              aria-label="Copy ID"
+                              icon={<FiCopy size={12} />}
+                              size="xs"
+                              ml="2"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigator.clipboard.writeText(p.institute_id);
+                                toast({
+                                  title: "Copied!",
+                                  status: "success",
+                                  duration: 1000,
+                                });
+                              }}
+                            />
+                          </Flex>
+                        </Td>
+                        <Td>
+                          <Flex align="center">
+                            <Avatar size="sm" name={toTitleCase(p.name)} mr="3" />
+                            <Box>
+                              <Text fontWeight="bold" fontSize="sm">
+                                {toTitleCase(p.name)}
+                              </Text>
+                              <Text fontSize="xs" color="gray.500">
+                                {p.age} yrs • {p.gender}
+                              </Text>
+                            </Box>
+                          </Flex>
+                        </Td>
+                        <Td textAlign="center">
+                          <Text fontSize="sm" color="gray.600">
+                            {p.consultation_completed_time
+                              ? formatDateTimeIST(p.consultation_completed_time)
+                              : p.visitingTime
+                                ? formatDateTimeIST(p.visitingTime)
+                                : "TBD"}
+                          </Text>
+                        </Td>
+                        <Td textAlign="center">
+                          <Button
+                            colorScheme="gray"
+                            size="sm"
+                            borderRadius="full"
+                            isDisabled={true}
+                          >
+                            View Lab Order
+                          </Button>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+            </Box>
+          </>
+        )}
       </Box>
 
       {/* PATIENT MODAL */}
@@ -1122,19 +786,8 @@ BITS Pilani
             )}
           </ModalBody>
           <ModalFooter bg="gray.50">
-            <Button colorScheme="blue" onClick={submitResults} mr={3}>
+            <Button colorScheme="blue" onClick={submitResults}>
               Save Results
-            </Button>
-            <Button colorScheme="green" onClick={handlePrint}>
-              Print Report
-            </Button>
-            <Button
-              colorScheme="yellow"
-              onClick={handleMailing}
-              isLoading={emailLoading}
-              ml={3}
-            >
-              Email Report
             </Button>
           </ModalFooter>
         </ModalContent>
