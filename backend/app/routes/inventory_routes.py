@@ -221,3 +221,5 @@ def dropdown_medicines():
         database.redis_client.setex("medicines_config", 86400, json.dumps(medicines))
 
     return jsonify(medicines), 200
+
+

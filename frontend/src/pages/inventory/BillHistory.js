@@ -5,10 +5,10 @@ import {
     useDisclosure, Divider, Input, InputGroup, InputLeftElement, Table, Thead, Tbody, Tr, Th, Td,
     HStack, Avatar, Menu, MenuButton, MenuList, MenuItem, IconButton, Stat, StatLabel, StatNumber, StatHelpText
 } from '@chakra-ui/react';
-import { FiSearch, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiSearch, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRight, FiMail } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
-import { formatDateIST, formatDateTimeIST, toTitleCase, numberToWords } from '../../utils/utils';
+import { formatDateIST, toTitleCase, numberToWords, generateTextReceipt } from '../../utils/utils';
 
 function BillHistory() {
     const [billHistory, setBillHistory] = useState([]);
@@ -19,6 +19,7 @@ function BillHistory() {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [billLoading, setBillLoading] = useState(false);
+    const [emailLoadingId, setEmailLoadingId] = useState(null);
 
     const [selectedPatient, setSelectedPatient] = useState(null);
     const { isOpen, onOpen, onClose } = useDisclosure();
@@ -86,93 +87,241 @@ function BillHistory() {
         onOpen();
     };
 
+    const handleEmailReceipt = async (patient) => {
+        if (!patient || !patient.institute_id) return;
+
+        setEmailLoadingId(patient._id || patient.visit_id);
+        try {
+            const token = localStorage.getItem('token');
+            const res = await axios.get(`${BASE_URL}/get_patient/${patient.institute_id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            const patientData = res.data;
+            const recipientEmail = patientData.email;
+
+            if (!recipientEmail) {
+                toast({
+                    title: 'Email not found',
+                    description: 'This patient does not have an email registered.',
+                    status: 'error',
+                    duration: 3000,
+                    isClosable: true,
+                });
+                return;
+            }
+
+            const receiptText = generateTextReceipt(patient, patient);
+            const subject = `Sale Bill Receipt for ${toTitleCase(patientData.name)} (Invoice: ${patient.invoice_no || 'DRAFT'})`;
+            const body = `Dear ${toTitleCase(patientData.name)},
+
+Please find below the sale bill receipt for your recent visit to the BITS Pilani Medical Centre.
+
+${receiptText}
+
+Best regards,
+Medical Centre Team
+BITS Pilani
+`;
+
+            await axios.post(
+                `${BASE_URL}/lab/send_email`,
+                {
+                    recipient_email: recipientEmail,
+                    to_email: recipientEmail,
+                    subject: subject,
+                    body: body
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            toast({
+                title: 'Email Sent Successfully',
+                description: `Receipt has been sent to ${recipientEmail}`,
+                status: 'success',
+                duration: 3000,
+                isClosable: true,
+            });
+
+        } catch (error) {
+            console.error('Error sending email:', error);
+            toast({
+                title: 'Email Error',
+                description: error.response?.data?.error || error.message || 'Failed to send receipt email',
+                status: 'error',
+                duration: 3000,
+                isClosable: true,
+            });
+        } finally {
+            setEmailLoadingId(null);
+        }
+    };
+
     const handlePrintReceipt = () => {
         if (!selectedPatient) return;
         try {
-            let finalInvoiceNo = selectedPatient.invoice_no || '';
-            let finalTotal = selectedPatient.total_amount || 0;
-            let paymentMode = selectedPatient.payment_mode || 'N/A';
-            
-            let itemIndex = 1;
+            const isFaculty = selectedPatient.patient_type !== 'Student';
+            const isFacultyStaffOrDependent = ['Faculty', 'Staff', 'Dependant'].includes(selectedPatient.patient_type || '');
+            const relationCodeMap = {
+                "Daughter": "D",
+                "Son": "S",
+                "Spouse": "Spouse",
+                "Wife": "W",
+                "Husband": "H",
+                "Mother": "M",
+                "Father": "F",
+                "Self": "Self"
+            };
+
+            const relation = selectedPatient.relation || 'Self';
+            const relAbbrev = relationCodeMap[relation] || relation;
+            const relationSuffix = isFaculty ? ` (${relAbbrev})` : '';
+
+            let sponsorLineHtml = '';
+            if (isFacultyStaffOrDependent) {
+                sponsorLineHtml = `<div>(Cr : ${selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - ${selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''})</div>`;
+            }
+
             let printItemsHtml = '';
-            
-            (selectedPatient.items || []).forEach((item) => {
+            (selectedPatient.items || []).forEach((item, i) => {
+                let nameAndBatchHtml = `<div>${toTitleCase(item.name)}</div>`;
                 if (item.type === 'medicine') {
-                    printItemsHtml += `<tr><td>${itemIndex++}</td><td>${item.name}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
-                } else {
-                    const gross = item.gross || 0;
-                    const discPerc = item.discount || 0;
-                    const discAmt = item.discount_amount || 0;
-                    const rembPerc = item.rembursement || 0;
-                    const rembAmt = item.rembursement_amount || 0;
-                    const amt = item.amount || 0;
-                    printItemsHtml += `<tr><td>${itemIndex++}</td><td>${item.name}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt.toFixed(2)}</td><td>${rembPerc}</td><td>${rembAmt.toFixed(2)}</td><td>${amt.toFixed(2)}</td></tr>`;
+                    nameAndBatchHtml += `<div class="subtext">B - ${item.batch || '611104EC2'}, E - ${item.expiry || '02/31'}</div>`;
                 }
+
+                let rateQtyHtml = '';
+                if (item.type === 'medicine') {
+                    rateQtyHtml = `<div>${(item.rate || 0).toFixed(2)}</div><div class="subtext">(${item.quantity || 1})</div>`;
+                } else {
+                    rateQtyHtml = `<div>${(item.gross || 0).toFixed(2)}</div><div class="subtext">(1)</div>`;
+                }
+
+                let gstHtml = `<div>${(item.cgst || 0).toFixed(2)}</div><div>${(item.sgst || 0).toFixed(2)}</div>`;
+
+                printItemsHtml += `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td style="text-align: left;">${nameAndBatchHtml}</td>
+                        <td>${rateQtyHtml}</td>
+                        <td>${item.discount || 0}</td>
+                        <td>${(item.amount || 0).toFixed(2)}</td>
+                        <td>${gstHtml}</td>
+                        <td style="text-align: right; font-weight: bold;">${(item.item_total || 0).toFixed(2)}</td>
+                    </tr>
+                `;
             });
+
+            const todayStr = new Date(selectedPatient.payment_date || new Date()).toLocaleDateString('en-GB').replace(/\//g, '-');
+            const invoiceNo = selectedPatient.invoice_no || 'INV-DRAFT';
+            const city = 'Pilani';
+            const doctorName = selectedPatient.doctor_name || selectedPatient.doctor_assigned || 'Dr. Assigned';
 
             // Build HTML for printing
             const html = `
                 <html>
                 <head>
-                    <title>Payment Receipt</title>
+                    <title>Sale Bill - BITS Cooperative</title>
                     <style>
-                        body { font-family: Arial, sans-serif; margin:0; padding:10mm; }
-                        .header { text-align:center; font-size:12px; }
-                        .header h2 { margin:0; font-size:16px; }
-                        .title { text-align:center; font-weight:bold; margin:10px 0; }
-                        table { width:100%; border-collapse: collapse; font-size:11px; }
-                        table th, table td { border:1px solid #000; padding:4px; }
-                        table th { font-weight:bold; }
-                        .small-table td { border:none; padding:2px; }
-                        .amount-words { margin-top:10px; font-weight:bold; text-transform: uppercase; }
-                        .footer { text-align:center; margin-top:20px; font-size:12px; }
-                        @page { size: A4 portrait; margin:10mm; }
+                        body { font-family: monospace, Arial; margin: 0; padding: 5mm; color: #000; font-size: 11px; line-height: 1.2; }
+                        .header-title { text-align: center; font-size: 13px; font-weight: bold; margin: 2px 0; }
+                        .header-subtitle { text-align: center; font-size: 11px; margin-bottom: 5px; }
+                        .meta-table { width: 100%; margin: 5px 0; font-size: 11px; }
+                        .meta-table td { padding: 1px 0; vertical-align: top; }
+                        .divider { border-top: 1px dashed #000; margin: 4px 0; }
+                        table.items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 5px; }
+                        table.items-table th { border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 4px 2px; font-weight: bold; text-align: center; }
+                        table.items-table td { padding: 4px 2px; text-align: center; vertical-align: top; }
+                        .subtext { font-size: 9px; color: #555; }
+                        .totals-row td { border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-weight: bold; padding: 6px 2px; }
+                        .amount-words { margin: 6px 0; font-weight: bold; text-transform: uppercase; }
+                        .split-box { border: 1px solid #000; padding: 5px; margin: 6px 0; font-size: 10px; font-weight: bold; }
+                        .footer-signature { display: flex; justify-content: space-between; margin-top: 30px; font-size: 10px; }
+                        @page { size: A5 portrait; margin: 5mm; }
                     </style>
                 </head>
                 <body>
-                    <div class="header">
-                        <h2>Birla Institute of Technology & Science</h2>
-                        <div>MEDICAL CENTRE</div>
-                        <div>Vidya Vihar, Pilani, RAJASTHAN</div>
-                        <div>Contact: 01596-515525 | medc@pilani.bits-pilani.ac.in | Fax:01596-244183</div>
-                        <div>Date/Time: ${formatDateTimeIST(selectedPatient.payment_date || new Date())}</div>
+                    <div style="display: flex; justify-content: space-between; font-size: 10px;">
+                        <div>D. L. # 4161-4162</div>
+                        <div style="font-weight: bold; text-decoration: underline;">SALE BILL</div>
+                        <div>GST # 08AACAB7763Q1Z2</div>
                     </div>
-                    <hr style="border:1px solid #000; margin:8px 0;" />
-                    <div class="title">* PAYMENT RECEIPT *</div>
-                    <hr style="border:1px solid #000; margin:8px 0;" />
-                    <table class="small-table" style="margin-bottom:10px;">
+                    <div class="header-title">BITS Consumers Cooperative Stores Ltd.</div>
+                    <div class="header-subtitle">Pilani - 333031 (Rajasthan)</div>
+                    <div class="divider"></div>
+                    <table class="meta-table">
                         <tr>
-                            <td>Invoice No.:</td><td>${finalInvoiceNo}</td>
-                            <td>Institute ID:</td><td>${selectedPatient.institute_id}</td>
+                            <td style="width: 60%;"><strong>Bill # :</strong> ${invoiceNo}</td>
+                            <td style="text-align: right;"><strong>Date :</strong> ${todayStr}</td>
                         </tr>
                         <tr>
-                            <td>UMR:</td><td>${selectedPatient.umrn || ''}</td>
-                            <td>Age/Gender:</td><td>${selectedPatient.age || 'N/A'}/${selectedPatient.gender || 'N/A'}</td>
+                            <td colspan="2"><strong>Name :</strong> ${toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}${relationSuffix}, City : ${city}</td>
                         </tr>
+                        ${isFacultyStaffOrDependent ? `<tr><td colspan="2">${sponsorLineHtml}</td></tr>` : ''}
                         <tr>
-                            <td>Patient:</td><td>${toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}</td>
-                            <td>Payment No.:</td><td>${selectedPatient.payment_no || ''}</td>
+                            <td colspan="2"><strong>Dr. :</strong> ${toTitleCase(doctorName).toUpperCase()}</td>
                         </tr>
                     </table>
-                    <table>
+                    
+                    <table class="items-table">
                         <thead>
                             <tr>
-                                <th>S.No.</th><th>Service</th><th>Gross Amt</th>
-                                <th>Disc(%)</th><th>Disc</th><th>Remb(%)</th>
-                                <th>Remb Amt</th><th>Amount</th>
+                                <th style="width: 5%;">SNo</th>
+                                <th style="text-align: left; width: 45%;">Item</th>
+                                <th style="width: 15%;">Rate<br/>Qty.</th>
+                                <th style="width: 7%;">Dis</th>
+                                <th style="width: 10%;">Amt.</th>
+                                <th style="width: 10%;">CGST<br/>SGST</th>
+                                <th style="text-align: right; width: 8%;">Total</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${printItemsHtml}
+                            
+                            <tr class="totals-row">
+                                <td></td>
+                                <td style="text-align: left;">Total</td>
+                                <td></td>
+                                <td></td>
+                                <td>${(selectedPatient.items || []).reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}</td>
+                                <td>
+                                    <div>${(selectedPatient.items || []).reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</div>
+                                    <div>${(selectedPatient.items || []).reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</div>
+                                </td>
+                                <td style="text-align: right;">${(selectedPatient.unrounded_total || selectedPatient.total_amount || 0).toFixed(2)}</td>
+                            </tr>
                         </tbody>
                     </table>
-                    <table class="small-table" style="margin-top:10px;">
-                        <tr><td>Total :</td><td style="text-align:right;">${finalTotal.toFixed(2)}</td></tr>
-                        <tr><td>Payment Mode:</td><td style="text-align:right;">${paymentMode}</td></tr>
+
+                    <table style="width: 100%; font-size: 11px; margin-top: 5px; border-collapse: collapse;">
+                        <tr>
+                            <td>Round Off :</td>
+                            <td style="text-align: right; font-weight: bold;">${(selectedPatient.round_off || 0).toFixed(2)}</td>
+                        </tr>
+                        <tr style="font-size: 12px; font-weight: bold;">
+                            <td>Bill Total :</td>
+                            <td style="text-align: right; border-bottom: 2px double #000; padding: 2px 0;">Rs. ${(selectedPatient.total_amount || 0).toFixed(2)}</td>
+                        </tr>
                     </table>
-                    <div class="amount-words">${numberToWords(Math.round(finalTotal))} Rupees Only</div>
-                    <div class="footer">
-                        <p>Thank you.</p>
+
+                    <div class="amount-words">Total : Rs. ${numberToWords(selectedPatient.total_amount || 0)} Only.</div>
+
+                    <div class="split-box">
+                        ${isFaculty ? `
+                            REIMBURSED: Rs. ${(selectedPatient.reimbursed_amount || 0).toFixed(2)} (90%)<br/>
+                            SELF PAID (SALARY DEDUCTION): Rs. ${(selectedPatient.self_paid_amount || 0).toFixed(2)} (10%)
+                        ` : `
+                            REIMBURSED: Rs. 0.00 (0%)<br/>
+                            SELF PAID (UPI/CASH/CARD): Rs. ${(selectedPatient.self_paid_amount || 0).toFixed(2)} (100%)
+                        `}
+                    </div>
+
+                    <div style="font-size: 9px; text-align: center; margin-top: 10px;">
+                        ${todayStr} - contact@bitscoop.in (${new Date().toLocaleTimeString('en-GB')})
+                    </div>
+
+                    <div class="footer-signature">
+                        <div>Checked By</div>
+                        <div>Authorised Signature</div>
                     </div>
                 </body>
                 </html>
@@ -198,54 +347,156 @@ function BillHistory() {
 
     const ReceiptPreview = () => {
         if (!selectedPatient) return null;
+
+        const isFaculty = selectedPatient.patient_type !== 'Student';
+        const isFacultyStaffOrDependent = ['Faculty', 'Staff', 'Dependant'].includes(selectedPatient.patient_type || '');
+        const relationCodeMap = {
+            "Daughter": "D",
+            "Son": "S",
+            "Spouse": "Spouse",
+            "Wife": "W",
+            "Husband": "H",
+            "Mother": "M",
+            "Father": "F",
+            "Self": "Self"
+        };
+
+        const relation = selectedPatient.relation || 'Self';
+        const relAbbrev = relationCodeMap[relation] || relation;
+        const relationSuffix = isFaculty ? ` (${relAbbrev})` : '';
+
+        const todayStr = new Date(selectedPatient.payment_date || new Date()).toLocaleDateString('en-GB').replace(/\//g, '-');
+        const invoiceNo = selectedPatient.invoice_no || 'INV-DRAFT';
+        const city = 'Pilani';
+        const doctorName = selectedPatient.doctor_name || selectedPatient.doctor_assigned || 'Dr. Assigned';
+
         return (
-            <Box p={4} borderWidth="1px" borderRadius="md" bg="white">
-                <Box textAlign="center" mb={4}>
-                    <Text fontWeight="bold" fontSize="lg" color="blue.800">Payment Receipt Preview</Text>
-                    <Text fontSize="sm" color="gray.600">Click "Print Receipt" below to view the full printable format.</Text>
-                </Box>
-                <Divider mb={4} />
-                <Flex justify="space-between" mb={4} fontSize="sm">
-                    <Box>
-                        <Text><strong>Invoice No:</strong> {selectedPatient.invoice_no}</Text>
-                        <Text><strong>Patient Name:</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}</Text>
-                    </Box>
-                    <Box textAlign="right">
-                        <Text><strong>Institute ID:</strong> {selectedPatient.institute_id}</Text>
-                        <Text><strong>Total Amount:</strong> ₹{selectedPatient.total_amount?.toFixed(2)}</Text>
-                    </Box>
+            <Box
+                p={4}
+                borderWidth="2px"
+                borderColor="gray.800"
+                borderStyle="double"
+                borderRadius="md"
+                bg="white"
+                color="black"
+                fontFamily="monospace"
+                fontSize="xs"
+                boxShadow="md"
+                maxH="500px"
+                overflowY="auto"
+            >
+                <Flex justify="space-between" fontSize="9px" fontWeight="bold" mb={1}>
+                    <Text>D. L. # 4161-4162</Text>
+                    <Text textDecoration="underline">SALE BILL</Text>
+                    <Text>GST # 08AACAB7763Q1Z2</Text>
                 </Flex>
-                <Table size="sm" mb={4} variant="simple">
+
+                <Box textAlign="center" mb={2}>
+                    <Text fontWeight="bold" fontSize="sm">BITS Consumers Cooperative Stores Ltd.</Text>
+                    <Text fontSize="9px">Pilani - 333031 (Rajasthan)</Text>
+                </Box>
+
+                <Divider borderColor="gray.400" mb={2} />
+
+                <Grid templateColumns="1fr 1fr" gap={1} mb={2}>
+                    <Text><strong>Invoice No:</strong> {invoiceNo}</Text>
+                    <Text textAlign="right"><strong>Date :</strong> {todayStr}</Text>
+                    <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+                        <strong>Name :</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}{relationSuffix}, City : {city}
+                    </Text>
+                    {isFacultyStaffOrDependent && (
+                        <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+                            <strong>Cr :</strong> {selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - {selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''}
+                        </Text>
+                    )}
+                    <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+                        <strong>Dr. :</strong> {toTitleCase(doctorName).toUpperCase()}
+                    </Text>
+                </Grid>
+
+                <Divider borderColor="gray.400" mb={1} />
+
+                <Table variant="simple" size="sm" fontSize="10px" p={0}>
                     <Thead>
                         <Tr>
-                            <Th>S.No.</Th><Th>Items</Th><Th>Gross</Th><Th>Disc(%)</Th><Th>DiscAmt</Th><Th>Remb(%)</Th><Th>RembAmt</Th><Th>Amount</Th>
+                            <Th p={1} color="black" fontSize="9px">SNo</Th>
+                            <Th p={1} color="black" fontSize="9px" textAlign="left">Item</Th>
+                            <Th p={1} color="black" fontSize="9px" textAlign="center">Rate/Qty</Th>
+                            <Th p={1} color="black" fontSize="9px" textAlign="center">Dis</Th>
+                            <Th p={1} color="black" fontSize="9px" textAlign="center">Amt</Th>
+                            <Th p={1} color="black" fontSize="9px" textAlign="center">CGST/SGST</Th>
+                            <Th p={1} color="black" fontSize="9px" textAlign="right">Total</Th>
                         </Tr>
                     </Thead>
                     <Tbody>
-                        {(selectedPatient.items || []).map((item, i) => {
-                            if (item.type === 'medicine') {
-                                return (
-                                    <Tr key={i}>
-                                        <Td>{i + 1}</Td><Td>{item.name}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
-                                    </Tr>
-                                );
-                            }
-                            return (
-                                <Tr key={i}>
-                                    <Td>{i + 1}</Td><Td>{item.name}</Td>
-                                    <Td>{item.gross?.toFixed(2) || '0.00'}</Td><Td>{item.discount || 0}</Td>
-                                    <Td>{item.discount_amount?.toFixed(2) || '0.00'}</Td><Td>{item.rembursement || 0}</Td>
-                                    <Td>{item.rembursement_amount?.toFixed(2) || '0.00'}</Td><Td>{item.amount?.toFixed(2) || '0.00'}</Td>
-                                </Tr>
-                            );
-                        })}
-                        {(selectedPatient.items || []).length === 0 && (
-                            <Tr>
-                                <Td colSpan={8} textAlign="center">No items found.</Td>
+                        {(selectedPatient.items || []).map((item, idx) => (
+                            <Tr key={idx}>
+                                <Td p={1}>{idx + 1}</Td>
+                                <Td p={1} textAlign="left">
+                                    <Text fontWeight="bold" fontSize="10px">{item.name}</Text>
+                                    {item.type === 'medicine' && (
+                                        <Text fontSize="8px" color="gray.600">B - {item.batch}, E - {item.expiry}</Text>
+                                    )}
+                                </Td>
+                                <Td p={1} textAlign="center">
+                                    <Text>{(item.rate || item.gross || 0).toFixed(2)}</Text>
+                                    <Text fontSize="8px" color="gray.600">({item.quantity || 1})</Text>
+                                </Td>
+                                <Td p={1} textAlign="center">{item.discount || 0}%</Td>
+                                <Td p={1} textAlign="center">{(item.amount || 0).toFixed(2)}</Td>
+                                <Td p={1} textAlign="center">
+                                    <Text>{(item.cgst || 0).toFixed(2)}</Text>
+                                    <Text>{(item.sgst || 0).toFixed(2)}</Text>
+                                </Td>
+                                <Td p={1} textAlign="right" fontWeight="bold">{(item.item_total || 0).toFixed(2)}</Td>
                             </Tr>
-                        )}
+                        ))}
+
+                        <Tr fontWeight="bold" borderTop="1px dashed black" borderBottom="1px dashed black">
+                            <Td p={1}></Td>
+                            <Td p={1} textAlign="left">Total</Td>
+                            <Td p={1}></Td>
+                            <Td p={1}></Td>
+                            <Td p={1} textAlign="center">
+                                {(selectedPatient.items || []).reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+                            </Td>
+                            <Td p={1} textAlign="center">
+                                <Text>{(selectedPatient.items || []).reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</Text>
+                                <Text>{(selectedPatient.items || []).reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</Text>
+                            </Td>
+                            <Td p={1} textAlign="right">{(selectedPatient.unrounded_total || selectedPatient.total_amount || 0).toFixed(2)}</Td>
+                        </Tr>
                     </Tbody>
                 </Table>
+
+                <Box mt={2} fontSize="11px">
+                    <Flex justify="space-between">
+                        <Text>Round Off :</Text>
+                        <Text fontWeight="bold">{(selectedPatient.round_off || 0).toFixed(2)}</Text>
+                    </Flex>
+                    <Flex justify="space-between" fontSize="sm" fontWeight="bold" borderBottom="2px double black" pb={1} mt={1}>
+                        <Text>Bill Total :</Text>
+                        <Text>Rs. {(selectedPatient.total_amount || 0).toFixed(2)}</Text>
+                    </Flex>
+                </Box>
+
+                <Text mt={2} fontWeight="bold" textTransform="uppercase" fontSize="10px">
+                    Total : Rs. {numberToWords(selectedPatient.total_amount || 0)} Only.
+                </Text>
+
+                <Box mt={3} p={2} border="1px solid black" fontSize="9px" fontWeight="bold">
+                    {isFaculty ? (
+                        <Box>
+                            <Text>REIMBURSED: Rs. {(selectedPatient.reimbursed_amount || 0).toFixed(2)} (90%)</Text>
+                            <Text>SELF PAID (SALARY DEDUCTION): Rs. {(selectedPatient.self_paid_amount || 0).toFixed(2)} (10%)</Text>
+                        </Box>
+                    ) : (
+                        <Box>
+                            <Text>REIMBURSED: Rs. 0.00 (0%)</Text>
+                            <Text>SELF PAID (UPI/CASH/CARD): Rs. {(selectedPatient.self_paid_amount || 0).toFixed(2)} (100%)</Text>
+                        </Box>
+                    )}
+                </Box>
             </Box>
         );
     };
@@ -305,7 +556,7 @@ function BillHistory() {
                                 <Table variant="simple" size="sm" fontSize="sm">
                                     <Thead bg={tableHeaderBg}>
                                         <Tr>
-                                            <Th>Date</Th><Th>Invoice No</Th><Th>Patient Name</Th><Th>Institute ID</Th><Th isNumeric>Items</Th><Th isNumeric>Amount</Th><Th></Th>
+                                            <Th>Date</Th><Th>Invoice No</Th><Th>Patient Name</Th><Th>Institute ID</Th><Th isNumeric>Items</Th><Th isNumeric>Amount</Th><Th textAlign="center">Actions</Th>
                                         </Tr>
                                     </Thead>
                                     <Tbody>
@@ -317,8 +568,10 @@ function BillHistory() {
                                                 <Td>{bill.institute_id}</Td>
                                                 <Td isNumeric>{bill.items ? bill.items.length : 0}</Td>
                                                 <Td isNumeric>₹{bill.total_amount.toFixed(2)}</Td>
-                                                <Td textAlign="right">
-                                                    <Button size="xs" leftIcon={<FiPrinter />} colorScheme="blue" onClick={() => handleSelectPatient(bill)}>View/Print</Button>
+                                                <Td textAlign="center">
+                                                    <HStack spacing={2} justify="flex-end">
+                                                        <Button size="xs" leftIcon={<FiPrinter />} colorScheme="blue" onClick={() => handleSelectPatient(bill)}>View/Print/Email</Button>
+                                                    </HStack>
                                                 </Td>
                                             </Tr>
                                         ))}
@@ -364,7 +617,15 @@ function BillHistory() {
                     </ModalBody>
                     <ModalFooter bg="gray.50" borderTop="1px solid" borderColor="gray.100" py={4}>
                         <Button variant="ghost" mr={3} onClick={onClose}>Close</Button>
-                        <Button colorScheme="blue" leftIcon={<FiPrinter />} onClick={handlePrintReceipt}>Print Receipt</Button>
+                        <Button colorScheme="blue" leftIcon={<FiPrinter />} mr={2} onClick={handlePrintReceipt}>Print Receipt</Button>
+                        <Button
+                            colorScheme="teal"
+                            leftIcon={<FiMail />}
+                            onClick={() => handleEmailReceipt(selectedPatient)}
+                            isLoading={emailLoadingId === (selectedPatient?._id || selectedPatient?.visit_id)}
+                        >
+                            Email Receipt
+                        </Button>
                     </ModalFooter>
                 </ModalContent>
             </Modal>

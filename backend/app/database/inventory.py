@@ -65,9 +65,27 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
     if not patient:
         return {"success": False, "error": "Patient not found"}
         
+    p_type = patient.get("patient_type", "Student")
+    is_faculty_eligible = p_type in ["Faculty", "Staff", "Dependant"]
+    
+    sponsor_name = None
+    sponsor_psrn = None
+    relation = "Student"
+    
+    if is_faculty_eligible:
+        relation = patient.get("relation", "Self")
+        if p_type == "Dependant":
+            sponsor_psrn = patient.get("primary_psrn_id")
+            if sponsor_psrn:
+                sponsor_doc = patients.find_one({"institute_id": sponsor_psrn})
+                sponsor_name = sponsor_doc.get("name") if sponsor_doc else None
+        else:
+            sponsor_psrn = patient.get("institute_id")
+            sponsor_name = patient.get("name")
+            relation = "Self"
+
     # Compute totals for snapshot
     config_list = load_lab_tests_from_config()
-    total_amount = 0
     billed_items = []
     
     # Fetch specific visit to extract lab_tests and prescriptions
@@ -76,77 +94,135 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
     else:
         visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
     
-    lab_tests = visit.get("lab_tests", []) if visit else []
-    medicines = visit.get("prescriptions", []) if visit else []
+    visit_doc = visit or {}
+    doctor_name = visit_doc.get("doctor_name", visit_doc.get("doctor_username", ""))
+    lab_tests = visit_doc.get("lab_tests", [])
+    medicines = visit_doc.get("prescriptions", [])
 
     if selected_labs is None:
         selected_labs = list(range(len(lab_tests)))
     if selected_medicines is None:
         selected_medicines = list(range(len(medicines)))
         
-    # We will update the patient and visit with ONLY the selected lab tests.
     final_lab_tests = []
     
     for i, t in enumerate(lab_tests):
         if i in selected_labs:
             test_name = t.get("lab_test", "")
             gross = get_test_price(test_name, config_list)
-            discPerc = t.get("discount", 0)
+            discPerc = 50 if is_faculty_eligible else t.get("discount", 0)
             discAmt = gross * discPerc / 100
-            rembPerc = t.get("rembPerc", 0)
-            rembAmt = gross * rembPerc / 100
-            amt = gross - discAmt - rembAmt
+            amt = gross - discAmt
             
             billed_items.append({
                 "type": "lab_test",
                 "name": test_name,
                 "gross": gross,
                 "discount": discPerc,
-                "discount_amount": discAmt,
-                "rembursement": rembPerc,
-                "rembursement_amount": rembAmt,
-                "amount": amt
+                "discount_amount": round(discAmt, 2),
+                "cgst": 0.00,
+                "sgst": 0.00,
+                "amount": round(amt, 2),
+                "item_total": round(amt, 2)
             })
-            total_amount += amt
             final_lab_tests.append(t)
         
     final_medicines = []
-    if selected_medicines and isinstance(selected_medicines[0], dict):
-        for m in selected_medicines:
-            billed_items.append({
-                "type": "medicine",
-                "name": m.get("note", m.get("drug", "")),
-                "quantity": m.get("quantity", ""),
-                "amount": 0
-            })
-            final_medicines.append(m)
-    else:
-        for i, p in enumerate(medicines):
-            if i in selected_medicines:
-                billed_items.append({
-                    "type": "medicine",
-                    "name": p.get("note", p) if isinstance(p, dict) else p,
-                    "quantity": p.get("quantity", "") if isinstance(p, dict) else "",
-                    "amount": 0
-                })
-                final_medicines.append(p)
+    from app.database.patients import get_stable_medicine_details
+    
+    for idx, item in enumerate(selected_medicines):
+        if isinstance(item, dict):
+            m_dict = dict(item)
+        else:
+            # item is an index
+            idx_val = int(item)
+            if idx_val < len(medicines):
+                p = medicines[idx_val]
+                m_dict = dict(p) if isinstance(p, dict) else {"drug": p}
+            else:
+                continue
+                
+        med_name = m_dict.get("drug") or m_dict.get("note") or ""
+        qty_str = m_dict.get("quantity") or "1"
+        try:
+            quantity = float(qty_str) if qty_str else 1.0
+        except ValueError:
+            quantity = 1.0
+            
+        rate = m_dict.get("sale_rate")
+        gst_rate = m_dict.get("gst_rate")
+        batch = m_dict.get("batch_number")
+        expiry = m_dict.get("expiry_date")
+        
+        if rate is None or gst_rate is None or batch is None or expiry is None:
+            # Lookup or fallback
+            rate, gst_rate, batch, expiry = get_stable_medicine_details(visit_id or (visit.get("visit_id") if visit else None), med_name)
+            
+        gross = rate * quantity
+        gst_amount = gross * (gst_rate / 100.0)
+        cgst = gst_amount / 2.0
+        sgst = gst_amount / 2.0
+        item_total = gross + gst_amount
+        
+        billed_items.append({
+            "type": "medicine",
+            "name": med_name,
+            "rate": rate,
+            "quantity": int(quantity) if quantity.is_integer() else quantity,
+            "gross": round(gross, 2),
+            "discount": 0,
+            "discount_amount": 0.00,
+            "cgst": round(cgst, 2),
+            "sgst": round(sgst, 2),
+            "amount": round(gross, 2),
+            "item_total": round(item_total, 2),
+            "batch": batch,
+            "expiry": expiry
+        })
+        m_dict["quantity"] = quantity
+        m_dict["sale_rate"] = rate
+        m_dict["gst_rate"] = gst_rate
+        m_dict["batch_number"] = batch
+        m_dict["expiry_date"] = expiry
+        final_medicines.append(m_dict)
             
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     count = bills.count_documents({"payment_date": {"$gte": today_start}})
     invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
     
+    # Calculate round off and splits
+    total_unrounded = sum(item["item_total"] for item in billed_items)
+    total_rounded = round(total_unrounded)
+    round_off = round(total_rounded - total_unrounded, 2)
+    
+    if is_faculty_eligible:
+        # Reimbursed is 90% of sum of item totals, rounded to 2 decimal places
+        reimbursed = round(total_unrounded * 0.90, 2)
+        self_paid = round(total_rounded - reimbursed, 2)
+    else:
+        reimbursed = 0.00
+        self_paid = float(total_rounded)
+        
     bill_doc = {
         "invoice_no": invoice_no,
         "payment_date": now,
         "institute_id": patient.get("institute_id"),
         "patient_name": patient.get("name"),
-        "patient_type": patient.get("patient_type"),
-        "age": patient.get("date_of_birth"), # Age is derived from DOB later
+        "patient_type": p_type,
+        "age": patient.get("date_of_birth"),
         "gender": patient.get("gender"),
         "items": billed_items,
-        "total_amount": round(total_amount, 2),
-        "payment_mode": payment_mode
+        "unrounded_total": round(total_unrounded, 2),
+        "round_off": round_off,
+        "total_amount": total_rounded,
+        "reimbursed_amount": reimbursed,
+        "self_paid_amount": self_paid,
+        "sponsor_name": sponsor_name,
+        "sponsor_psrn": sponsor_psrn,
+        "relation": relation,
+        "payment_mode": payment_mode,
+        "doctor_name": doctor_name
     }
     bills.insert_one(bill_doc)
 
@@ -185,7 +261,7 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
             }}
         )
 
-    return {"success": result.modified_count > 0, "invoice_no": invoice_no, "total_amount": total_amount, "bill": bill_doc}
+    return {"success": result.modified_count > 0, "invoice_no": invoice_no, "total_amount": total_rounded, "bill": bill_doc}
 
 
 def cancel_bill(institute_id, visit_id=None):
