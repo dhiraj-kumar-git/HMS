@@ -250,4 +250,34 @@ describe('MedicalCounterDashboard Component', () => {
       expect(screen.getByText('No active patients found.')).toBeInTheDocument();
     });
   });
+
+  it('renders Patient Details column with name, age and gender', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/active_registrations')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: 'OPD-101',
+              name: 'John Doe',
+              age: 25,
+              gender: 'Male',
+              workflow_status: 'consultation completed',
+              bill_status: 'pending',
+              lab_status: 'pending',
+              visit_id: 'VIS-001'
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Patient Details')).toBeInTheDocument();
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+      expect(screen.getByText('25 yrs • Male')).toBeInTheDocument();
+    });
+  });
 });

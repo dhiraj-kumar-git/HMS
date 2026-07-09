@@ -383,6 +383,30 @@
         ]
       }
     },
+    "/hr_report": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Inventory - /hr_report",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/lab/save_report": {
       "post": {
         "tags": [

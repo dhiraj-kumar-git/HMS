@@ -87,3 +87,84 @@ export const numberToWords = (num) => {
   if (num < 1000) return a[Math.floor(num/100)] + ' Hundred' + (num%100 ? ' ' + numberToWords(num%100) : '');
   return a[Math.floor(num/1000)] + ' Thousand' + (num%1000 ? ' ' + numberToWords(num%1000) : '');
 };
+
+export const generateTextReceipt = (patient, bill) => {
+  const isFaculty = patient.patient_type !== 'Student';
+  const isFacultyStaffOrDependent = ['Faculty', 'Staff', 'Dependant'].includes(patient.patient_type || '');
+  const relationCodeMap = {
+    "Daughter": "D",
+    "Son": "S",
+    "Spouse": "Spouse",
+    "Wife": "W",
+    "Husband": "H",
+    "Mother": "M",
+    "Father": "F",
+    "Self": "Self"
+  };
+  
+  const relation = patient.relation || 'Self';
+  const relAbbrev = relationCodeMap[relation] || relation;
+  const relationSuffix = isFaculty ? ` (${relAbbrev})` : '';
+  
+  const todayStr = new Date(patient.payment_date || new Date()).toLocaleDateString('en-GB').replace(/\//g, '-');
+  const invoiceNo = patient.invoice_no || 'INV-DRAFT';
+  const city = 'Pilani';
+  const doctorName = patient.doctor_name || patient.doctor_assigned || 'Dr. Assigned';
+
+  let lines = [];
+  lines.push("----------------------------------------------------------------");
+  lines.push("D. L. # 4161-4162              SALE BILL              GST # 08AACAB7763Q1Z2");
+  lines.push("----------------------------------------------------------------");
+  lines.push("              BITS Consumers Cooperative Stores Ltd.");
+  lines.push("                     Pilani - 333031 (Rajasthan)");
+  lines.push("----------------------------------------------------------------");
+  lines.push(`Bill # : ${invoiceNo.padEnd(25)} Date : ${todayStr}`);
+  lines.push(`Name   : ${(patient.patient_name || patient.name || '').toUpperCase()}${relationSuffix}`);
+  lines.push(`City   : ${city.padEnd(27)} Dr.  : ${doctorName.toUpperCase()}`);
+  if (isFacultyStaffOrDependent) {
+    lines.push(`Cr     : ${patient.sponsor_name || patient.patient_name || patient.name || ''} - ${patient.sponsor_psrn || patient.primary_psrn_id || patient.institute_id || ''}`);
+  }
+  lines.push("----------------------------------------------------------------");
+  lines.push("SNo  Item                      Rate/Qty   Dis%   Amt    CGST/SGST  Total");
+  lines.push("----------------------------------------------------------------");
+
+  bill.items.forEach((item, i) => {
+    const sno = String(i + 1).padEnd(5);
+    const name = item.name.substring(0, 24).padEnd(25);
+    
+    let rateQty = "";
+    if (item.type === 'medicine') {
+      rateQty = `${(item.rate || 0).toFixed(2)} (${item.quantity})`;
+    } else {
+      rateQty = `${(item.gross || 0).toFixed(2)} (1)`;
+    }
+    rateQty = rateQty.padEnd(11);
+
+    const dis = `${item.discount || 0}%`.padEnd(7);
+    const amt = (item.amount || 0).toFixed(2).padEnd(7);
+    const gst = `${(item.cgst || 0).toFixed(2)}/${(item.sgst || 0).toFixed(2)}`.padEnd(11);
+    const total = (item.item_total || 0).toFixed(2);
+
+    lines.push(`${sno}${name}${rateQty}${dis}${amt}${gst}${total}`);
+    if (item.type === 'medicine') {
+      lines.push(`     (B: ${item.batch || '611104EC2'}, E: ${item.expiry || '02/31'})`);
+    }
+  });
+
+  lines.push("----------------------------------------------------------------");
+  lines.push(`Round Off: ${(bill.round_off || 0).toFixed(2).padStart(52)}`);
+  lines.push(`Bill Total: Rs. ${(bill.total_amount || 0).toFixed(2).padStart(49)}`);
+  lines.push("----------------------------------------------------------------");
+  lines.push(`Total: Rs. ${numberToWords(bill.total_amount || 0)} Only.`);
+  lines.push("----------------------------------------------------------------");
+  if (isFaculty) {
+    lines.push(`REIMBURSED: Rs. ${(bill.reimbursed_amount || 0).toFixed(2)} (90%)`);
+    lines.push(`SELF PAID (SALARY DEDUCTION): Rs. ${(bill.self_paid_amount || 0).toFixed(2)} (10%)`);
+  } else {
+    lines.push(`REIMBURSED: Rs. 0.00 (0%)`);
+    lines.push(`SELF PAID (UPI/CASH/CARD): Rs. ${(bill.self_paid_amount || 0).toFixed(2)} (100%)`);
+  }
+  lines.push("----------------------------------------------------------------");
+  
+  return lines.join("\n");
+};
