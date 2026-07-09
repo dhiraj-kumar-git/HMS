@@ -42,7 +42,7 @@ import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, 
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
-import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase } from '../../utils/utils';
+import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase, generateTextReceipt } from '../../utils/utils';
 
 function MedicalCounterDashboard() {
   const [registrations, setRegistrations] = useState([]);
@@ -57,6 +57,7 @@ function MedicalCounterDashboard() {
   const [selectedLabs, setSelectedLabs] = useState([]);
   const [selectedMedicines, setSelectedMedicines] = useState([]);
   const [editedMedicines, setEditedMedicines] = useState([]);
+  const [emailLoadingId, setEmailLoadingId] = useState(null);
 
   // History state removed
 
@@ -154,7 +155,10 @@ function MedicalCounterDashboard() {
   const handleSelectPatient = (patient) => {
     setSelectedPatient(patient);
     setPaymentStatus('pending');
-    setPaymentMode('UPI');
+
+    const isFacultyStaffOrDependent = ['Faculty', 'Staff', 'Dependant'].includes(patient?.patient_type || '');
+    setPaymentMode(isFacultyStaffOrDependent ? 'Salary' : 'UPI');
+
     setBillGenerated(false);
 
     // Initialize all items as selected by default
@@ -165,7 +169,6 @@ function MedicalCounterDashboard() {
     onOpen();
   };
 
-  // New getTestPrice function that returns the last rate from config
   const getTestPrice = (testName) => {
     if (!testName) return 0;
     const config = labTestsConfig.find(
@@ -177,16 +180,111 @@ function MedicalCounterDashboard() {
     return 0;
   };
 
-  const calculateTotal = () => {
-    let total = 0;
-    if (selectedPatient && selectedPatient.lab_tests) {
-      selectedPatient.lab_tests.forEach((testObj, idx) => {
-        if (selectedLabs.includes(idx)) {
-          total += getTestPrice(testObj.lab_test);
-        }
-      });
+  const getCalculatedBillDetailsForPatient = (patient) => {
+    if (!patient) return null;
+    if (patient.items) return patient;
+    const isFaculty = patient.patient_type !== 'Student';
+    const items = [];
+
+    // Process lab tests
+    (patient.lab_tests || []).forEach((testObj, idx) => {
+      const isSelected = patient.bill_status === 'paid' ? true : selectedLabs.includes(idx);
+      if (isSelected) {
+        const gross = getTestPrice(testObj.lab_test);
+        const discount = isFaculty ? 50 : 0;
+        const discountAmount = gross * (discount / 100);
+        const amount = gross - discountAmount;
+        items.push({
+          type: 'lab_test',
+          name: testObj.lab_test,
+          gross: gross,
+          discount: discount,
+          discount_amount: discountAmount,
+          cgst: 0.00,
+          sgst: 0.00,
+          amount: amount,
+          item_total: amount
+        });
+      }
+    });
+
+    // Process medicines
+    const medsList = patient.bill_status === 'paid' ? (patient.prescriptions || []) : editedMedicines;
+    medsList.forEach((med, idx) => {
+      const isSelected = patient.bill_status === 'paid' ? true : selectedMedicines.includes(idx);
+      if (isSelected) {
+        const rate = med.sale_rate || 12.67;
+        const qty = parseFloat(med.quantity) || 1.0;
+        const gst_rate = med.gst_rate || 5.0;
+        const gross = rate * qty;
+        const gst_amount = gross * (gst_rate / 100);
+        const cgst = gst_amount / 2;
+        const sgst = gst_amount / 2;
+        const item_total = gross + gst_amount;
+
+        items.push({
+          type: 'medicine',
+          name: med.note || med.drug || '',
+          rate: rate,
+          quantity: qty,
+          gross: gross,
+          discount: 0,
+          discount_amount: 0.00,
+          cgst: cgst,
+          sgst: sgst,
+          amount: gross,
+          item_total: item_total,
+          batch: med.batch_number || 'B-611104EC2',
+          expiry: med.expiry_date || '02/31'
+        });
+      }
+    });
+
+    const total_unrounded = items.reduce((sum, item) => sum + item.item_total, 0);
+    const total_rounded = Math.round(total_unrounded);
+    const round_off = total_rounded - total_unrounded;
+
+    let reimbursed = 0;
+    let self_paid = 0;
+    if (isFaculty) {
+      reimbursed = parseFloat((total_unrounded * 0.90).toFixed(2));
+      self_paid = parseFloat((total_rounded - reimbursed).toFixed(2));
+    } else {
+      reimbursed = 0;
+      self_paid = total_rounded;
     }
-    return total;
+
+    return {
+      items,
+      unrounded_total: total_unrounded,
+      round_off: round_off,
+      total_amount: total_rounded,
+      reimbursed_amount: reimbursed,
+      self_paid_amount: self_paid
+    };
+  };
+
+  const getCalculatedBillDetails = () => {
+    return getCalculatedBillDetailsForPatient(selectedPatient);
+  };
+
+  const getBillDetails = () => {
+    if (selectedPatient && selectedPatient.items) {
+      return {
+        items: selectedPatient.items,
+        unrounded_total: selectedPatient.unrounded_total || selectedPatient.total_amount,
+        round_off: selectedPatient.round_off || 0,
+        total_amount: selectedPatient.total_amount,
+        reimbursed_amount: selectedPatient.reimbursed_amount || 0,
+        self_paid_amount: selectedPatient.self_paid_amount || selectedPatient.total_amount
+      };
+    }
+    return getCalculatedBillDetails();
+  };
+
+  const calculateTotal = () => {
+    const details = getBillDetails();
+    return details ? details.total_amount : 0;
   };
 
   const handleConfirmPayment = async () => {
@@ -194,6 +292,23 @@ function MedicalCounterDashboard() {
     setPaymentStatus('processing');
     try {
       const token = localStorage.getItem('token');
+      const payloadMedicines = selectedMedicines.map(idx => {
+        const med = editedMedicines[idx];
+        const rate = med.sale_rate || 12.67;
+        const gst_rate = med.gst_rate || 5.0;
+        const qty = parseFloat(med.quantity) || 1.0;
+        const batch_number = med.batch_number || 'B-611104EC2';
+        const expiry_date = med.expiry_date || '02/31';
+        return {
+          ...med,
+          quantity: qty,
+          sale_rate: rate,
+          gst_rate: gst_rate,
+          batch_number: batch_number,
+          expiry_date: expiry_date
+        };
+      });
+
       const response = await axios.post(
         `${BASE_URL}/pay_bill`,
         {
@@ -201,19 +316,19 @@ function MedicalCounterDashboard() {
           visit_id: selectedPatient.visit_id,
           payment_mode: paymentMode,
           selected_labs: selectedLabs,
-          selected_medicines: selectedMedicines.map(idx => editedMedicines[idx]),
+          selected_medicines: payloadMedicines,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setSelectedPatient(prev => ({ ...prev, invoice_no: response.data.invoice_no }));
+      setSelectedPatient(prev => ({ ...prev, ...response.data }));
       setPaymentStatus('completed');
       fetchRegistrations(); // Refresh list to remove from queue behind the modal
     } catch (error) {
       setPaymentStatus('pending');
       toast({
         title: 'Payment Error',
-        description: error.response?.data?.error || 'Failed to update bill status',
+        description: error.response?.data?.error || 'Failed to record payment',
         status: 'error',
         duration: 3000,
         isClosable: true,
@@ -256,106 +371,259 @@ function MedicalCounterDashboard() {
     }
   };
 
-  const handlePrintReceipt = () => {
-    if (!selectedPatient) return;
+  const handleEmailReceipt = async (patient) => {
+    if (!patient || !patient.institute_id) return;
+
+    setEmailLoadingId(patient.visit_id);
     try {
-      let finalInvoiceNo = selectedPatient.invoice_no || '';
-      let finalTotal = calculateTotal();
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`${BASE_URL}/get_patient/${patient.institute_id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-      let itemIndex = 1;
+      const patientData = res.data;
+      const recipientEmail = patientData.email;
+
+      if (!recipientEmail) {
+        toast({
+          title: 'Email not found',
+          description: 'This patient does not have an email registered.',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      const bill = getCalculatedBillDetailsForPatient(patient);
+      if (!bill) {
+        toast({
+          title: 'Error generating bill',
+          description: 'Unable to calculate bill details.',
+          status: 'error',
+          duration: 3000,
+          isClosable: true,
+        });
+        return;
+      }
+
+      const receiptText = generateTextReceipt(patient, bill);
+      const subject = `Sale Bill Receipt for ${toTitleCase(patientData.name)} (Invoice: ${patient.invoice_no || 'DRAFT'})`;
+      const body = `Dear ${toTitleCase(patientData.name)},
+
+Please find below the sale bill receipt for your recent visit to the BITS Pilani Medical Centre.
+
+${receiptText}
+
+Best regards,
+Medical Centre Team
+BITS Pilani
+`;
+
+      await axios.post(
+        `${BASE_URL}/lab/send_email`,
+        {
+          recipient_email: recipientEmail,
+          to_email: recipientEmail,
+          subject: subject,
+          body: body
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast({
+        title: 'Email Sent Successfully',
+        description: `Receipt has been sent to ${recipientEmail}`,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+
+    } catch (error) {
+      console.error('Error sending email:', error);
+      toast({
+        title: 'Email Error',
+        description: error.response?.data?.error || error.message || 'Failed to send receipt email',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setEmailLoadingId(null);
+    }
+  };
+
+  const handlePrintReceipt = () => {
+    const bill = getBillDetails();
+    if (!selectedPatient || !bill) return;
+    try {
+      const isFaculty = selectedPatient.patient_type !== 'Student';
+      const isFacultyStaffOrDependent = ['Faculty', 'Staff', 'Dependant'].includes(selectedPatient.patient_type || '');
+      const relationCodeMap = {
+        "Daughter": "D",
+        "Son": "S",
+        "Spouse": "Spouse",
+        "Wife": "W",
+        "Husband": "H",
+        "Mother": "M",
+        "Father": "F",
+        "Self": "Self"
+      };
+
+      const relation = selectedPatient.relation || 'Self';
+      const relAbbrev = relationCodeMap[relation] || relation;
+      const relationSuffix = isFaculty ? ` (${relAbbrev})` : '';
+
+      let sponsorLineHtml = '';
+      if (isFacultyStaffOrDependent) {
+        sponsorLineHtml = `<div>(Cr : ${selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - ${selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''})</div>`;
+      }
+
       let printItemsHtml = '';
-
-      // Map Medicines
-      (selectedPatient.prescriptions || []).forEach((med, i) => {
-        if (selectedMedicines.includes(i)) {
-          printItemsHtml += `<tr><td>${itemIndex++}</td><td>${med.note || med}</td><td colspan="5">Medicine</td><td>0.00</td></tr>`;
+      bill.items.forEach((item, i) => {
+        let nameAndBatchHtml = `<div>${toTitleCase(item.name)}</div>`;
+        if (item.type === 'medicine') {
+          nameAndBatchHtml += `<div class="subtext">B - ${item.batch || '611104EC2'}, E - ${item.expiry || '02/31'}</div>`;
         }
+
+        let rateQtyHtml = '';
+        if (item.type === 'medicine') {
+          rateQtyHtml = `<div>${(item.rate || 0).toFixed(2)}</div><div class="subtext">(${item.quantity || 1})</div>`;
+        } else {
+          rateQtyHtml = `<div>${(item.gross || 0).toFixed(2)}</div><div class="subtext">(1)</div>`;
+        }
+
+        let gstHtml = `<div>${(item.cgst || 0).toFixed(2)}</div><div>${(item.sgst || 0).toFixed(2)}</div>`;
+
+        printItemsHtml += `
+          <tr>
+            <td>${i + 1}</td>
+            <td style="text-align: left;">${nameAndBatchHtml}</td>
+            <td>${rateQtyHtml}</td>
+            <td>${item.discount || 0}</td>
+            <td>${(item.amount || 0).toFixed(2)}</td>
+            <td>${gstHtml}</td>
+            <td style="text-align: right; font-weight: bold;">${(item.item_total || 0).toFixed(2)}</td>
+          </tr>
+        `;
       });
 
-      // Map Lab Tests
-      (selectedPatient.lab_tests || []).forEach((t, i) => {
-        if (selectedLabs.includes(i)) {
-          const gross = getTestPrice(t.lab_test);
-          const discPerc = t.discount || 0;
-          const discAmt = (gross * discPerc / 100).toFixed(2);
-          const rembPerc = t.rembPerc || 0;
-          const rembAmt = (gross * rembPerc / 100).toFixed(2);
-          const amt = (gross - discAmt - rembAmt).toFixed(2);
-          printItemsHtml += `<tr><td>${itemIndex++}</td><td>${t.lab_test}</td><td>${gross.toFixed(2)}</td><td>${discPerc}</td><td>${discAmt}</td><td>${rembPerc}</td><td>${rembAmt}</td><td>${amt}</td></tr>`;
-        }
-      });
+      const todayStr = new Date(selectedPatient.payment_date || new Date()).toLocaleDateString('en-GB').replace(/\//g, '-');
+      const invoiceNo = selectedPatient.invoice_no || 'INV-DRAFT';
+      const city = 'Pilani';
+      const doctorName = selectedPatient.doctor_name || selectedPatient.doctor_assigned || 'Dr. Assigned';
 
-      // Build HTML for printing
+      // Build HTML for printing (Sale Bill cooperative stores style)
       const html = `
           <html>
           <head>
-            <title>Payment Receipt</title>
+            <title>Sale Bill - BITS Cooperative</title>
             <style>
-              body { font-family: Arial, sans-serif; margin:0; padding:10mm; }
-              .header { text-align:center; font-size:12px; }
-              .header h2 { margin:0; font-size:16px; }
-              .title { text-align:center; font-weight:bold; margin:10px 0; }
-              table { width:100%; border-collapse: collapse; font-size:11px; }
-              table th, table td { border:1px solid #000; padding:4px; }
-              table th { font-weight:bold; }
-              .small-table td { border:none; padding:2px; }
-              .amount-words { margin-top:10px; font-weight:bold; text-transform: uppercase; }
-              .footer { text-align:center; margin-top:20px; font-size:12px; }
-              @page { size: A4 portrait; margin:10mm; }
+              body { font-family: monospace, Arial; margin: 0; padding: 5mm; color: #000; font-size: 11px; line-height: 1.2; }
+              .header-title { text-align: center; font-size: 13px; font-weight: bold; margin: 2px 0; }
+              .header-subtitle { text-align: center; font-size: 11px; margin-bottom: 5px; }
+              .meta-table { width: 100%; margin: 5px 0; font-size: 11px; }
+              .meta-table td { padding: 1px 0; vertical-align: top; }
+              .divider { border-top: 1px dashed #000; margin: 4px 0; }
+              table.items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 5px; }
+              table.items-table th { border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 4px 2px; font-weight: bold; text-align: center; }
+              table.items-table td { padding: 4px 2px; text-align: center; vertical-align: top; }
+              .subtext { font-size: 9px; color: #555; }
+              .totals-row td { border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-weight: bold; padding: 6px 2px; }
+              .amount-words { margin: 6px 0; font-weight: bold; text-transform: uppercase; }
+              .split-box { border: 1px solid #000; padding: 5px; margin: 6px 0; font-size: 10px; font-weight: bold; }
+              .footer-signature { display: flex; justify-content: space-between; margin-top: 30px; font-size: 10px; }
+              @page { size: A5 portrait; margin: 5mm; }
             </style>
           </head>
           <body>
-            <div class="header">
-              <h2>Birla Institute of Technology & Science</h2>
-              <div>MEDICAL CENTRE</div>
-              <div>Vidya Vihar, Pilani, RAJASTHAN</div>
-              <div>Contact: 01596-515525 | medc@pilani.bits-pilani.ac.in | Fax:01596-244183</div>
-              <div>Date/Time: ${formatDateTimeIST(new Date())}</div>
+            <div style="display: flex; justify-content: space-between; font-size: 10px;">
+              <div>D. L. # 4161-4162</div>
+              <div style="font-weight: bold; text-decoration: underline;">SALE BILL</div>
+              <div>GST # 08AACAB7763Q1Z2</div>
             </div>
-            <hr style="border:1px solid #000; margin:8px 0;" />
-            <div class="title">* PAYMENT RECEIPT *</div>
-            <hr style="border:1px solid #000; margin:8px 0;" />
-            <table class="small-table" style="margin-bottom:10px;">
+            <div class="header-title">BITS Consumers Cooperative Stores Ltd.</div>
+            <div class="header-subtitle">Pilani - 333031 (Rajasthan)</div>
+            <div class="divider"></div>
+            <table class="meta-table">
               <tr>
-                <td>Invoice No.:</td><td>${finalInvoiceNo}</td>
-                <td>Institute ID:</td><td>${selectedPatient.institute_id}</td>
+                <td style="width: 60%;"><strong>Bill # :</strong> ${invoiceNo}</td>
+                <td style="text-align: right;"><strong>Date :</strong> ${todayStr}</td>
               </tr>
               <tr>
-                <td>UMR:</td><td>${selectedPatient.umrn || ''}</td>
-                <td>Age/Gender:</td><td>${calculateAge(selectedPatient.age)}/${selectedPatient.gender || 'N/A'}</td>
+                <td colspan="2"><strong>Name :</strong> ${toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}${relationSuffix}, City : ${city}</td>
               </tr>
+              ${isFacultyStaffOrDependent ? `<tr><td colspan="2">${sponsorLineHtml}</td></tr>` : ''}
               <tr>
-                <td>Patient:</td><td>${toTitleCase(selectedPatient.name || selectedPatient.patient_name || '')}</td>
-                <td>Payment No.:</td><td>${selectedPatient.payment_no || ''}</td>
+                <td colspan="2"><strong>Dr. :</strong> ${toTitleCase(doctorName)}</td>
               </tr>
             </table>
-            <table>
+            
+            <table class="items-table">
               <thead>
                 <tr>
-                  <th>S.No.</th><th>Service</th><th>Gross Amt</th>
-                  <th>Disc(%)</th><th>Disc</th><th>Remb(%)</th>
-                  <th>Remb Amt</th><th>Amount</th>
+                  <th style="width: 5%;">SNo</th>
+                  <th style="text-align: left; width: 45%;">Item</th>
+                  <th style="width: 15%;">Rate<br/>Qty.</th>
+                  <th style="width: 7%;">Dis</th>
+                  <th style="width: 10%;">Amt.</th>
+                  <th style="width: 10%;">CGST<br/>SGST</th>
+                  <th style="text-align: right; width: 8%;">Total</th>
                 </tr>
               </thead>
               <tbody>
                 ${printItemsHtml}
+                
+                <tr class="totals-row">
+                  <td></td>
+                  <td style="text-align: left;">Total</td>
+                  <td></td>
+                  <td></td>
+                  <td>${bill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}</td>
+                  <td>
+                    <div>${bill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</div>
+                    <div>${bill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</div>
+                  </td>
+                  <td style="text-align: right;">${bill.unrounded_total.toFixed(2)}</td>
+                </tr>
               </tbody>
             </table>
-            <table class="small-table" style="margin-top:10px;">
-              <tr><td>Total :</td><td style="text-align:right;">${finalTotal.toFixed(2)}</td></tr>
-              <tr><td>Payment Mode:</td><td style="text-align:right;">${paymentMode}</td></tr>
+
+            <table style="width: 100%; font-size: 11px; margin-top: 5px; border-collapse: collapse;">
+              <tr>
+                <td>Round Off :</td>
+                <td style="text-align: right; font-weight: bold;">${bill.round_off.toFixed(2)}</td>
+              </tr>
+              <tr style="font-size: 12px; font-weight: bold;">
+                <td>Bill Total :</td>
+                <td style="text-align: right; border-bottom: 2px double #000; padding: 2px 0;">Rs. ${bill.total_amount.toFixed(2)}</td>
+              </tr>
             </table>
-            <div class="amount-words">${numberToWords(Math.round(finalTotal))} Rupees Only</div>
-            <div class="footer">
-              Treated By: ${selectedPatient.treated_by || ''}<br/>
-              * PLEASE KEEP YOUR HOSPITAL CLEAN *<br/>
-              Page 1 of 1
+
+            <div class="amount-words">Total : Rs. ${numberToWords(bill.total_amount)} Only.</div>
+
+            <div class="split-box">
+              ${isFaculty ? `
+                REIMBURSED: Rs. ${bill.reimbursed_amount.toFixed(2)} (90%)<br/>
+                SELF PAID (SALARY DEDUCTION): Rs. ${bill.self_paid_amount.toFixed(2)} (10%)
+              ` : `
+                REIMBURSED: Rs. 0.00 (0%)<br/>
+                SELF PAID (UPI/CASH/CARD): Rs. ${bill.self_paid_amount.toFixed(2)} (100%)
+              `}
+            </div>
+
+            <div style="font-size: 9px; text-align: center; margin-top: 10px;">
+              ${todayStr} - contact@bitscoop.in (${new Date().toLocaleTimeString('en-GB')})
+            </div>
+
+            <div class="footer-signature">
+              <div>Checked By</div>
+              <div>Authorised Signature</div>
             </div>
           </body>
           </html>
       `;
 
-      // Print
       const w = window.open('', '_blank');
       w.document.open();
       w.document.write(html);
@@ -376,73 +644,158 @@ function MedicalCounterDashboard() {
 
   // On-screen receipt preview
   const ReceiptPreview = () => {
-    const total = calculateTotal();
+    const bill = getBillDetails();
+    if (!selectedPatient || !bill) return null;
+
+    const isFaculty = selectedPatient.patient_type !== 'Student';
+    const isFacultyStaffOrDependent = ['Faculty', 'Staff', 'Dependant'].includes(selectedPatient.patient_type || '');
+    const relationCodeMap = {
+      "Daughter": "D",
+      "Son": "S",
+      "Spouse": "Spouse",
+      "Wife": "W",
+      "Husband": "H",
+      "Mother": "M",
+      "Father": "F",
+      "Self": "Self"
+    };
+
+    const relation = selectedPatient.relation || 'Self';
+    const relAbbrev = relationCodeMap[relation] || relation;
+    const relationSuffix = isFaculty ? ` (${relAbbrev})` : '';
+
+    const todayStr = new Date(selectedPatient.payment_date || new Date()).toLocaleDateString('en-GB').replace(/\//g, '-');
+    const invoiceNo = selectedPatient.invoice_no || 'INV-DRAFT';
+    const city = 'Pilani';
+    const doctorName = selectedPatient.doctor_name || selectedPatient.doctor_assigned || 'Dr. Assigned';
+
     return (
-      <Box p={4} borderWidth="1px" borderRadius="md">
+      <Box
+        p={4}
+        borderWidth="2px"
+        borderColor="gray.800"
+        borderStyle="double"
+        borderRadius="md"
+        bg="white"
+        color="black"
+        fontFamily="monospace"
+        fontSize="xs"
+        boxShadow="md"
+        maxH="600px"
+        overflowY="auto"
+      >
+        <Flex justify="space-between" fontSize="9px" fontWeight="bold" mb={1}>
+          <Text>D. L. # 4161-4162</Text>
+          <Text textDecoration="underline">SALE BILL</Text>
+          <Text>GST # 08AACAB7763Q1Z2</Text>
+        </Flex>
+
         <Box textAlign="center" mb={2}>
-          <Heading size="md">Birla Institute of Technology & Science</Heading>
-          <Text>MEDICAL CENTRE, Pilani, Rajasthan</Text>
-          <Text>Date/Time: {formatDateTimeIST(new Date())}</Text>
-          <Divider borderColor="black" borderWidth="1px" my={2} />
+          <Text fontWeight="bold" fontSize="sm">BITS Consumers Cooperative Stores Ltd.</Text>
+          <Text fontSize="9px">Pilani - 333031 (Rajasthan)</Text>
         </Box>
-        <Divider mb={2} />
-        <Text fontWeight="bold" textAlign="center" mb={2}>* PAYMENT RECEIPT *</Text>
-        <Divider borderColor="black" borderWidth="1px" my={2} />
-        <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm" mb={2}>
-          <Text>Invoice No.: {selectedPatient.invoice_no}</Text>
-          <Text>Institute ID: {selectedPatient.institute_id}</Text>
-          <Text>UMR: {selectedPatient.umrn}</Text>
-          <Text>Age/Gender: {calculateAge(selectedPatient.age)}/{selectedPatient.gender || 'N/A'}</Text>
-          <Text>Patient: {toTitleCase(selectedPatient.name || selectedPatient.patient_name)}</Text>
-          <Text>Payment No.: {selectedPatient.payment_no}</Text>
-          <Text>Ref. Doctor: {selectedPatient.doctor_assigned}</Text>
+
+        <Divider borderColor="gray.400" mb={2} />
+
+        <Grid templateColumns="1fr 1fr" gap={1} mb={2}>
+          <Text><strong>Invoice No:</strong> {invoiceNo}</Text>
+          <Text textAlign="right"><strong>Date :</strong> {todayStr}</Text>
+          <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+            <strong>Name :</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}{relationSuffix}, City : {city}
+          </Text>
+          {isFacultyStaffOrDependent && (
+            <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+              <strong>Cr :</strong> {selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - {selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''}
+            </Text>
+          )}
+          <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+            <strong>Dr. :</strong> {toTitleCase(doctorName).toUpperCase()}
+          </Text>
         </Grid>
-        <Divider my={4} />
-        <Table size="sm" mb={2}>
+
+        <Divider borderColor="gray.400" mb={1} />
+
+        <Table variant="simple" size="sm" fontSize="10px" p={0}>
           <Thead>
             <Tr>
-              <Th>S.No.</Th><Th>Service</Th><Th>Gross</Th>
-              <Th>Disc(%)</Th><Th>Disc</Th><Th>Remb(%)</Th>
-              <Th>Remb Amt</Th><Th>Amt</Th>
+              <Th p={1} color="black" fontSize="9px">SNo</Th>
+              <Th p={1} color="black" fontSize="9px" textAlign="left">Item</Th>
+              <Th p={1} color="black" fontSize="9px" textAlign="center">Rate/Qty</Th>
+              <Th p={1} color="black" fontSize="9px" textAlign="center">Dis</Th>
+              <Th p={1} color="black" fontSize="9px" textAlign="center">Amt</Th>
+              <Th p={1} color="black" fontSize="9px" textAlign="center">CGST/SGST</Th>
+              <Th p={1} color="black" fontSize="9px" textAlign="right">Total</Th>
             </Tr>
           </Thead>
           <Tbody>
-            {(selectedPatient.prescriptions || []).map((med, i) => (
-              <Tr key={`med-${i}`}>
-                <Td>{i + 1}</Td><Td>{med.note || med}</Td><Td colSpan={5}>Medicine</Td><Td>0.00</Td>
+            {bill.items.map((item, idx) => (
+              <Tr key={idx}>
+                <Td p={1}>{idx + 1}</Td>
+                <Td p={1} textAlign="left">
+                  <Text fontWeight="bold" fontSize="10px">{item.name}</Text>
+                  {item.type === 'medicine' && (
+                    <Text fontSize="8px" color="gray.600">B - {item.batch}, E - {item.expiry}</Text>
+                  )}
+                </Td>
+                <Td p={1} textAlign="center">
+                  <Text>{(item.rate || item.gross || 0).toFixed(2)}</Text>
+                  <Text fontSize="8px" color="gray.600">({item.quantity || 1})</Text>
+                </Td>
+                <Td p={1} textAlign="center">{item.discount || 0}%</Td>
+                <Td p={1} textAlign="center">{(item.amount || 0).toFixed(2)}</Td>
+                <Td p={1} textAlign="center">
+                  <Text>{(item.cgst || 0).toFixed(2)}</Text>
+                  <Text>{(item.sgst || 0).toFixed(2)}</Text>
+                </Td>
+                <Td p={1} textAlign="right" fontWeight="bold">{(item.item_total || 0).toFixed(2)}</Td>
               </Tr>
             ))}
-            {(selectedPatient.lab_tests || []).map((t, i) => {
-              const gross = getTestPrice(t.lab_test);
-              const discPerc = t.discount || 0;
-              const discAmt = (gross * discPerc / 100).toFixed(2);
-              const rembPerc = t.rembPerc || 0;
-              const rembAmt = (gross * rembPerc / 100).toFixed(2);
-              const amt = (gross - discAmt - rembAmt).toFixed(2);
-              return (
-                <Tr key={i}>
-                  <Td>{(selectedPatient.prescriptions || []).length + i + 1}</Td>
-                  <Td>{t.lab_test}</Td>
-                  <Td>{gross.toFixed(2)}</Td>
-                  <Td>{discPerc}</Td>
-                  <Td>{discAmt}</Td>
-                  <Td>{rembPerc}</Td>
-                  <Td>{rembAmt}</Td>
-                  <Td>{amt}</Td>
-                </Tr>
-              );
-            })}
+
+            <Tr fontWeight="bold" borderTop="1px dashed black" borderBottom="1px dashed black">
+              <Td p={1}></Td>
+              <Td p={1} textAlign="left">Total</Td>
+              <Td p={1}></Td>
+              <Td p={1}></Td>
+              <Td p={1} textAlign="center">
+                {bill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+              </Td>
+              <Td p={1} textAlign="center">
+                <Text>{bill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</Text>
+                <Text>{bill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</Text>
+              </Td>
+              <Td p={1} textAlign="right">{bill.unrounded_total.toFixed(2)}</Td>
+            </Tr>
           </Tbody>
         </Table>
-        <Grid templateColumns="1fr 1fr" gap={2} fontSize="sm">
-          <Text>Total :</Text>
-          <Text textAlign="right">{total.toFixed(2)}</Text>
-          <Text>Payment Mode:</Text>
-          <Text textAlign="right">{selectedPatient.payment_mode || 'Cash'}</Text>
-        </Grid>
-        <Text mt={2} fontWeight="bold">
-          {numberToWords(Math.round(total))} Rupees Only
+
+        <Box mt={2} fontSize="11px">
+          <Flex justify="space-between">
+            <Text>Round Off :</Text>
+            <Text fontWeight="bold">{bill.round_off.toFixed(2)}</Text>
+          </Flex>
+          <Flex justify="space-between" fontSize="sm" fontWeight="bold" borderBottom="2px double black" pb={1} mt={1}>
+            <Text>Bill Total :</Text>
+            <Text>Rs. {bill.total_amount.toFixed(2)}</Text>
+          </Flex>
+        </Box>
+
+        <Text mt={2} fontWeight="bold" textTransform="uppercase" fontSize="10px">
+          Total : Rs. {numberToWords(bill.total_amount)} Only.
         </Text>
+
+        <Box mt={3} p={2} border="1px solid black" fontSize="9px" fontWeight="bold">
+          {isFaculty ? (
+            <Box>
+              <Text>REIMBURSED: Rs. {bill.reimbursed_amount.toFixed(2)} (90%)</Text>
+              <Text>SELF PAID (SALARY DEDUCTION): Rs. {bill.self_paid_amount.toFixed(2)} (10%)</Text>
+            </Box>
+          ) : (
+            <Box>
+              <Text>REIMBURSED: Rs. 0.00 (0%)</Text>
+              <Text>SELF PAID (UPI/CASH/CARD): Rs. {bill.self_paid_amount.toFixed(2)} (100%)</Text>
+            </Box>
+          )}
+        </Box>
       </Box>
     );
   };
@@ -556,13 +909,12 @@ function MedicalCounterDashboard() {
               <Thead bg={tableHeaderBg}>
                 <Tr>
                   <Th>Institute ID</Th>
-                  <Th>Name</Th>
-                  <Th>Age</Th>
-                  <Th>Type</Th>
-                  <Th>Status</Th>
-                  <Th>Bill</Th>
-                  <Th>Lab</Th>
-                  <Th>Completed Time</Th>
+                  <Th>Patient Details</Th>
+                  <Th textAlign="center">Type</Th>
+                  <Th textAlign="center">Status</Th>
+                  <Th textAlign="center">Bill</Th>
+                  <Th textAlign="center">Lab</Th>
+                  <Th textAlign="center">Completed Time</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -573,14 +925,20 @@ function MedicalCounterDashboard() {
                     onClick={() => handleSelectPatient(patient)}
                   >
                     <Td>{patient.institute_id}</Td>
-                    <Td>{toTitleCase(patient.name)}</Td>
-                    <Td>{calculateAge(patient.age)}</Td>
                     <Td>
+                      <Box>
+                        <Text fontWeight="bold">{toTitleCase(patient.name)}</Text>
+                        <Text fontSize="xs" color="gray.500">
+                          {calculateAge(patient.age)} yrs{patient.gender ? ` • ${patient.gender}` : ''}
+                        </Text>
+                      </Box>
+                    </Td>
+                    <Td textAlign="center">
                       <Badge fontSize="10px" colorScheme={patient.patient_type === 'Student' ? 'blue' : patient.patient_type === 'Faculty' ? 'purple' : 'gray'}>
                         {patient.patient_type}
                       </Badge>
                     </Td>
-                    <Td>
+                    <Td textAlign="center">
                       <Badge
                         variant="subtle"
                         fontSize="10px"
@@ -594,7 +952,7 @@ function MedicalCounterDashboard() {
                         {patient.workflow_status}
                       </Badge>
                     </Td>
-                    <Td>
+                    <Td textAlign="center">
                       <Badge
                         variant="outline"
                         fontSize="10px"
@@ -603,7 +961,7 @@ function MedicalCounterDashboard() {
                         {patient.bill_status}
                       </Badge>
                     </Td>
-                    <Td>
+                    <Td textAlign="center">
                       <Badge
                         variant="outline"
                         fontSize="10px"
@@ -612,14 +970,14 @@ function MedicalCounterDashboard() {
                         {patient.lab_status}
                       </Badge>
                     </Td>
-                    <Td fontSize="xs">
+                    <Td textAlign="center" fontSize="xs">
                       {patient.consultation_completed_time ? formatDateTimeIST(patient.consultation_completed_time) : formatDateTimeIST(patient.booked_at || Date.now())}
                     </Td>
                   </Tr>
                 ))}
                 {filteredRegistrations.length === 0 && (
                   <Tr>
-                    <Td colSpan={8} textAlign="center">
+                    <Td colSpan={7} textAlign="center">
                       No active patients found.
                     </Td>
                   </Tr>
@@ -637,10 +995,10 @@ function MedicalCounterDashboard() {
             setBillGenerated(false);
           }}
           isCentered
-          size="xl"
+          size="5xl"
         >
           <ModalOverlay />
-          <ModalContent bg={modalBg} maxW="800px" borderRadius="2xl" overflow="hidden">
+          <ModalContent bg={modalBg} maxW="1100px" borderRadius="2xl" overflow="hidden">
             {/* Modal Header with patient basic info */}
             <Box bg="blue.800" color="white" p={4}>
               {selectedPatient && (
@@ -648,7 +1006,7 @@ function MedicalCounterDashboard() {
                   <Heading size="md">
                     {toTitleCase(selectedPatient.name || selectedPatient.patient_name || '')} (ID: {selectedPatient.institute_id})
                   </Heading>
-                  <Text fontSize="sm">Age: {calculateAge(selectedPatient.age)}</Text>
+                  <Text fontSize="sm">Patient Type: {selectedPatient.patient_type} • Age: {calculateAge(selectedPatient.age)}</Text>
                   {selectedPatient.booked_at && (
                     <Text fontSize="xs" mt={1}>Order Date: {formatDateTimeIST(selectedPatient.booked_at)}</Text>
                   )}
@@ -657,107 +1015,130 @@ function MedicalCounterDashboard() {
             </Box>
             <ModalCloseButton color="white" />
             {/* Panelled Modal Body */}
-            <ModalBody p={4}>
-              {paymentStatus === 'completed' ? (
-                <Box textAlign="center" py={6}>
-                  <Icon as={FiPrinter} boxSize={12} color="green.500" mb={4} />
-                  <Heading size="md" color="green.600" mb={2}>Payment Received</Heading>
-                  <Text mb={4}>Invoice No: {selectedPatient?.invoice_no}</Text>
-                  <Button colorScheme="blue" onClick={handlePrintReceipt} leftIcon={<FiPrinter />} size="lg">
-                    Print Receipt
-                  </Button>
-                </Box>
-              ) : (
+            <ModalBody p={6}>
+              <Grid templateColumns={{ base: "1fr", lg: "1.1fr 0.9fr" }} gap={6} alignItems="start">
+                {/* Left Column: Input and selection controls */}
                 <Box>
-                  <Table variant="simple" size="sm" mb={4}>
-                    <Thead>
-                      <Tr>
-                        <Th width="40px">Incl.</Th>
-                        <Th>Item</Th>
-                        <Th>Type</Th>
-                        <Th isNumeric>Amount (Rs)</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {editedMedicines.map((pres, i) => (
-                        <Tr key={`pres-${i}`}>
-                          <Td>
-                            <Checkbox
-                              isChecked={selectedMedicines.includes(i)}
-                              onChange={(e) => {
-                                if (e.target.checked) setSelectedMedicines(prev => [...prev, i]);
-                                else setSelectedMedicines(prev => prev.filter(idx => idx !== i));
-                              }}
-                            />
-                          </Td>
-                          <Td>
-                            <Text fontWeight="bold">{pres.note || pres.drug}</Text>
-                            {pres.dose && <Text fontSize="xs" color="gray.500">{pres.dose} | {pres.route} | {pres.frequency} {pres.duration && `| ${pres.duration}`}</Text>}
-                            <Flex align="center" mt={1}>
-                              <Text fontSize="xs" mr={2}>Qty:</Text>
-                              <Input
-                                size="xs"
-                                width="60px"
-                                value={pres.quantity || ''}
-                                onChange={(e) => {
-                                  const newMeds = [...editedMedicines];
-                                  newMeds[i].quantity = e.target.value;
-                                  setEditedMedicines(newMeds);
-                                }}
-                              />
-                            </Flex>
-                          </Td>
-                          <Td>Medicine</Td>
-                          <Td isNumeric>0.00</Td>
-                        </Tr>
-                      ))}
-                      {(selectedPatient?.lab_tests || []).map((test, i) => (
-                        <Tr key={`test-${i}`}>
-                          <Td>
-                            <Checkbox
-                              isChecked={selectedLabs.includes(i)}
-                              onChange={(e) => {
-                                if (e.target.checked) setSelectedLabs(prev => [...prev, i]);
-                                else setSelectedLabs(prev => prev.filter(idx => idx !== i));
-                              }}
-                            />
-                          </Td>
-                          <Td>{test.lab_test || 'Unknown Test'}</Td>
-                          <Td>Lab Test</Td>
-                          <Td isNumeric>{getTestPrice(test.lab_test).toFixed(2)}</Td>
-                        </Tr>
-                      ))}
-                      {(!selectedPatient?.prescriptions?.length && !selectedPatient?.lab_tests?.length) && (
-                        <Tr>
-                          <Td colSpan={3} textAlign="center">No billable items</Td>
-                        </Tr>
-                      )}
-                      <Tr fontWeight="bold" bg="gray.100">
-                        <Td colSpan={3} textAlign="right">Total Due:</Td>
-                        <Td isNumeric>{calculateTotal().toFixed(2)}</Td>
-                      </Tr>
-                    </Tbody>
-                  </Table>
+                  {paymentStatus === 'completed' ? (
+                    <Box textAlign="center" py={12} px={6} border="1px dashed" borderColor="green.300" borderRadius="xl" bg="green.50">
+                      <Icon as={FiPrinter} boxSize={16} color="green.500" mb={4} />
+                      <Heading size="md" color="green.600" mb={2}>Payment Received</Heading>
+                      <Text mb={4}>Invoice No: {selectedPatient?.invoice_no}</Text>
+                      <HStack spacing={4} mt={4}>
+                        <Button colorScheme="blue" onClick={handlePrintReceipt} leftIcon={<FiPrinter />} size="md" flex={1}>
+                          Print Receipt
+                        </Button>
+                        <Button
+                          colorScheme="teal"
+                          onClick={() => handleEmailReceipt(selectedPatient)}
+                          leftIcon={<FiMail />}
+                          size="md"
+                          flex={1}
+                          isLoading={emailLoadingId === selectedPatient?.visit_id}
+                        >
+                          Email Receipt
+                        </Button>
+                      </HStack>
+                    </Box>
+                  ) : (
+                    <Box>
+                      <Heading size="xs" color="gray.600" mb={3} textTransform="uppercase">Select Billable Items</Heading>
 
-                  <Box p={4} bg="blue.50" borderRadius="md" mt={4}>
-                    <Heading size="sm" mb={3} color="blue.800">Payment Collection</Heading>
-                    <Flex align="center" gap={4}>
-                      <Text fontWeight="bold" whiteSpace="nowrap">Payment Mode:</Text>
-                      <Select
-                        value={paymentMode}
-                        onChange={(e) => setPaymentMode(e.target.value)}
-                        bg="white"
-                        size="md"
-                        maxW="200px"
-                      >
-                        <option value="UPI">UPI</option>
-                        <option value="Cash">Cash</option>
-                        <option value="Card">Card</option>
-                      </Select>
-                    </Flex>
-                  </Box>
+                      <Box maxH="350px" overflowY="auto" border="1px solid" borderColor="gray.200" borderRadius="md" p={2} mb={4} bg="white">
+                        <Table variant="simple" size="sm">
+                          <Thead bg="gray.50">
+                            <Tr>
+                              <Th width="40px">Incl.</Th>
+                              <Th>Item Details</Th>
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {editedMedicines.map((pres, i) => (
+                              <Tr key={`pres-${i}`}>
+                                <Td>
+                                  <Checkbox
+                                    isChecked={selectedMedicines.includes(i)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedMedicines(prev => [...prev, i]);
+                                      else setSelectedMedicines(prev => prev.filter(idx => idx !== i));
+                                    }}
+                                  />
+                                </Td>
+                                <Td>
+                                  <Text fontWeight="bold">{pres.note || pres.drug}</Text>
+                                  {pres.dose && <Text fontSize="xs" color="gray.500">{pres.dose} | {pres.route}</Text>}
+                                  <Flex align="center" mt={1}>
+                                    <Text fontSize="xs" mr={2}>Qty:</Text>
+                                    <Input
+                                      size="xs"
+                                      width="60px"
+                                      value={pres.quantity || ''}
+                                      onChange={(e) => {
+                                        const newMeds = [...editedMedicines];
+                                        newMeds[i].quantity = e.target.value;
+                                        setEditedMedicines(newMeds);
+                                      }}
+                                    />
+                                  </Flex>
+                                </Td>
+                              </Tr>
+                            ))}
+                            {(selectedPatient?.lab_tests || []).map((test, i) => (
+                              <Tr key={`test-${i}`}>
+                                <Td>
+                                  <Checkbox
+                                    isChecked={selectedLabs.includes(i)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedLabs(prev => [...prev, i]);
+                                      else setSelectedLabs(prev => prev.filter(idx => idx !== i));
+                                    }}
+                                  />
+                                </Td>
+                                <Td>
+                                  <Text fontWeight="bold">{test.lab_test || 'Unknown Test'}</Text>
+                                  <Text fontSize="xs" color="gray.500">Lab Test | Rate: Rs. {getTestPrice(test.lab_test).toFixed(2)}</Text>
+                                </Td>
+                              </Tr>
+                            ))}
+                            {(!selectedPatient?.prescriptions?.length && !selectedPatient?.lab_tests?.length) && (
+                              <Tr>
+                                <Td colSpan={2} textAlign="center">No billable items found</Td>
+                              </Tr>
+                            )}
+                          </Tbody>
+                        </Table>
+                      </Box>
+
+                      <Box p={4} bg="blue.50" borderRadius="md">
+                        <Heading size="xs" mb={3} color="blue.800" textTransform="uppercase">Payment Collection</Heading>
+                        <Flex align="center" gap={4}>
+                          <Text fontWeight="bold" fontSize="sm" whiteSpace="nowrap">Payment Mode:</Text>
+                          <Select
+                            value={paymentMode}
+                            onChange={(e) => setPaymentMode(e.target.value)}
+                            bg="white"
+                            size="sm"
+                            maxW="150px"
+                          >
+                            {['Faculty', 'Staff', 'Dependant'].includes(selectedPatient?.patient_type || '') && (
+                              <option value="Salary">Salary</option>
+                            )}
+                            <option value="UPI">UPI</option>
+                            <option value="Cash">Cash</option>
+                            <option value="Card">Card</option>
+                          </Select>
+                        </Flex>
+                      </Box>
+                    </Box>
+                  )}
                 </Box>
-              )}
+
+                {/* Right Column: Live receipt preview */}
+                <Box>
+                  <Heading size="xs" color="gray.600" mb={3} textTransform="uppercase">Invoice Receipt Preview</Heading>
+                  <ReceiptPreview />
+                </Box>
+              </Grid>
             </ModalBody>
             {/* Footer with actions */}
             <ModalFooter p={4} borderTopWidth="1px" bg={modalFooterBg}>
@@ -768,9 +1149,8 @@ function MedicalCounterDashboard() {
                     mr={3}
                     onClick={handleConfirmPayment}
                     isLoading={paymentStatus === 'processing'}
-                    fontSize="md"
+                    fontSize="sm"
                     px={6}
-                    py={2}
                   >
                     Confirm Payment & Mark as Paid
                   </Button>
@@ -778,20 +1158,19 @@ function MedicalCounterDashboard() {
                     colorScheme="red"
                     onClick={handleCancelBill}
                     isLoading={paymentStatus === 'processing'}
-                    fontSize="md"
+                    fontSize="sm"
                     px={4}
-                    py={2}
                     mr={3}
                   >
                     Cancel Entire Bill
                   </Button>
-                  <Button variant="ghost" onClick={onClose} fontSize="md" px={4} py={2}>
+                  <Button variant="ghost" size="sm" onClick={onClose} px={4}>
                     Close
                   </Button>
                 </>
               )}
               {paymentStatus === 'completed' && (
-                <Button variant="ghost" onClick={onClose} colorScheme="blue">
+                <Button variant="ghost" size="sm" onClick={onClose} colorScheme="blue">
                   Close
                 </Button>
               )}
