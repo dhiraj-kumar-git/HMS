@@ -52,7 +52,7 @@ describe('EMRHistoryDisplay', () => {
     expect(screen.getByText(/Chief Complaints/i)).toBeInTheDocument();
     expect(screen.getByText("Fever")).toBeInTheDocument();
     expect(screen.getByText("Peanuts")).toBeInTheDocument();
-    expect(screen.getByText("BP: 120/80")).toBeInTheDocument();
+    expect(screen.getByText("BP: 120/80 mmHg")).toBeInTheDocument();
     expect(screen.getByText("Viral fever")).toBeInTheDocument();
     expect(screen.getByText("Dolo")).toBeInTheDocument();
     expect(screen.getByText("• CBC")).toBeInTheDocument();

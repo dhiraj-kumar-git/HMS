@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   VStack,
@@ -57,14 +57,21 @@ export default function EMRForm({ initialEmrData, onChange, medicineOptions = []
   const [medInput, setMedInput] = useState({ drug: '', dose: '', route: '', frequency: '', duration: '', quantity: '' });
   const [labInput, setLabInput] = useState('');
 
+  const lastPropagatedRef = useRef(initialEmrData);
+
   // Synchronize local state if initialEmrData changes from parent
   useEffect(() => {
-    setLocalEmrData(initialEmrData);
+    // Only synchronize if initialEmrData is different from our last debounced/propagated state
+    if (JSON.stringify(initialEmrData) !== JSON.stringify(lastPropagatedRef.current)) {
+      setLocalEmrData(initialEmrData);
+      lastPropagatedRef.current = initialEmrData;
+    }
   }, [initialEmrData]);
 
   // Debounce notification to parent
   useEffect(() => {
     const timer = setTimeout(() => {
+      lastPropagatedRef.current = localEmrData;
       onChange(localEmrData);
     }, 200);
     return () => clearTimeout(timer);

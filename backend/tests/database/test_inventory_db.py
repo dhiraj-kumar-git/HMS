@@ -212,21 +212,35 @@ def test_pay_bill_faculty_pricing(mocker):
     # Reimbursed (90% of unrounded 76.61) = 68.95
     # Self Paid (77 - 68.95) = 8.05
     assert res["total_amount"] == 77
-    bill = res["bill"]
-    assert bill["sponsor_name"] == "Sponsor Employee"
-    assert bill["sponsor_psrn"] == "PSRN1"
-    assert bill["relation"] == "Daughter"
-    assert bill["total_amount"] == 77
-    assert bill["reimbursed_amount"] == 68.95
-    assert bill["self_paid_amount"] == 8.05
-    assert len(bill["items"]) == 2
-    assert bill["items"][0]["type"] == "lab_test"
-    assert bill["items"][0]["discount"] == 50
-    assert bill["items"][0]["item_total"] == 50.0
-    assert bill["items"][1]["type"] == "medicine"
-    assert bill["items"][1]["rate"] == 12.67
-    assert bill["items"][1]["cgst"] == 0.63
-    assert bill["items"][1]["sgst"] == 0.63
-    assert bill["items"][1]["item_total"] == 26.61
+    bills_list = res["bill"]
+    assert isinstance(bills_list, list)
+    assert len(bills_list) == 2
+    
+    bill_med = bills_list[0]
+    bill_lab = bills_list[1]
+    
+    assert bill_med["sponsor_name"] == "Sponsor Employee"
+    assert bill_med["sponsor_psrn"] == "PSRN1"
+    assert bill_med["relation"] == "Daughter"
+    assert bill_med["total_amount"] == 27
+    assert bill_med["reimbursed_amount"] == 23.95
+    assert bill_med["self_paid_amount"] == 3.05
+    assert len(bill_med["items"]) == 1
+    assert bill_med["items"][0]["type"] == "medicine"
+    assert bill_med["items"][0]["rate"] == 12.67
+    assert bill_med["items"][0]["cgst"] == 0.63
+    assert bill_med["items"][0]["sgst"] == 0.63
+    assert bill_med["items"][0]["item_total"] == 26.61
+    
+    assert bill_lab["sponsor_name"] == "Sponsor Employee"
+    assert bill_lab["sponsor_psrn"] == "PSRN1"
+    assert bill_lab["relation"] == "Daughter"
+    assert bill_lab["total_amount"] == 50
+    assert bill_lab["reimbursed_amount"] == 45.00
+    assert bill_lab["self_paid_amount"] == 5.00
+    assert len(bill_lab["items"]) == 1
+    assert bill_lab["items"][0]["type"] == "lab_test"
+    assert bill_lab["items"][0]["discount"] == 50
+    assert bill_lab["items"][0]["item_total"] == 50.0
 
 

@@ -376,7 +376,7 @@ function MedicalCounterDashboard() {
     }
   };
 
-  const handleEmailReceipt = async (patient) => {
+  const handleEmailReceipt = async (patient, suppressToast = false) => {
     if (!patient || !patient.institute_id) return;
 
     setEmailLoadingId(patient.visit_id);
@@ -436,13 +436,15 @@ BITS Pilani
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      toast({
-        title: 'Email Sent Successfully',
-        description: `Receipt has been sent to ${recipientEmail}`,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
+      if (!suppressToast) {
+        toast({
+          title: 'Email Sent Successfully',
+          description: `Receipt has been sent to ${recipientEmail}`,
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
 
     } catch (error) {
       console.error('Error sending email:', error);
@@ -484,67 +486,73 @@ BITS Pilani
         sponsorLineHtml = `<div>(Cr : ${selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - ${selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''})</div>`;
       }
 
-      let printItemsHtml = '';
-      bill.items.forEach((item, i) => {
-        let nameAndBatchHtml = `<div>${toTitleCase(item.name)}</div>`;
-        if (item.type === 'medicine') {
-          nameAndBatchHtml += `<div class="subtext">B - ${item.batch || '611104EC2'}, E - ${item.expiry || '02/31'}</div>`;
-        }
-
-        let rateQtyHtml = '';
-        if (item.type === 'medicine') {
-          rateQtyHtml = `<div>${(item.rate || 0).toFixed(2)}</div><div class="subtext">(${item.quantity || 1})</div>`;
-        } else {
-          rateQtyHtml = `<div>${(item.gross || 0).toFixed(2)}</div><div class="subtext">(1)</div>`;
-        }
-
-        let gstHtml = `<div>${(item.cgst || 0).toFixed(2)}</div><div>${(item.sgst || 0).toFixed(2)}</div>`;
-
-        printItemsHtml += `
-          <tr>
-            <td>${i + 1}</td>
-            <td style="text-align: left;">${nameAndBatchHtml}</td>
-            <td>${rateQtyHtml}</td>
-            <td>${item.discount || 0}</td>
-            <td>${(item.amount || 0).toFixed(2)}</td>
-            <td>${gstHtml}</td>
-            <td style="text-align: right; font-weight: bold;">${(item.item_total || 0).toFixed(2)}</td>
-          </tr>
-        `;
-      });
-
       const todayStr = new Date(selectedPatient.payment_date || new Date()).toLocaleDateString('en-GB').replace(/\//g, '-');
       const invoiceNo = selectedPatient.invoice_no || 'INV-DRAFT';
       const city = 'Pilani';
       const doctorName = selectedPatient.doctor_name || selectedPatient.doctor_assigned || 'Dr. Assigned';
 
-      // Build HTML for printing (Sale Bill cooperative stores style)
-      const html = `
-          <html>
-          <head>
-            <title>Sale Bill - BITS Cooperative</title>
-            <style>
-              body { font-family: monospace, Arial; margin: 0; padding: 5mm; color: #000; font-size: 11px; line-height: 1.2; }
-              .header-title { text-align: center; font-size: 13px; font-weight: bold; margin: 2px 0; }
-              .header-subtitle { text-align: center; font-size: 11px; margin-bottom: 5px; }
-              .meta-table { width: 100%; margin: 5px 0; font-size: 11px; }
-              .meta-table td { padding: 1px 0; vertical-align: top; }
-              .divider { border-top: 1px dashed #000; margin: 4px 0; }
-              table.items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 5px; }
-              table.items-table th { border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 4px 2px; font-weight: bold; text-align: center; }
-              table.items-table td { padding: 4px 2px; text-align: center; vertical-align: top; }
-              .subtext { font-size: 9px; color: #555; }
-              .totals-row td { border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-weight: bold; padding: 6px 2px; }
-              .amount-words { margin: 6px 0; font-weight: bold; text-transform: uppercase; }
-              .split-box { border: 1px solid #000; padding: 5px; margin: 6px 0; font-size: 10px; font-weight: bold; }
-              .footer-signature { display: flex; justify-content: space-between; margin-top: 30px; font-size: 10px; }
-              @page { size: A5 portrait; margin: 5mm; }
-            </style>
-          </head>
-          <body>
+      const medItems = bill.items.filter(item => item.type === 'medicine');
+      const labItems = bill.items.filter(item => item.type === 'lab_test');
+
+      const getSubBillDetails = (items) => {
+        const total_unrounded = items.reduce((sum, item) => sum + item.item_total, 0);
+        const total_rounded = Math.round(total_unrounded);
+        const round_off = total_rounded - total_unrounded;
+
+        let reimbursed = 0;
+        let self_paid = 0;
+        if (isFaculty) {
+          reimbursed = parseFloat((total_unrounded * 0.90).toFixed(2));
+          self_paid = parseFloat((total_rounded - reimbursed).toFixed(2));
+        } else {
+          reimbursed = 0;
+          self_paid = total_rounded;
+        }
+        return {
+          items,
+          unrounded_total: total_unrounded,
+          round_off,
+          total_amount: total_rounded,
+          reimbursed_amount: reimbursed,
+          self_paid_amount: self_paid
+        };
+      };
+
+      const getSingleBillHtml = (subBill, categoryTitle, invoiceNoForSubBill) => {
+        let printItemsHtml = '';
+        subBill.items.forEach((item, i) => {
+          let nameAndBatchHtml = `<div>${toTitleCase(item.name)}</div>`;
+          if (item.type === 'medicine') {
+            nameAndBatchHtml += `<div class="subtext">B - ${item.batch || '611104EC2'}, E - ${item.expiry || '02/31'}</div>`;
+          }
+
+          let rateQtyHtml = '';
+          if (item.type === 'medicine') {
+            rateQtyHtml = `<div>${(item.rate || 0).toFixed(2)}</div><div class="subtext">(${item.quantity || 1})</div>`;
+          } else {
+            rateQtyHtml = `<div>${(item.gross || 0).toFixed(2)}</div><div class="subtext">(1)</div>`;
+          }
+
+          let gstHtml = `<div>${(item.cgst || 0).toFixed(2)}</div><div>${(item.sgst || 0).toFixed(2)}</div>`;
+
+          printItemsHtml += `
+            <tr>
+              <td>${i + 1}</td>
+              <td style="text-align: left;">${nameAndBatchHtml}</td>
+              <td>${rateQtyHtml}</td>
+              <td>${item.discount || 0}</td>
+              <td>${(item.amount || 0).toFixed(2)}</td>
+              <td>${gstHtml}</td>
+              <td style="text-align: right; font-weight: bold;">${(item.item_total || 0).toFixed(2)}</td>
+            </tr>
+          `;
+        });
+
+        return `
+          <div class="receipt-section">
             <div style="display: flex; justify-content: space-between; font-size: 10px;">
               <div>D. L. # 4161-4162</div>
-              <div style="font-weight: bold; text-decoration: underline;">SALE BILL</div>
+              <div style="font-weight: bold; text-decoration: underline;">SALE BILL (${categoryTitle})</div>
               <div>GST # 08AACAB7763Q1Z2</div>
             </div>
             <div class="header-title">BITS Consumers Cooperative Stores Ltd.</div>
@@ -552,7 +560,7 @@ BITS Pilani
             <div class="divider"></div>
             <table class="meta-table">
               <tr>
-                <td style="width: 60%;"><strong>Bill # :</strong> ${invoiceNo}</td>
+                <td style="width: 60%;"><strong>Bill # :</strong> ${invoiceNoForSubBill}</td>
                 <td style="text-align: right;"><strong>Date :</strong> ${todayStr}</td>
               </tr>
               <tr>
@@ -584,12 +592,12 @@ BITS Pilani
                   <td style="text-align: left;">Total</td>
                   <td></td>
                   <td></td>
-                  <td>${bill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}</td>
+                  <td>${subBill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}</td>
                   <td>
-                    <div>${bill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</div>
-                    <div>${bill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</div>
+                    <div>${subBill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</div>
+                    <div>${subBill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</div>
                   </td>
-                  <td style="text-align: right;">${bill.unrounded_total.toFixed(2)}</td>
+                  <td style="text-align: right;">${subBill.unrounded_total.toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
@@ -597,23 +605,23 @@ BITS Pilani
             <table style="width: 100%; font-size: 11px; margin-top: 5px; border-collapse: collapse;">
               <tr>
                 <td>Round Off :</td>
-                <td style="text-align: right; font-weight: bold;">${bill.round_off.toFixed(2)}</td>
+                <td style="text-align: right; font-weight: bold;">${subBill.round_off.toFixed(2)}</td>
               </tr>
               <tr style="font-size: 12px; font-weight: bold;">
                 <td>Bill Total :</td>
-                <td style="text-align: right; border-bottom: 2px double #000; padding: 2px 0;">Rs. ${bill.total_amount.toFixed(2)}</td>
+                <td style="text-align: right; border-bottom: 2px double #000; padding: 2px 0;">Rs. ${subBill.total_amount.toFixed(2)}</td>
               </tr>
             </table>
 
-            <div class="amount-words">Total : Rs. ${numberToWords(bill.total_amount)} Only.</div>
+            <div class="amount-words">Total : Rs. ${numberToWords(subBill.total_amount)} Only.</div>
 
             <div class="split-box">
               ${isFaculty ? `
-                REIMBURSED: Rs. ${bill.reimbursed_amount.toFixed(2)} (90%)<br/>
-                SELF PAID (SALARY DEDUCTION): Rs. ${bill.self_paid_amount.toFixed(2)} (10%)
+                REIMBURSED: Rs. ${subBill.reimbursed_amount.toFixed(2)} (90%)<br/>
+                SELF PAID (SALARY DEDUCTION): Rs. ${subBill.self_paid_amount.toFixed(2)} (10%)
               ` : `
                 REIMBURSED: Rs. 0.00 (0%)<br/>
-                SELF PAID (UPI/CASH/CARD): Rs. ${bill.self_paid_amount.toFixed(2)} (100%)
+                SELF PAID (UPI/CASH/CARD): Rs. ${subBill.self_paid_amount.toFixed(2)} (100%)
               `}
             </div>
 
@@ -625,6 +633,58 @@ BITS Pilani
               <div>Checked By</div>
               <div>Authorised Signature</div>
             </div>
+          </div>
+        `;
+      };
+
+      let invMed = invoiceNo;
+      let invLab = invoiceNo;
+      if (invoiceNo.includes(',')) {
+        const parts = invoiceNo.split(',');
+        invMed = parts[0].trim();
+        invLab = parts[1].trim();
+      }
+
+      let bodyHtml = '';
+      if (medItems.length > 0 && labItems.length > 0) {
+        const medBill = getSubBillDetails(medItems);
+        const labBill = getSubBillDetails(labItems);
+        bodyHtml = `
+          ${getSingleBillHtml(medBill, "MEDICINES", invMed)}
+          <div class="page-break"></div>
+          ${getSingleBillHtml(labBill, "LAB TESTS", invLab)}
+        `;
+      } else {
+        bodyHtml = getSingleBillHtml(bill, medItems.length > 0 ? "MEDICINES" : "LAB TESTS", invoiceNo);
+      }
+
+      const html = `
+          <html>
+          <head>
+            <title>Sale Bill - BITS Cooperative</title>
+            <style>
+              body { font-family: monospace, Arial; margin: 0; padding: 5mm; color: #000; font-size: 11px; line-height: 1.2; }
+              .header-title { text-align: center; font-size: 13px; font-weight: bold; margin: 2px 0; }
+              .header-subtitle { text-align: center; font-size: 11px; margin-bottom: 5px; }
+              .meta-table { width: 100%; margin: 5px 0; font-size: 11px; }
+              .meta-table td { padding: 1px 0; vertical-align: top; }
+              .divider { border-top: 1px dashed #000; margin: 4px 0; }
+              table.items-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 5px; }
+              table.items-table th { border-bottom: 1px dashed #000; border-top: 1px dashed #000; padding: 4px 2px; font-weight: bold; text-align: center; }
+              table.items-table td { padding: 4px 2px; text-align: center; vertical-align: top; }
+              .subtext { font-size: 9px; color: #555; }
+              .totals-row td { border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-weight: bold; padding: 6px 2px; }
+              .amount-words { margin: 6px 0; font-weight: bold; text-transform: uppercase; }
+              .split-box { border: 1px solid #000; padding: 5px; margin: 6px 0; font-size: 10px; font-weight: bold; }
+              .footer-signature { display: flex; justify-content: space-between; margin-top: 30px; font-size: 10px; }
+              @page { size: A5 portrait; margin: 5mm; }
+              @media print {
+                .page-break { page-break-after: always; }
+              }
+            </style>
+          </head>
+          <body>
+            ${bodyHtml}
           </body>
           </html>
       `;
@@ -644,6 +704,13 @@ BITS Pilani
         duration: 3000,
         isClosable: true,
       });
+    }
+  };
+
+  const handlePrintAndEmailReceipt = () => {
+    handlePrintReceipt();
+    if (selectedPatient) {
+      handleEmailReceipt(selectedPatient, true);
     }
   };
 
@@ -674,135 +741,199 @@ BITS Pilani
     const city = 'Pilani';
     const doctorName = selectedPatient.doctor_name || selectedPatient.doctor_assigned || 'Dr. Assigned';
 
-    return (
-      <Box
-        p={4}
-        borderWidth="2px"
-        borderColor="gray.800"
-        borderStyle="double"
-        borderRadius="md"
-        bg="white"
-        color="black"
-        fontFamily="monospace"
-        fontSize="xs"
-        boxShadow="md"
-        maxH="600px"
-        overflowY="auto"
-      >
-        <Flex justify="space-between" fontSize="9px" fontWeight="bold" mb={1}>
-          <Text>D. L. # 4161-4162</Text>
-          <Text textDecoration="underline">SALE BILL</Text>
-          <Text>GST # 08AACAB7763Q1Z2</Text>
-        </Flex>
+    const medItems = bill.items.filter(item => item.type === 'medicine');
+    const labItems = bill.items.filter(item => item.type === 'lab_test');
 
-        <Box textAlign="center" mb={2}>
-          <Text fontWeight="bold" fontSize="sm">BITS Consumers Cooperative Stores Ltd.</Text>
-          <Text fontSize="9px">Pilani - 333031 (Rajasthan)</Text>
-        </Box>
+    const getSubBillDetails = (items) => {
+      const total_unrounded = items.reduce((sum, item) => sum + item.item_total, 0);
+      const total_rounded = Math.round(total_unrounded);
+      const round_off = total_rounded - total_unrounded;
 
-        <Divider borderColor="gray.400" mb={2} />
+      let reimbursed = 0;
+      let self_paid = 0;
+      if (isFaculty) {
+        reimbursed = parseFloat((total_unrounded * 0.90).toFixed(2));
+        self_paid = parseFloat((total_rounded - reimbursed).toFixed(2));
+      } else {
+        reimbursed = 0;
+        self_paid = total_rounded;
+      }
+      return {
+        items,
+        unrounded_total: total_unrounded,
+        round_off,
+        total_amount: total_rounded,
+        reimbursed_amount: reimbursed,
+        self_paid_amount: self_paid
+      };
+    };
 
-        <Grid templateColumns="1fr 1fr" gap={1} mb={2}>
-          <Text><strong>Invoice No:</strong> {invoiceNo}</Text>
-          <Text textAlign="right"><strong>Date :</strong> {todayStr}</Text>
-          <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
-            <strong>Name :</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}{relationSuffix}, City : {city}
-          </Text>
-          {isFacultyStaffOrDependent && (
+    const renderSingleReceipt = (subBill, categoryTitle, invoiceNoForSubBill) => {
+      return (
+        <Box
+          p={4}
+          borderWidth="2px"
+          borderColor="gray.800"
+          borderStyle="double"
+          borderRadius="md"
+          bg="white"
+          color="black"
+          fontFamily="monospace"
+          fontSize="xs"
+          boxShadow="md"
+          maxH="600px"
+          overflowY="auto"
+          w="100%"
+        >
+          <Flex justify="space-between" fontSize="9px" fontWeight="bold" mb={1}>
+            <Text>D. L. # 4161-4162</Text>
+            <Text textDecoration="underline">SALE BILL ({categoryTitle})</Text>
+            <Text>GST # 08AACAB7763Q1Z2</Text>
+          </Flex>
+
+          <Box textAlign="center" mb={2}>
+            <Text fontWeight="bold" fontSize="sm">BITS Consumers Cooperative Stores Ltd.</Text>
+            <Text fontSize="9px">Pilani - 333031 (Rajasthan)</Text>
+          </Box>
+
+          <Divider borderColor="gray.400" mb={2} />
+
+          <Grid templateColumns="1fr 1fr" gap={1} mb={2}>
+            <Text><strong>Invoice No:</strong> {invoiceNoForSubBill}</Text>
+            <Text textAlign="right"><strong>Date :</strong> {todayStr}</Text>
             <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
-              <strong>Cr :</strong> {selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - {selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''}
+              <strong>Name :</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}{relationSuffix}, City : {city}
             </Text>
-          )}
-          <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
-            <strong>Dr. :</strong> {toTitleCase(doctorName).toUpperCase()}
-          </Text>
-        </Grid>
+            {isFacultyStaffOrDependent && (
+              <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+                <strong>Cr :</strong> {selectedPatient.sponsor_name || selectedPatient.patient_name || selectedPatient.name || ''} - {selectedPatient.sponsor_psrn || selectedPatient.primary_psrn_id || selectedPatient.institute_id || ''}
+              </Text>
+            )}
+            <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
+              <strong>Dr. :</strong> {toTitleCase(doctorName).toUpperCase()}
+            </Text>
+          </Grid>
 
-        <Divider borderColor="gray.400" mb={1} />
+          <Divider borderColor="gray.400" mb={1} />
 
-        <Table variant="simple" size="sm" fontSize="10px" p={0}>
-          <Thead>
-            <Tr>
-              <Th p={1} color="black" fontSize="9px">SNo</Th>
-              <Th p={1} color="black" fontSize="9px" textAlign="left">Item</Th>
-              <Th p={1} color="black" fontSize="9px" textAlign="center">Rate/Qty</Th>
-              <Th p={1} color="black" fontSize="9px" textAlign="center">Dis</Th>
-              <Th p={1} color="black" fontSize="9px" textAlign="center">Amt</Th>
-              <Th p={1} color="black" fontSize="9px" textAlign="center">CGST/SGST</Th>
-              <Th p={1} color="black" fontSize="9px" textAlign="right">Total</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {bill.items.map((item, idx) => (
-              <Tr key={idx}>
-                <Td p={1}>{idx + 1}</Td>
-                <Td p={1} textAlign="left">
-                  <Text fontWeight="bold" fontSize="10px">{item.name}</Text>
-                  {item.type === 'medicine' && (
-                    <Text fontSize="8px" color="gray.600">B - {item.batch}, E - {item.expiry}</Text>
-                  )}
-                </Td>
-                <Td p={1} textAlign="center">
-                  <Text>{(item.rate || item.gross || 0).toFixed(2)}</Text>
-                  <Text fontSize="8px" color="gray.600">({item.quantity || 1})</Text>
-                </Td>
-                <Td p={1} textAlign="center">{item.discount || 0}%</Td>
-                <Td p={1} textAlign="center">{(item.amount || 0).toFixed(2)}</Td>
-                <Td p={1} textAlign="center">
-                  <Text>{(item.cgst || 0).toFixed(2)}</Text>
-                  <Text>{(item.sgst || 0).toFixed(2)}</Text>
-                </Td>
-                <Td p={1} textAlign="right" fontWeight="bold">{(item.item_total || 0).toFixed(2)}</Td>
+          <Table variant="simple" size="sm" fontSize="10px" p={0}>
+            <Thead>
+              <Tr>
+                <Th p={1} color="black" fontSize="9px">SNo</Th>
+                <Th p={1} color="black" fontSize="9px" textAlign="left">Item</Th>
+                <Th p={1} color="black" fontSize="9px" textAlign="center">Rate/Qty</Th>
+                <Th p={1} color="black" fontSize="9px" textAlign="center">Dis</Th>
+                <Th p={1} color="black" fontSize="9px" textAlign="center">Amt</Th>
+                <Th p={1} color="black" fontSize="9px" textAlign="center">CGST/SGST</Th>
+                <Th p={1} color="black" fontSize="9px" textAlign="right">Total</Th>
               </Tr>
-            ))}
+            </Thead>
+            <Tbody>
+              {subBill.items.map((item, idx) => (
+                <Tr key={idx}>
+                  <Td p={1}>{idx + 1}</Td>
+                  <Td p={1} textAlign="left">
+                    <Text fontWeight="bold" fontSize="10px">{item.name}</Text>
+                    {item.type === 'medicine' && (
+                      <Text fontSize="8px" color="gray.600">B - {item.batch}, E - {item.expiry}</Text>
+                    )}
+                  </Td>
+                  <Td p={1} textAlign="center">
+                    <Text>{(item.rate || item.gross || 0).toFixed(2)}</Text>
+                    <Text fontSize="8px" color="gray.600">({item.quantity || 1})</Text>
+                  </Td>
+                  <Td p={1} textAlign="center">{item.discount || 0}%</Td>
+                  <Td p={1} textAlign="center">{(item.amount || 0).toFixed(2)}</Td>
+                  <Td p={1} textAlign="center">
+                    <Text>{(item.cgst || 0).toFixed(2)}</Text>
+                    <Text>{(item.sgst || 0).toFixed(2)}</Text>
+                  </Td>
+                  <Td p={1} textAlign="right" fontWeight="bold">{(item.item_total || 0).toFixed(2)}</Td>
+                </Tr>
+              ))}
 
-            <Tr fontWeight="bold" borderTop="1px dashed black" borderBottom="1px dashed black">
-              <Td p={1}></Td>
-              <Td p={1} textAlign="left">Total</Td>
-              <Td p={1}></Td>
-              <Td p={1}></Td>
-              <Td p={1} textAlign="center">
-                {bill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
-              </Td>
-              <Td p={1} textAlign="center">
-                <Text>{bill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</Text>
-                <Text>{bill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</Text>
-              </Td>
-              <Td p={1} textAlign="right">{bill.unrounded_total.toFixed(2)}</Td>
-            </Tr>
-          </Tbody>
-        </Table>
+              <Tr fontWeight="bold" borderTop="1px dashed black" borderBottom="1px dashed black">
+                <Td p={1}></Td>
+                <Td p={1} textAlign="left">Total</Td>
+                <Td p={1}></Td>
+                <Td p={1}></Td>
+                <Td p={1} textAlign="center">
+                  {subBill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}
+                </Td>
+                <Td p={1} textAlign="center">
+                  <Text>{subBill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</Text>
+                  <Text>{subBill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</Text>
+                </Td>
+                <Td p={1} textAlign="right">{subBill.unrounded_total.toFixed(2)}</Td>
+              </Tr>
+            </Tbody>
+          </Table>
 
-        <Box mt={2} fontSize="11px">
-          <Flex justify="space-between">
-            <Text>Round Off :</Text>
-            <Text fontWeight="bold">{bill.round_off.toFixed(2)}</Text>
-          </Flex>
-          <Flex justify="space-between" fontSize="sm" fontWeight="bold" borderBottom="2px double black" pb={1} mt={1}>
-            <Text>Bill Total :</Text>
-            <Text>Rs. {bill.total_amount.toFixed(2)}</Text>
-          </Flex>
+          <Box mt={2} fontSize="11px">
+            <Flex justify="space-between">
+              <Text>Round Off :</Text>
+              <Text fontWeight="bold">{subBill.round_off.toFixed(2)}</Text>
+            </Flex>
+            <Flex justify="space-between" fontSize="sm" fontWeight="bold" borderBottom="2px double black" pb={1} mt={1}>
+              <Text>Bill Total :</Text>
+              <Text>Rs. {subBill.total_amount.toFixed(2)}</Text>
+            </Flex>
+          </Box>
+
+          <Text mt={2} fontWeight="bold" textTransform="uppercase" fontSize="10px">
+            Total : Rs. {numberToWords(subBill.total_amount)} Only.
+          </Text>
+
+          <Box mt={3} p={2} border="1px solid black" fontSize="9px" fontWeight="bold">
+            {isFaculty ? (
+              <Box>
+                <Text>REIMBURSED: Rs. {subBill.reimbursed_amount.toFixed(2)} (90%)</Text>
+                <Text>SELF PAID (SALARY DEDUCTION): Rs. {subBill.self_paid_amount.toFixed(2)} (10%)</Text>
+              </Box>
+            ) : (
+              <Box>
+                <Text>REIMBURSED: Rs. 0.00 (0%)</Text>
+                <Text>SELF PAID (UPI/CASH/CARD): Rs. {subBill.self_paid_amount.toFixed(2)} (100%)</Text>
+              </Box>
+            )}
+          </Box>
         </Box>
+      );
+    };
 
-        <Text mt={2} fontWeight="bold" textTransform="uppercase" fontSize="10px">
-          Total : Rs. {numberToWords(bill.total_amount)} Only.
-        </Text>
+    let invMed = invoiceNo;
+    let invLab = invoiceNo;
+    if (invoiceNo.includes(',')) {
+      const parts = invoiceNo.split(',');
+      invMed = parts[0].trim();
+      invLab = parts[1].trim();
+    }
 
-        <Box mt={3} p={2} border="1px solid black" fontSize="9px" fontWeight="bold">
-          {isFaculty ? (
-            <Box>
-              <Text>REIMBURSED: Rs. {bill.reimbursed_amount.toFixed(2)} (90%)</Text>
-              <Text>SELF PAID (SALARY DEDUCTION): Rs. {bill.self_paid_amount.toFixed(2)} (10%)</Text>
-            </Box>
-          ) : (
-            <Box>
-              <Text>REIMBURSED: Rs. 0.00 (0%)</Text>
-              <Text>SELF PAID (UPI/CASH/CARD): Rs. {bill.self_paid_amount.toFixed(2)} (100%)</Text>
-            </Box>
-          )}
-        </Box>
-      </Box>
-    );
+    if (medItems.length > 0 && labItems.length > 0) {
+      const medBill = getSubBillDetails(medItems);
+      const labBill = getSubBillDetails(labItems);
+      return (
+        <Flex direction={{ base: "column", xl: "row" }} gap={4} w="100%" align="stretch">
+          <Flex direction="column" flex="1" gap={2}>
+            <Heading size="xs" color="gray.700" textAlign="center" textTransform="uppercase">Medicine Bill Preview</Heading>
+            {renderSingleReceipt(medBill, "MEDICINES", invMed)}
+          </Flex>
+          <Flex direction="column" flex="1" gap={2}>
+            <Heading size="xs" color="gray.700" textAlign="center" textTransform="uppercase">Lab Test Bill Preview</Heading>
+            {renderSingleReceipt(labBill, "LAB TESTS", invLab)}
+          </Flex>
+        </Flex>
+      );
+    } else {
+      const category = medItems.length > 0 ? "MEDICINES" : "LAB TESTS";
+      const title = medItems.length > 0 ? "Medicine Bill Preview" : "Lab Test Bill Preview";
+      return (
+        <Flex direction="column" w="100%" gap={2}>
+          <Heading size="xs" color="gray.700" textAlign="center" textTransform="uppercase">{title}</Heading>
+          {renderSingleReceipt(bill, category, invoiceNo)}
+        </Flex>
+      );
+    }
   };
 
 
@@ -1027,7 +1158,7 @@ BITS Pilani
           size="5xl"
         >
           <ModalOverlay />
-          <ModalContent bg={modalBg} maxW="1100px" borderRadius="2xl" overflow="hidden">
+          <ModalContent bg={modalBg} maxW="1450px" borderRadius="2xl" overflow="hidden">
             {/* Modal Header with patient basic info */}
             <Box bg="blue.800" color="white" p={4}>
               {selectedPatient && (
@@ -1036,8 +1167,8 @@ BITS Pilani
                     {toTitleCase(selectedPatient.name || selectedPatient.patient_name || '')} (ID: {selectedPatient.institute_id})
                   </Heading>
                   <Text fontSize="sm">Patient Type: {selectedPatient.patient_type} • Age: {calculateAge(selectedPatient.age)}</Text>
-                  {selectedPatient.booked_at && (
-                    <Text fontSize="xs" mt={1}>Order Date: {formatDateTimeIST(selectedPatient.booked_at)}</Text>
+                  {(selectedPatient.consultation_completed_time || selectedPatient.booked_at) && (
+                    <Text fontSize="xs" mt={1}>Order Date: {formatDateTimeIST(selectedPatient.consultation_completed_time || selectedPatient.booked_at)}</Text>
                   )}
                 </Flex>
               )}
@@ -1045,7 +1176,7 @@ BITS Pilani
             <ModalCloseButton color="white" />
             {/* Panelled Modal Body */}
             <ModalBody p={6}>
-              <Grid templateColumns={{ base: "1fr", lg: "1.1fr 0.9fr" }} gap={6} alignItems="start">
+              <Grid templateColumns={{ base: "1fr", lg: "0.7fr 1.3fr" }} gap={6} alignItems="start">
                 {/* Left Column: Input and selection controls */}
                 <Box>
                   {paymentStatus === 'completed' ? (
@@ -1053,21 +1184,19 @@ BITS Pilani
                       <Icon as={FiPrinter} boxSize={16} color="green.500" mb={4} />
                       <Heading size="md" color="green.600" mb={2}>Payment Received</Heading>
                       <Text mb={4}>Invoice No: {selectedPatient?.invoice_no}</Text>
-                      <HStack spacing={4} mt={4}>
-                        <Button colorScheme="blue" onClick={handlePrintReceipt} leftIcon={<FiPrinter />} size="md" flex={1}>
-                          Print Receipt
-                        </Button>
+                      <Flex direction="column" gap={3} mt={4} w="100%">
                         <Button
-                          colorScheme="teal"
-                          onClick={() => handleEmailReceipt(selectedPatient)}
-                          leftIcon={<FiMail />}
+                          colorScheme="blue"
+                          onClick={handlePrintAndEmailReceipt}
+                          leftIcon={<FiPrinter />}
                           size="md"
-                          flex={1}
+                          w="100%"
                           isLoading={emailLoadingId === selectedPatient?.visit_id}
+                          loadingText="Sending Email..."
                         >
-                          Email Receipt
+                          Print & Email Receipt
                         </Button>
-                      </HStack>
+                      </Flex>
                     </Box>
                   ) : (
                     <Box>
@@ -1164,7 +1293,7 @@ BITS Pilani
 
                 {/* Right Column: Live receipt preview */}
                 <Box>
-                  <Heading size="xs" color="gray.600" mb={3} textTransform="uppercase">Invoice Receipt Preview</Heading>
+                  <Heading size="xs" color="gray.600" mb={3} textTransform="uppercase" textAlign="center">Invoice Receipt Preview</Heading>
                   <ReceiptPreview />
                 </Box>
               </Grid>

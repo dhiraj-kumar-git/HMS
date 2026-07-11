@@ -92,10 +92,10 @@ describe('EMRForm Component', () => {
     );
 
     // Add medication
-    const drugInput = screen.getByPlaceholderText(/Select or type\.\.\./i);
+    const drugInput = screen.getAllByPlaceholderText(/Select or type\.\.\./i)[0];
     fireEvent.change(drugInput, { target: { value: 'Paracetamol 500mg' } });
     
-    const doseInput = screen.getByPlaceholderText(/500mg/i);
+    const doseInput = screen.getByLabelText(/Dose/i);
     fireEvent.change(doseInput, { target: { value: '1 tablet' } });
 
     const addButton = screen.getByText(/Add Medication/i);
@@ -109,8 +109,8 @@ describe('EMRForm Component', () => {
     expect(screen.getByText(/Paracetamol 500mg/i)).toBeInTheDocument();
 
     // Remove medication
-    const removeButton = screen.getByRole('button', { name: /Remove/i });
-    fireEvent.click(removeButton);
+    const removeBtn = screen.getByRole('button', { name: /Remove/i });
+    fireEvent.click(removeBtn);
 
     act(() => {
       jest.advanceTimersByTime(250);
@@ -131,7 +131,7 @@ describe('EMRForm Component', () => {
     );
 
     // Add Investigation
-    const testInput = screen.getByPlaceholderText(/Select or type test\.\.\./i);
+    const testInput = screen.getAllByPlaceholderText(/Select or type\.\.\./i)[1];
     fireEvent.change(testInput, { target: { value: 'Complete Blood Count' } });
 
     const addButton = screen.getByText(/Add Test/i);

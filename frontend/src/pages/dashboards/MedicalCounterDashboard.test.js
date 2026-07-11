@@ -41,6 +41,11 @@ describe('MedicalCounterDashboard Component', () => {
           ]
         });
       }
+      if (url.includes('/get_patient/')) {
+        return Promise.resolve({
+          data: { email: 'john@example.com', name: 'John Doe' }
+        });
+      }
       return Promise.resolve({ data: [] });
     });
   });
@@ -190,9 +195,9 @@ describe('MedicalCounterDashboard Component', () => {
     const confirmBtn = screen.getByText('Confirm Payment & Mark as Paid');
     fireEvent.click(confirmBtn);
 
-    await screen.findByText('Print Receipt');
+    await screen.findByText('Print & Email Receipt');
 
-    const printBtn = screen.getByText('Print Receipt');
+    const printBtn = screen.getByText('Print & Email Receipt');
     fireEvent.click(printBtn);
 
     expect(window.open).toHaveBeenCalled();
@@ -279,5 +284,16 @@ describe('MedicalCounterDashboard Component', () => {
       expect(screen.getByText('John Doe')).toBeInTheDocument();
       expect(screen.getByText('25 yrs • Male')).toBeInTheDocument();
     });
+  });
+
+  it('renders separate bills for medicines and lab tests in preview', async () => {
+    renderDashboard();
+    await screen.findByText('John Doe');
+    fireEvent.click(screen.getByText('John Doe'));
+
+    await screen.findByText('Confirm Payment & Mark as Paid');
+
+    expect(screen.getByText(/SALE BILL \(MEDICINES\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/SALE BILL \(LAB TESTS\)/i)).toBeInTheDocument();
   });
 });

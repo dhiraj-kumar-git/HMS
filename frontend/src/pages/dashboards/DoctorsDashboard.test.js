@@ -238,7 +238,7 @@ describe('DoctorsDashboard Component', () => {
     // Add Medication
     const drugInput = screen.getAllByPlaceholderText(/Select or type/i)[0];
     fireEvent.change(drugInput, { target: { value: 'Paracetamol' } });
-    const doseInput = screen.getByPlaceholderText(/500mg/i);
+    const doseInput = screen.getByLabelText(/Dose/i);
     fireEvent.change(doseInput, { target: { value: '650mg' } });
 
     const addMedicationBtn = screen.getByRole('button', { name: /Add Medication/i });
@@ -248,7 +248,7 @@ describe('DoctorsDashboard Component', () => {
     expect(screen.getByText(/650mg/i)).toBeInTheDocument();
 
     // Add Advice
-    const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
+    const adviceInput = screen.getByLabelText(/Advice \/ General Instructions/i);
     fireEvent.change(adviceInput, { target: { value: 'Rest for 2 days' } });
 
     expect(adviceInput.value).toBe('Rest for 2 days');
@@ -330,7 +330,7 @@ describe('DoctorsDashboard Component', () => {
     await screen.findByText('John Doe (ID: 101)');
 
     // Type in advice
-    const adviceInput = screen.getByPlaceholderText(/Rest, drink plenty of fluids/i);
+    const adviceInput = screen.getByLabelText(/Advice \/ General Instructions/i);
     fireEvent.change(adviceInput, { target: { value: 'Unsaved advice' } });
 
     // Click Close
