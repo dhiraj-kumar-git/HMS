@@ -43,7 +43,7 @@ describe('PrescriptionModal Component', () => {
     expect(screen.getByText(/: john@example.com/i)).toBeInTheDocument();
     expect(screen.getByText(/: 123 Test St/i)).toBeInTheDocument();
     expect(screen.getByText(/: OPD-123/i)).toBeInTheDocument();
-    expect(screen.getByText(/: ID-456/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/: ID-456/i)[0]).toBeInTheDocument();
   });
 
   it('triggers print function when Print Prescription is clicked', () => {

@@ -19,9 +19,10 @@ import {
   FormLabel,
   VStack,
   Heading,
-  Button
+  Button,
+  IconButton
 } from '@chakra-ui/react';
-import { FiRefreshCw } from 'react-icons/fi';
+import { FiRefreshCw, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { getDateISTString, toTitleCase } from '../../utils/utils';
@@ -30,6 +31,7 @@ import PrescriptionModal from '../../components/PrescriptionModal';
 export default function ReceptionistHistory() {
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Get today's date formatted as YYYY-MM-DD in IST
   const today = getDateISTString();
@@ -73,6 +75,10 @@ export default function ReceptionistHistory() {
     fetchQueue();
   }, [startDate, endDate, statusFilter]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, statusFilter]);
+
   const getStatusBadgeColor = (status) => {
     switch (status) {
       case 'booked': return 'yellow';
@@ -84,6 +90,10 @@ export default function ReceptionistHistory() {
       default: return 'gray';
     }
   };
+
+  const ITEMS_PER_PAGE = 10;
+  const paginatedQueue = queue.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(queue.length / ITEMS_PER_PAGE);
 
   return (
     <Box p={{ base: "4", md: "6" }} flex="1" overflowY="auto">
@@ -179,7 +189,7 @@ export default function ReceptionistHistory() {
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {queue.map((appointment) => (
+                    {paginatedQueue.map((appointment) => (
                       <Tr
                         key={appointment.visit_id}
                         onClick={() => {
@@ -219,6 +229,32 @@ export default function ReceptionistHistory() {
                     ))}
                   </Tbody>
                 </Table>
+                {totalPages > 1 && (
+                  <Flex justify="space-between" align="center" mt={4}>
+                    <Text fontSize="sm" color="gray.500">
+                      Showing {paginatedQueue.length} of {queue.length} entries
+                    </Text>
+                    <HStack>
+                      <IconButton
+                        icon={<FiChevronLeft />}
+                        size="sm"
+                        isDisabled={currentPage === 1}
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        aria-label="Previous Page"
+                      />
+                      <Text fontSize="sm">
+                        Page {currentPage} of {totalPages}
+                      </Text>
+                      <IconButton
+                        icon={<FiChevronRight />}
+                        size="sm"
+                        isDisabled={currentPage * ITEMS_PER_PAGE >= queue.length}
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        aria-label="Next Page"
+                      />
+                    </HStack>
+                  </Flex>
+                )}
               </Box>
             )}</Box>
         </VStack>

@@ -25,9 +25,10 @@ import {
   ModalHeader,
   ModalFooter,
   ModalBody,
-  ModalCloseButton
+  ModalCloseButton,
+  IconButton
 } from '@chakra-ui/react';
-import { FiRefreshCw } from 'react-icons/fi';
+import { FiRefreshCw, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import { getDateISTString, toTitleCase } from '../../utils/utils';
@@ -36,6 +37,8 @@ import PrescriptionModal from '../../components/PrescriptionModal';
 export default function ReceptionistQueue() {
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [bookedPage, setBookedPage] = useState(1);
+  const [confirmedPage, setConfirmedPage] = useState(1);
 
   // Get today's date formatted as YYYY-MM-DD in IST
   const today = getDateISTString();
@@ -80,6 +83,11 @@ export default function ReceptionistQueue() {
 
   useEffect(() => {
     fetchQueue();
+  }, [startDate, endDate, statusFilter]);
+
+  useEffect(() => {
+    setBookedPage(1);
+    setConfirmedPage(1);
   }, [startDate, endDate, statusFilter]);
 
   const handleStatusChange = async (visitId, status) => {
@@ -129,8 +137,13 @@ export default function ReceptionistQueue() {
     }
   };
 
-  const renderTable = (title, data) => {
+  const renderTable = (title, data, currentPage = 1, setPage = () => {}, isPaginated = false) => {
     if (data.length === 0 && title !== "Booked Appointments" && title !== "Confirmed Appointments") return null;
+    const itemsPerPage = 5;
+    const paginatedData = isPaginated
+      ? data.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+      : data;
+
     return (
       <Box mb={6}>
         {title && <Text fontSize="md" fontWeight="bold" mb={2} color="gray.700">{title}</Text>}
@@ -138,68 +151,96 @@ export default function ReceptionistQueue() {
           {data.length === 0 ? (
             <Text color="gray.500" fontStyle="italic">No {title.toLowerCase()} found.</Text>
           ) : (
-            <Table variant="simple" size="sm" sx={{ tableLayout: 'fixed' }}>
-              <Thead>
-                <Tr>
-                  <Th w="15%">Date & Time</Th>
-                  <Th w="25%">Patient Info</Th>
-                  <Th w="15%">Institute ID</Th>
-                  <Th w="15%">Doctor</Th>
-                  <Th w="10%" textAlign="center">Status</Th>
-                  <Th w="20%" textAlign="center">Actions</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {data.map((appointment) => (
-                  <Tr key={appointment.visit_id}>
-                    <Td fontWeight="bold">
-                      {new Date(appointment.time).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
-                    </Td>
-                    <Td>
-                      <Flex align="center" justify="flex-start">
-                        <Box textAlign="left">
-                          <Text fontWeight="bold">{toTitleCase(appointment.name)}</Text>
-                          {appointment.age && appointment.gender ? (
-                            <Text fontSize="sm" color="gray.500">{appointment.age} yrs • {appointment.gender}</Text>
-                          ) : (
-                            <Text fontSize="sm" color="gray.500">Info not available</Text>
-                          )}
-                        </Box>
-                      </Flex>
-                    </Td>
-                    <Td>{appointment.institute_id}</Td>
-                    <Td>{appointment.doctor_name || appointment.doctor_username}</Td>
-                    <Td textAlign="center">
-                      <Badge colorScheme={getStatusBadgeColor(appointment.status)}>
-                        {appointment.status.replace('_', ' ').toUpperCase()}
-                      </Badge>
-                    </Td>
-                    <Td textAlign="center">
-                      <HStack spacing={2} justify="center">
-                        {appointment.status === 'booked' && (
-                          <Button size="xs" colorScheme="blue" onClick={() => handleStatusChange(appointment.visit_id, 'confirmed')}>
-                            Confirm
-                          </Button>
-                        )}
-                        {appointment.status === 'confirmed' && (
-                          <Button size="xs" colorScheme="green" onClick={() => handleStatusChange(appointment.visit_id, 'checked_in')}>
-                            Check-In
-                          </Button>
-                        )}
-                        {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
-                          <Button size="xs" colorScheme="orange" onClick={() => {
-                            setSelectedVisitIdForNoShow(appointment.visit_id);
-                            setIsNoShowModalOpen(true);
-                          }}>
-                            No Show
-                          </Button>
-                        )}
-                      </HStack>
-                    </Td>
+            <>
+              <Table variant="simple" size="sm" sx={{ tableLayout: 'fixed' }}>
+                <Thead>
+                  <Tr>
+                    <Th w="15%">Date & Time</Th>
+                    <Th w="25%">Patient Info</Th>
+                    <Th w="15%">Institute ID</Th>
+                    <Th w="15%">Doctor</Th>
+                    <Th w="10%" textAlign="center">Status</Th>
+                    <Th w="20%" textAlign="center">Actions</Th>
                   </Tr>
-                ))}
-              </Tbody>
-            </Table>
+                </Thead>
+                <Tbody>
+                  {paginatedData.map((appointment) => (
+                    <Tr key={appointment.visit_id}>
+                      <Td fontWeight="bold">
+                        {new Date(appointment.time).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                      </Td>
+                      <Td>
+                        <Flex align="center" justify="flex-start">
+                          <Box textAlign="left">
+                            <Text fontWeight="bold">{toTitleCase(appointment.name)}</Text>
+                            {appointment.age && appointment.gender ? (
+                              <Text fontSize="sm" color="gray.500">{appointment.age} yrs • {appointment.gender}</Text>
+                            ) : (
+                              <Text fontSize="sm" color="gray.500">Info not available</Text>
+                            )}
+                          </Box>
+                        </Flex>
+                      </Td>
+                      <Td>{appointment.institute_id}</Td>
+                      <Td>{appointment.doctor_name || appointment.doctor_username}</Td>
+                      <Td textAlign="center">
+                        <Badge colorScheme={getStatusBadgeColor(appointment.status)}>
+                          {appointment.status.replace('_', ' ').toUpperCase()}
+                        </Badge>
+                      </Td>
+                      <Td textAlign="center">
+                        <HStack spacing={2} justify="center">
+                          {appointment.status === 'booked' && (
+                            <Button size="xs" colorScheme="blue" onClick={() => handleStatusChange(appointment.visit_id, 'confirmed')}>
+                              Confirm
+                            </Button>
+                          )}
+                          {appointment.status === 'confirmed' && (
+                            <Button size="xs" colorScheme="green" onClick={() => handleStatusChange(appointment.visit_id, 'checked_in')}>
+                              Check-In
+                            </Button>
+                          )}
+                          {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
+                            <Button size="xs" colorScheme="orange" onClick={() => {
+                              setSelectedVisitIdForNoShow(appointment.visit_id);
+                              setIsNoShowModalOpen(true);
+                            }}>
+                              No Show
+                            </Button>
+                          )}
+                        </HStack>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+              {isPaginated && data.length > itemsPerPage && (
+                <Flex justify="space-between" align="center" mt={4}>
+                  <Text fontSize="sm" color="gray.500">
+                    Showing {paginatedData.length} of {data.length} entries
+                  </Text>
+                  <HStack>
+                    <IconButton
+                      icon={<FiChevronLeft />}
+                      size="sm"
+                      isDisabled={currentPage === 1}
+                      onClick={() => setPage(currentPage - 1)}
+                      aria-label="Previous Page"
+                    />
+                    <Text fontSize="sm">
+                      Page {currentPage} of {Math.ceil(data.length / itemsPerPage)}
+                    </Text>
+                    <IconButton
+                      icon={<FiChevronRight />}
+                      size="sm"
+                      isDisabled={currentPage * itemsPerPage >= data.length}
+                      onClick={() => setPage(currentPage + 1)}
+                      aria-label="Next Page"
+                    />
+                  </HStack>
+                </Flex>
+              )}
+            </>
           )}
         </Box>
       </Box>
@@ -286,8 +327,8 @@ export default function ReceptionistQueue() {
           </Flex>
         ) : (
           <Box>
-            {renderTable("Booked Appointments", queue.filter(a => a.status === 'booked'))}
-            {renderTable("Confirmed Appointments", queue.filter(a => a.status === 'confirmed'))}
+            {renderTable("Booked Appointments", queue.filter(a => a.status === 'booked'), bookedPage, setBookedPage, true)}
+            {renderTable("Confirmed Appointments", queue.filter(a => a.status === 'confirmed'), confirmedPage, setConfirmedPage, true)}
             {renderTable(
               (statusFilter !== 'booked' && statusFilter !== 'confirmed' && statusFilter !== 'active') ? "Other Appointments" : "",
               queue.filter(a => a.status !== 'booked' && a.status !== 'confirmed')
