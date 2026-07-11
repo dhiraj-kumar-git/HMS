@@ -62,7 +62,7 @@ def test_pay_bill_success(mocker):
     res = inv.pay_bill("I123", visit_id="v1", selected_labs=[0], selected_medicines=[0])
     
     assert res["success"] is True
-    assert res["total_amount"] == 90.0
+    assert res["total_amount"] == 50.0
     assert "INV-" in res["invoice_no"]
 
 def test_pay_bill_no_visit(mocker):

@@ -125,13 +125,29 @@ const getOPDNumber = (visitId, dateStr) => {
   return `${dateStr}${paddedSerial}`;
 };
 
-const formatDateDMY = (dateObj) => {
+
+
+const formatDateTimeDMY = (dateObj) => {
+  if (!dateObj) return '';
   const d = new Date(dateObj);
-  const day = String(d.getDate()).padStart(2, '0');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[d.getMonth()];
-  const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
+  if (isNaN(d.getTime())) return '';
+  
+  const formatter = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  
+  const parts = formatter.formatToParts(d);
+  const partMap = {};
+  parts.forEach(p => partMap[p.type] = p.value);
+  
+  return `${partMap.day}-${partMap.month}-${partMap.year} ${partMap.hour}:${partMap.minute}:${partMap.second}`;
 };
 
 function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
@@ -282,8 +298,9 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
   const dd = String(todayObj.getDate()).padStart(2, '0');
   const dateYYYYMMDD = `${yyyy}${mm}${dd}`;
 
-  const opdNo = prescriptionData?.opdNumber || getOPDNumber(prescriptionData?.visit_id, dateYYYYMMDD);
-  const formattedToday = formatDateDMY(todayObj);
+  const opdNo = prescriptionData?.opd_no || prescriptionData?.opdNumber || getOPDNumber(prescriptionData?.visit_id, dateYYYYMMDD);
+  const uhidNo = prescriptionData?.uhid_no || prescriptionData?.institute_id || '';
+  const formattedToday = formatDateTimeDMY(prescriptionData?.time || todayObj);
 
   return (
     <>
@@ -397,7 +414,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
                 </Flex>
                 <Flex mb={2} align="center">
                   <Text width="110px" fontWeight="bold">UHID No</Text>
-                  <Text flex="1" className="monospace-text">: {prescriptionData?.institute_id || ''}</Text>
+                  <Text flex="1" className="monospace-text">: {uhidNo}</Text>
                 </Flex>
                 <Flex mb={2} align="center">
                   <Text width="110px" fontWeight="bold">Date</Text>
@@ -430,7 +447,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
           {/* Barcode Section */}
           <Flex px={6} py={4} justify="space-between" align="center" borderBottom="1px solid black">
             <Box width="30%" textAlign="center">
-              <Code39Barcode value={prescriptionData?.institute_id} />
+              <Code39Barcode value={uhidNo} />
               <Text fontSize="11px" fontWeight="bold" mt={1} className="monospace-text">UHIDNo.</Text>
             </Box>
             <Box width="30%" textAlign="center">
