@@ -732,7 +732,6 @@ export default function DoctorsDashboard() {
                     </Td>
                     <Td>
                       <Flex align="center" justify="flex-start">
-                        <Avatar size="sm" name={toTitleCase(p.name)} mr="3" />
                         <Box textAlign="left">
                           <Text fontWeight="bold">{toTitleCase(p.name)}</Text>
                           {p.age && p.gender ? (
@@ -859,12 +858,18 @@ export default function DoctorsDashboard() {
       <Box
         as="main"
         flex="1"
-        px="2"
-        py="6"
-        mx="8"
-        maxW="1200px"
         overflowY="auto"
+        p={{ base: 4, md: 6 }}
       >
+        <Box
+          w="full"
+          maxW="1200px"
+          mx="auto"
+          bg="white"
+          boxShadow="md"
+          borderRadius="lg"
+          p={{ base: 4, md: 6 }}
+        >
         {/* Top layout removed for optimized real estate */}
 
         {/* Upcoming Patients + Refresh */}
@@ -891,10 +896,7 @@ export default function DoctorsDashboard() {
           justifyContent="space-between"
           mb={4}
           gap={4}
-          bg="white"
-          p={4}
-          borderRadius="lg"
-          boxShadow="sm"
+          p={0}
         >
           <Flex flex="1" align="center" gap={4} flexWrap="wrap">
             <Text fontSize="sm" fontWeight="medium" color="gray.600" minW="50px">
@@ -958,7 +960,7 @@ export default function DoctorsDashboard() {
         </Box>
 
         {/* Upcoming Patients List */}
-        <Box flex="1" bg="white" p={4} borderRadius="lg" boxShadow="sm" overflowY="auto" position="relative" pb="12" mb="6">
+        <Box flex="1" overflowY="auto" position="relative" pb="12" mb="6">
           {listLoading ? (
             <Flex
               position="absolute"
@@ -1000,6 +1002,7 @@ export default function DoctorsDashboard() {
               )}
             </>
           )}
+        </Box>
         </Box>
       </Box>
 

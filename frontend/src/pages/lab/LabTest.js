@@ -29,6 +29,11 @@ import {
   Th,
   Td,
   Input,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
 } from "@chakra-ui/react";
 import {
   FiBell,
@@ -37,6 +42,8 @@ import {
   FiLogOut,
   FiCopy,
   FiRefreshCw,
+  FiChevronLeft,
+  FiChevronRight,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -54,6 +61,13 @@ export default function LabTestDashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [confirmedPage, setConfirmedPage] = useState(1);
+  const [upcomingPage, setUpcomingPage] = useState(1);
+
+  useEffect(() => {
+    setConfirmedPage(1);
+    setUpcomingPage(1);
+  }, [searchQuery, startDate, endDate]);
 
   const filterAndSort = (list) => {
     if (!list) return [];
@@ -347,6 +361,14 @@ export default function LabTestDashboard() {
 
 
 
+  const ITEMS_PER_PAGE = 5;
+
+  const filteredConfirmed = filterAndSort(patients.confirmed);
+  const filteredUpcoming = filterAndSort(patients.upcoming);
+
+  const paginatedConfirmed = filteredConfirmed.slice((confirmedPage - 1) * ITEMS_PER_PAGE, confirmedPage * ITEMS_PER_PAGE);
+  const paginatedUpcoming = filteredUpcoming.slice((upcomingPage - 1) * ITEMS_PER_PAGE, upcomingPage * ITEMS_PER_PAGE);
+
   return (
     <Flex direction="column" h="100vh" bg="gray.50" overflow="hidden">
       {/* HEADER */}
@@ -400,19 +422,20 @@ export default function LabTestDashboard() {
       <Box
         as="main"
         flex="1"
-        px="8"
-        py="6"
-        mx="8"
-        maxW="1200px"
-        overflow="hidden"
         overflowY="auto"
+        p={{ base: 4, md: 6 }}
       >
-        {/* Filter Toolbar */}
-        <Flex
+        <Box
+          w="full"
+          maxW="1200px"
+          mx="auto"
           bg="white"
-          p="4"
-          borderRadius="xl"
-          boxShadow="sm"
+          boxShadow="md"
+          borderRadius="lg"
+          p={{ base: 4, md: 6 }}
+        >
+          {/* Filter Toolbar */}
+        <Flex
           mb="6"
           align="center"
           gap="4"
@@ -466,7 +489,7 @@ export default function LabTestDashboard() {
             fontSize="xs"
             fontWeight="bold"
           >
-            Pending Lab Orders: {filterAndSort(patients.confirmed).length}
+            Pending Lab Orders: {filteredConfirmed.length}
           </Box>
 
           <Button
@@ -492,177 +515,241 @@ export default function LabTestDashboard() {
           <>
             {/* Confirmed Lab Test Orders Table */}
             <Heading as="h3" size="md" color="gray.800" mb="4">
-              Confirmed Lab Test Orders ({filterAndSort(patients.confirmed).length})
+              Confirmed Lab Test Orders ({filteredConfirmed.length})
             </Heading>
-            <Box bg="white" borderRadius="xl" boxShadow="sm" p="4" mb="8" overflowX="auto">
-              {filterAndSort(patients.confirmed).length === 0 ? (
+            <Box mb="8" overflowX="auto">
+              {filteredConfirmed.length === 0 ? (
                 <Flex h="100px" align="center" justify="center">
                   <Text color="gray.500" fontSize="sm">
                     No confirmed lab orders found.
                   </Text>
                 </Flex>
               ) : (
-                <Table variant="simple" size="sm">
-                  <Thead bg="gray.50">
-                    <Tr>
-                      <Th w="20%">Institute ID</Th>
-                      <Th w="35%">Patient Details</Th>
-                      <Th w="25%" textAlign="center">Lab Test Order Time</Th>
-                      <Th w="20%" textAlign="center">Actions</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filterAndSort(patients.confirmed).map((p, idx) => (
-                      <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                        <Td>
-                          <Flex align="center">
-                            <Text fontSize="sm" fontWeight="medium" color="gray.800">
-                              {p.institute_id}
-                            </Text>
-                            <IconButton
-                              aria-label="Copy ID"
-                              icon={<FiCopy size={12} />}
-                              size="xs"
-                              ml="2"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(p.institute_id);
-                                toast({
-                                  title: "Copied!",
-                                  status: "success",
-                                  duration: 1000,
-                                });
-                              }}
-                            />
-                          </Flex>
-                        </Td>
-                        <Td>
-                          <Flex align="center">
-                            <Avatar size="sm" name={toTitleCase(p.name)} mr="3" />
-                            <Box>
-                              <Text fontWeight="bold" fontSize="sm">
-                                {toTitleCase(p.name)}
-                              </Text>
-                              <Text fontSize="xs" color="gray.500">
-                                {p.age} yrs • {p.gender}
-                              </Text>
-                            </Box>
-                          </Flex>
-                        </Td>
-                        <Td textAlign="center">
-                          <Text fontSize="sm" color="gray.600">
-                            {p.consultation_completed_time
-                              ? formatDateTimeIST(p.consultation_completed_time)
-                              : p.visitingTime
-                                ? formatDateTimeIST(p.visitingTime)
-                                : "TBD"}
-                          </Text>
-                        </Td>
-                        <Td textAlign="center">
-                          <Button
-                            colorScheme="blue"
-                            size="sm"
-                            borderRadius="full"
-                            onClick={() => openPatientModal(p)}
-                          >
-                            View Lab Order
-                          </Button>
-                        </Td>
+                <>
+                  <Table variant="simple" size="sm">
+                    <Thead bg="gray.50">
+                      <Tr>
+                        <Th w="20%">Institute ID</Th>
+                        <Th w="35%">Patient Details</Th>
+                        <Th w="25%" textAlign="center">Lab Test Order Time</Th>
+                        <Th w="20%" textAlign="center">Actions</Th>
                       </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
+                    </Thead>
+                    <Tbody>
+                      {paginatedConfirmed.map((p, idx) => (
+                        <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                          <Td>
+                            <Flex align="center">
+                              <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                                {p.institute_id}
+                              </Text>
+                              <IconButton
+                                aria-label="Copy ID"
+                                icon={<FiCopy size={12} />}
+                                size="xs"
+                                ml="2"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(p.institute_id);
+                                  toast({
+                                    title: "Copied!",
+                                    status: "success",
+                                    duration: 1000,
+                                  });
+                                }}
+                              />
+                            </Flex>
+                          </Td>
+                          <Td>
+                            <Flex align="center">
+                              <Box>
+                                <Text fontWeight="bold" fontSize="sm">
+                                  {toTitleCase(p.name)}
+                                </Text>
+                                <Text fontSize="xs" color="gray.500">
+                                  {p.age} yrs • {p.gender}
+                                </Text>
+                              </Box>
+                            </Flex>
+                          </Td>
+                          <Td textAlign="center">
+                            <Text fontSize="sm" color="gray.600">
+                              {p.consultation_completed_time
+                                ? formatDateTimeIST(p.consultation_completed_time)
+                                : p.visitingTime
+                                  ? formatDateTimeIST(p.visitingTime)
+                                  : "TBD"}
+                            </Text>
+                          </Td>
+                          <Td textAlign="center">
+                            <Button
+                              colorScheme="blue"
+                              size="sm"
+                              borderRadius="full"
+                              onClick={() => openPatientModal(p)}
+                            >
+                              View Lab Order
+                            </Button>
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                  <Flex justify="space-between" mt={4} align="center">
+                    <Text fontSize="sm" color="gray.500">
+                      Showing {paginatedConfirmed.length} of {filteredConfirmed.length} orders
+                    </Text>
+                    <HStack>
+                      <IconButton
+                        icon={<FiChevronLeft />}
+                        size="sm"
+                        isDisabled={confirmedPage === 1}
+                        onClick={() => setConfirmedPage(confirmedPage - 1)}
+                        aria-label="Previous Page"
+                      />
+                      <Text fontSize="sm">Page {confirmedPage} of {Math.ceil(filteredConfirmed.length / ITEMS_PER_PAGE) || 1}</Text>
+                      <IconButton
+                        icon={<FiChevronRight />}
+                        size="sm"
+                        isDisabled={confirmedPage * ITEMS_PER_PAGE >= filteredConfirmed.length}
+                        onClick={() => setConfirmedPage(confirmedPage + 1)}
+                        aria-label="Next Page"
+                      />
+                    </HStack>
+                  </Flex>
+                </>
               )}
             </Box>
 
-            {/* Upcoming Lab Test Orders Table */}
-            <Heading as="h3" size="md" color="gray.800" mb="4">
-              Upcoming Lab Test Orders ({filterAndSort(patients.upcoming).length})
-            </Heading>
-            <Box bg="white" borderRadius="xl" boxShadow="sm" p="4" mb="8" overflowX="auto">
-              {filterAndSort(patients.upcoming).length === 0 ? (
-                <Flex h="100px" align="center" justify="center">
-                  <Text color="gray.500" fontSize="sm">
-                    No upcoming lab orders found.
-                  </Text>
-                </Flex>
-              ) : (
-                <Table variant="simple" size="sm">
-                  <Thead bg="gray.50">
-                    <Tr>
-                      <Th w="20%">Institute ID</Th>
-                      <Th w="35%">Patient Details</Th>
-                      <Th w="25%" textAlign="center">Lab Test Order Time</Th>
-                      <Th w="20%" textAlign="center">Actions</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {filterAndSort(patients.upcoming).map((p, idx) => (
-                      <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                        <Td>
-                          <Flex align="center">
-                            <Text fontSize="sm" fontWeight="medium" color="gray.800">
-                              {p.institute_id}
-                            </Text>
-                            <IconButton
-                              aria-label="Copy ID"
-                              icon={<FiCopy size={12} />}
-                              size="xs"
-                              ml="2"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(p.institute_id);
-                                toast({
-                                  title: "Copied!",
-                                  status: "success",
-                                  duration: 1000,
-                                });
-                              }}
-                            />
-                          </Flex>
-                        </Td>
-                        <Td>
-                          <Flex align="center">
-                            <Avatar size="sm" name={toTitleCase(p.name)} mr="3" />
-                            <Box>
-                              <Text fontWeight="bold" fontSize="sm">
-                                {toTitleCase(p.name)}
-                              </Text>
-                              <Text fontSize="xs" color="gray.500">
-                                {p.age} yrs • {p.gender}
-                              </Text>
-                            </Box>
-                          </Flex>
-                        </Td>
-                        <Td textAlign="center">
-                          <Text fontSize="sm" color="gray.600">
-                            {p.consultation_completed_time
-                              ? formatDateTimeIST(p.consultation_completed_time)
-                              : p.visitingTime
-                                ? formatDateTimeIST(p.visitingTime)
-                                : "TBD"}
+            {/* Upcoming Lab Test Orders Table Accordion */}
+            <Accordion allowToggle defaultIndex={[]} mb="8">
+              <AccordionItem border="none">
+                <h2>
+                  <AccordionButton
+                    p={0}
+                    _hover={{ bg: "transparent" }}
+                    _focus={{ boxShadow: "none" }}
+                  >
+                    <Box flex="1" textAlign="left">
+                      <Heading as="h3" size="md" color="gray.800" mb="4" display="flex" alignItems="center">
+                        Upcoming Lab Test Orders ({filteredUpcoming.length})
+                        <AccordionIcon ml={2} />
+                      </Heading>
+                    </Box>
+                  </AccordionButton>
+                </h2>
+                <AccordionPanel p={0}>
+                  <Box overflowX="auto">
+                    {filteredUpcoming.length === 0 ? (
+                      <Flex h="100px" align="center" justify="center">
+                        <Text color="gray.500" fontSize="sm">
+                          No upcoming lab orders found.
+                        </Text>
+                      </Flex>
+                    ) : (
+                      <>
+                        <Table variant="simple" size="sm">
+                          <Thead bg="gray.50">
+                            <Tr>
+                              <Th w="20%">Institute ID</Th>
+                              <Th w="35%">Patient Details</Th>
+                              <Th w="25%" textAlign="center">Lab Test Order Time</Th>
+                              <Th w="20%" textAlign="center">Actions</Th>
+                            </Tr>
+                          </Thead>
+                          <Tbody>
+                            {paginatedUpcoming.map((p, idx) => (
+                              <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                                <Td>
+                                  <Flex align="center">
+                                    <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                                      {p.institute_id}
+                                    </Text>
+                                    <IconButton
+                                      aria-label="Copy ID"
+                                      icon={<FiCopy size={12} />}
+                                      size="xs"
+                                      ml="2"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigator.clipboard.writeText(p.institute_id);
+                                        toast({
+                                          title: "Copied!",
+                                          status: "success",
+                                          duration: 1000,
+                                        });
+                                      }}
+                                    />
+                                  </Flex>
+                                </Td>
+                                <Td>
+                                  <Flex align="center">
+                                    <Box>
+                                      <Text fontWeight="bold" fontSize="sm">
+                                        {toTitleCase(p.name)}
+                                      </Text>
+                                      <Text fontSize="xs" color="gray.500">
+                                        {p.age} yrs • {p.gender}
+                                      </Text>
+                                    </Box>
+                                  </Flex>
+                                </Td>
+                                <Td textAlign="center">
+                                  <Text fontSize="sm" color="gray.600">
+                                    {p.consultation_completed_time
+                                      ? formatDateTimeIST(p.consultation_completed_time)
+                                      : p.visitingTime
+                                        ? formatDateTimeIST(p.visitingTime)
+                                        : "TBD"}
+                                  </Text>
+                                </Td>
+                                <Td textAlign="center">
+                                  <Button
+                                    colorScheme="gray"
+                                    size="sm"
+                                    borderRadius="full"
+                                    isDisabled={true}
+                                  >
+                                    View Lab Order
+                                  </Button>
+                                </Td>
+                              </Tr>
+                            ))}
+                          </Tbody>
+                        </Table>
+                        <Flex justify="space-between" mt={4} align="center">
+                          <Text fontSize="sm" color="gray.500">
+                            Showing {paginatedUpcoming.length} of {filteredUpcoming.length} orders
                           </Text>
-                        </Td>
-                        <Td textAlign="center">
-                          <Button
-                            colorScheme="gray"
-                            size="sm"
-                            borderRadius="full"
-                            isDisabled={true}
-                          >
-                            View Lab Order
-                          </Button>
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              )}
-            </Box>
+                          <HStack>
+                            <IconButton
+                              icon={<FiChevronLeft />}
+                              size="sm"
+                              isDisabled={upcomingPage === 1}
+                              onClick={() => setUpcomingPage(upcomingPage - 1)}
+                              aria-label="Previous Page"
+                            />
+                            <Text fontSize="sm">Page {upcomingPage} of {Math.ceil(filteredUpcoming.length / ITEMS_PER_PAGE) || 1}</Text>
+                            <IconButton
+                              icon={<FiChevronRight />}
+                              size="sm"
+                              isDisabled={upcomingPage * ITEMS_PER_PAGE >= filteredUpcoming.length}
+                              onClick={() => setUpcomingPage(upcomingPage + 1)}
+                              aria-label="Next Page"
+                            />
+                          </HStack>
+                        </Flex>
+                      </>
+                    )}
+                  </Box>
+                </AccordionPanel>
+              </AccordionItem>
+            </Accordion>
           </>
         )}
+        </Box>
       </Box>
 
       {/* PATIENT MODAL */}

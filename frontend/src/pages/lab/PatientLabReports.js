@@ -5,7 +5,6 @@ import {
  Text,
  Heading,
  Spinner,
- Avatar,
  Button,
  IconButton,
  useToast,
@@ -271,11 +270,6 @@ export default function PatientLabReports() {
         }}
        >
         <Box flex="1.5" display="flex" alignItems="center" gap="2">
-         <Avatar size="sm" mr={3} 
-          name={toTitleCase(patient.name)}
-          bg="blue.100"
-          color="blue.800"
-         />
          <Text fontWeight="medium">{toTitleCase(patient.name)}</Text>
         </Box>
 

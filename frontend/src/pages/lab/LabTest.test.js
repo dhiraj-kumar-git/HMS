@@ -186,6 +186,10 @@ describe('LabTest Component', () => {
       renderComponent();
     });
 
+    // Click the accordion button to expand the Upcoming section
+    const accordionHeader = screen.getByText(/Upcoming Lab Test Orders/i);
+    fireEvent.click(accordionHeader);
+
     await waitFor(() => {
       expect(screen.getByText('Jane Smith')).toBeInTheDocument();
       expect(screen.getByText('P999')).toBeInTheDocument();

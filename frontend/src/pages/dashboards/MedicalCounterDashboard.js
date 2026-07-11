@@ -38,7 +38,7 @@ import {
   Select,
   Checkbox,
 } from '@chakra-ui/react';
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter } from 'react-icons/fi';
+import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
@@ -47,6 +47,7 @@ import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase, generateTe
 function MedicalCounterDashboard() {
   const [registrations, setRegistrations] = useState([]);
   const [filteredRegistrations, setFilteredRegistrations] = useState([]);
+  const [activePatientsPage, setActivePatientsPage] = useState(1);
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [billGenerated, setBillGenerated] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -112,6 +113,10 @@ function MedicalCounterDashboard() {
       setFilteredRegistrations(sorted);
     }
   }, [searchQuery, registrations]);
+
+  useEffect(() => {
+    setActivePatientsPage(1);
+  }, [searchQuery]);
 
   const fetchRegistrations = async () => {
     try {
@@ -809,6 +814,8 @@ BITS Pilani
     );
   }
 
+  const paginatedRegistrations = filteredRegistrations.slice((activePatientsPage - 1) * 10, activePatientsPage * 10);
+
   return (
     <Flex direction="column" minH="100vh" bg={bodyBg}>
       {/* Header */}
@@ -918,7 +925,7 @@ BITS Pilani
                 </Tr>
               </Thead>
               <Tbody>
-                {filteredRegistrations.map((patient) => (
+                {paginatedRegistrations.map((patient) => (
                   <Tr
                     key={patient.institute_id}
                     _hover={{ bg: 'gray.50', cursor: 'pointer' }}
@@ -985,6 +992,28 @@ BITS Pilani
               </Tbody>
             </Table>
           </Box>
+          <Flex justify="space-between" mt={4} align="center">
+            <Text fontSize="sm" color="gray.500">
+              Showing {paginatedRegistrations.length} of {filteredRegistrations.length} patients
+            </Text>
+            <HStack>
+              <IconButton
+                icon={<FiChevronLeft />}
+                size="sm"
+                isDisabled={activePatientsPage === 1}
+                onClick={() => setActivePatientsPage(activePatientsPage - 1)}
+                aria-label="Previous Page"
+              />
+              <Text fontSize="sm">Page {activePatientsPage} of {Math.ceil(filteredRegistrations.length / 10) || 1}</Text>
+              <IconButton
+                icon={<FiChevronRight />}
+                size="sm"
+                isDisabled={activePatientsPage * 10 >= filteredRegistrations.length}
+                onClick={() => setActivePatientsPage(activePatientsPage + 1)}
+                aria-label="Next Page"
+              />
+            </HStack>
+          </Flex>
         </Box>
 
         {/* Redesigned Modal */}
