@@ -589,9 +589,55 @@ def update_appointment_status_route(visit_id):
 
     try:
         import database
+        visit = database.visits.find_one({"visit_id": visit_id})
+        if not visit:
+            return jsonify({"error": "Visit not found"}), 404
+
+        old_status = visit.get("status")
         success = database.update_appointment_status(visit_id, new_status)
+
+        email_error = None
         if success:
-            return jsonify({"message": "Appointment status updated"}), 200
+            if new_status == "confirmed" and old_status != "confirmed":
+                try:
+                    patient = database.patients.find_one({"institute_id": visit.get("institute_id")})
+                    if patient and patient.get("email"):
+                        recipient_email = patient["email"]
+                        patient_name = patient.get("name", "Patient")
+                        doctor_name = visit.get("doctor_name") or visit.get("doctor_username") or "Doctor"
+
+                        from datetime import datetime
+                        raw_time = visit.get("time")
+                        formatted_time = str(raw_time)
+                        if isinstance(raw_time, datetime):
+                            formatted_time = raw_time.strftime("%d-%b-%Y %I:%M %p")
+                        elif isinstance(raw_time, str):
+                            try:
+                                dt = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+                                formatted_time = dt.strftime("%d-%b-%Y %I:%M %p")
+                            except Exception:
+                                pass
+
+                        subject = "Appointment Confirmed - BITS Pilani Medical Center"
+                        body = (
+                            f"Dear {patient_name},\n\n"
+                            f"Your appointment at BITS Pilani Medical Center has been confirmed.\n\n"
+                            f"Details:\n"
+                            f"Doctor: {doctor_name}\n"
+                            f"Date & Time: {formatted_time}\n\n"
+                            f"Please arrive on time and Check-in with the receptionist at the Medical Center.\n\n"
+                            f"Regards,\n"
+                            f"Medical Center\n"
+                            f"BITS Pilani"
+                        )
+                        from app.routes.lab_routes import send_email
+                        send_email(recipient_email, subject, body)
+                    else:
+                        email_error = "Patient email address is not available in system."
+                except Exception as e:
+                    email_error = str(e)
+
+            return jsonify({"message": "Appointment status updated", "email_error": email_error}), 200
         return jsonify({"error": "Visit not found or no changes made"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500

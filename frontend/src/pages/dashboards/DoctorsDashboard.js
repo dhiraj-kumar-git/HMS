@@ -18,16 +18,7 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
-  Accordion,
-  AccordionItem,
-  AccordionButton,
-  AccordionPanel,
-  AccordionIcon,
-  Grid,
   useDisclosure,
-  FormControl,
-  FormLabel,
-  Textarea,
   Menu,
   MenuButton,
   MenuList,
@@ -43,7 +34,6 @@ import {
   InputGroup,
   InputLeftElement,
   Badge,
-  VStack,
 } from "@chakra-ui/react";
 import {
   FiBell,
@@ -54,11 +44,10 @@ import {
   FiRefreshCw,
   FiSearch,
   FiCheckCircle,
-  FiPlus,
-  FiX,
 } from "react-icons/fi";
 import axios from "axios";
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
+import EMRForm from '../../components/EMRForm';
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, getWeekdayIST, toTitleCase } from '../../utils/utils';
 
@@ -99,8 +88,6 @@ export default function DoctorsDashboard() {
     assessment: { provisional_diagnosis: '' },
     plan: { medications: [], investigations: [], advice: '', follow_up_date: '' }
   });
-  const [medInput, setMedInput] = useState({ drug: '', dose: '', route: '', frequency: '', duration: '', quantity: '' });
-  const [labInput, setLabInput] = useState('');
 
   // SEARCH PATIENT BOX
   const [searchInstituteId, setSearchInstituteId] = useState("");
@@ -291,28 +278,7 @@ export default function DoctorsDashboard() {
 
 
 
-  const handleUpdateEmr = (section, field, value) => {
-    setEmrData(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value
-      }
-    }));
-  };
 
-  const handleUpdateVitals = (field, value) => {
-    setEmrData(prev => ({
-      ...prev,
-      objective: {
-        ...prev.objective,
-        vitals: {
-          ...prev.objective.vitals,
-          [field]: value
-        }
-      }
-    }));
-  };
 
   const handleNoShowStatus = async (visitId) => {
     try {
@@ -340,77 +306,7 @@ export default function DoctorsDashboard() {
     }
   };
 
-  const handleAddMedication = () => {
-    if (!medInput.drug) return;
 
-    const isDuplicate = emrData.plan.medications.some(
-      m => m.drug.toLowerCase().trim() === medInput.drug.toLowerCase().trim()
-    );
-
-    if (isDuplicate) {
-      toast({
-        title: "Medication already added",
-        description: "You have already added this medication.",
-        status: "warning",
-        duration: 3000,
-        isClosable: true
-      });
-      return;
-    }
-
-    setEmrData(prev => ({
-      ...prev,
-      plan: {
-        ...prev.plan,
-        medications: [...prev.plan.medications, medInput]
-      }
-    }));
-    setMedInput({ drug: '', dose: '', route: '', frequency: '', duration: '', quantity: '' });
-  };
-
-  const handleRemoveMedication = (idx) => {
-    setEmrData(prev => {
-      const newMeds = [...prev.plan.medications];
-      newMeds.splice(idx, 1);
-      return { ...prev, plan: { ...prev.plan, medications: newMeds } };
-    });
-  };
-
-  const handleAddInvestigation = () => {
-    if (!labInput) return;
-
-    const isDuplicate = emrData.plan.investigations.some(
-      t => t.toLowerCase().trim() === labInput.toLowerCase().trim()
-    );
-
-    if (isDuplicate) {
-      toast({
-        title: "Lab test already added",
-        description: "You have already added this lab test.",
-        status: "warning",
-        duration: 3000,
-        isClosable: true
-      });
-      return;
-    }
-
-    setEmrData(prev => ({
-      ...prev,
-      plan: {
-        ...prev.plan,
-        investigations: [...prev.plan.investigations, labInput]
-      }
-    }));
-    setLabInput('');
-  };
-
-  const handleRemoveInvestigation = (idx) => {
-    setEmrData(prev => {
-      const newLabs = [...prev.plan.investigations];
-      newLabs.splice(idx, 1);
-      return { ...prev, plan: { ...prev.plan, investigations: newLabs } };
-    });
-  };
 
   const handleSaveDetails = () => {
     const diagnosis = emrData.assessment?.provisional_diagnosis?.trim() || "";
@@ -1026,201 +922,13 @@ export default function DoctorsDashboard() {
 
             {/* Main Pane - Inputs */}
             <Box flex="1" bg="white" overflowY="auto" p={4}>
-              <Accordion allowMultiple defaultIndex={[0, 1, 2, 3]}>
-                {/* Subjective */}
-                <AccordionItem>
-                  <h2>
-                    <AccordionButton>
-                      <Box flex="1" textAlign="left" fontWeight="bold">Subjective (Symptoms & History)</Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel pb={4}>
-                    <VStack align="stretch" spacing={3}>
-                      <FormControl isRequired>
-                        <FormLabel fontSize="xs">Chief Complaints</FormLabel>
-                        <Textarea size="sm" value={emrData.subjective.chief_complaints} onChange={(e) => handleUpdateEmr('subjective', 'chief_complaints', e.target.value)} />
-                      </FormControl>
-                      <FormControl>
-                        <FormLabel fontSize="xs">History of Present Illness</FormLabel>
-                        <Textarea size="sm" value={emrData.subjective.history_of_present_illness} onChange={(e) => handleUpdateEmr('subjective', 'history_of_present_illness', e.target.value)} />
-                      </FormControl>
-                      <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
-                        <FormControl>
-                          <FormLabel fontSize="xs">Past Medical History</FormLabel>
-                          <Textarea size="sm" value={emrData.subjective.past_medical_history} onChange={(e) => handleUpdateEmr('subjective', 'past_medical_history', e.target.value)} />
-                        </FormControl>
-                        <FormControl>
-                          <FormLabel fontSize="xs">Allergies</FormLabel>
-                          <Textarea size="sm" value={emrData.subjective.allergies} onChange={(e) => handleUpdateEmr('subjective', 'allergies', e.target.value)} />
-                        </FormControl>
-                      </Grid>
-                    </VStack>
-                  </AccordionPanel>
-                </AccordionItem>
-
-                {/* Objective */}
-                <AccordionItem>
-                  <h2>
-                    <AccordionButton>
-                      <Box flex="1" textAlign="left" fontWeight="bold">Objective (Vitals & Exam)</Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel pb={4}>
-                    <VStack align="stretch" spacing={4}>
-                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
-                        <Text fontSize="sm" fontWeight="bold" mb={3}>Vitals</Text>
-                        <Grid templateColumns={{ base: "repeat(2, 1fr)", md: "repeat(4, 1fr)" }} gap={3}>
-                          <FormControl><FormLabel fontSize="xs">BP (mmHg)</FormLabel><Input size="sm" placeholder="120/80" value={emrData.objective.vitals.blood_pressure} onChange={(e) => handleUpdateVitals('blood_pressure', e.target.value)} /></FormControl>
-                          <FormControl><FormLabel fontSize="xs">Pulse (bpm)</FormLabel><Input size="sm" placeholder="72" value={emrData.objective.vitals.pulse} onChange={(e) => handleUpdateVitals('pulse', e.target.value)} /></FormControl>
-                          <FormControl><FormLabel fontSize="xs">Temp (°F/°C)</FormLabel><Input size="sm" placeholder="98.6" value={emrData.objective.vitals.temperature} onChange={(e) => handleUpdateVitals('temperature', e.target.value)} /></FormControl>
-                          <FormControl><FormLabel fontSize="xs">SpO2 (%)</FormLabel><Input size="sm" placeholder="99" value={emrData.objective.vitals.spO2} onChange={(e) => handleUpdateVitals('spO2', e.target.value)} /></FormControl>
-                          <FormControl><FormLabel fontSize="xs">Weight (kg)</FormLabel><Input size="sm" placeholder="70" value={emrData.objective.vitals.weight} onChange={(e) => handleUpdateVitals('weight', e.target.value)} /></FormControl>
-                          <FormControl><FormLabel fontSize="xs">Height (cm)</FormLabel><Input size="sm" placeholder="175" value={emrData.objective.vitals.height} onChange={(e) => handleUpdateVitals('height', e.target.value)} /></FormControl>
-                          <FormControl><FormLabel fontSize="xs">Resp. Rate (/min)</FormLabel><Input size="sm" placeholder="16" value={emrData.objective.vitals.respiratory_rate} onChange={(e) => handleUpdateVitals('respiratory_rate', e.target.value)} /></FormControl>
-                        </Grid>
-                      </Box>
-                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
-                        <Text fontSize="sm" fontWeight="bold" mb={3}>Examinations</Text>
-                        <VStack align="stretch" spacing={3}>
-                          <FormControl>
-                            <FormLabel fontSize="xs">General Examination</FormLabel>
-                            <Textarea size="sm" value={emrData.objective.general_examination} onChange={(e) => handleUpdateEmr('objective', 'general_examination', e.target.value)} />
-                          </FormControl>
-                          <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
-                            <FormControl>
-                              <FormLabel fontSize="xs">Systemic Examination</FormLabel>
-                              <Textarea size="sm" value={emrData.objective.systemic_examination} onChange={(e) => handleUpdateEmr('objective', 'systemic_examination', e.target.value)} />
-                            </FormControl>
-                            <FormControl>
-                              <FormLabel fontSize="xs">Local Examination</FormLabel>
-                              <Textarea size="sm" value={emrData.objective.local_examination} onChange={(e) => handleUpdateEmr('objective', 'local_examination', e.target.value)} />
-                            </FormControl>
-                          </Grid>
-                        </VStack>
-                      </Box>
-                    </VStack>
-                  </AccordionPanel>
-                </AccordionItem>
-
-                {/* Assessment */}
-                <AccordionItem>
-                  <h2>
-                    <AccordionButton>
-                      <Box flex="1" textAlign="left" fontWeight="bold">Assessment (Diagnosis)</Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel pb={4}>
-                    <FormControl isRequired>
-                      <FormLabel fontSize="xs">Provisional Diagnosis</FormLabel>
-                      <Textarea size="sm" value={emrData.assessment.provisional_diagnosis} onChange={(e) => handleUpdateEmr('assessment', 'provisional_diagnosis', e.target.value)} />
-                    </FormControl>
-                  </AccordionPanel>
-                </AccordionItem>
-
-                {/* Plan */}
-                <AccordionItem>
-                  <h2>
-                    <AccordionButton>
-                      <Box flex="1" textAlign="left" fontWeight="bold">Plan (Medications, Labs, Advice)</Box>
-                      <AccordionIcon />
-                    </AccordionButton>
-                  </h2>
-                  <AccordionPanel pb={4}>
-                    <VStack align="stretch" spacing={6}>
-
-                      <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={4}>
-                        {/* Advice */}
-                        <FormControl>
-                          <FormLabel fontSize="xs">Advice / General Instructions</FormLabel>
-                          <Textarea size="sm" placeholder="Rest, drink plenty of fluids..." value={emrData.plan.advice} onChange={(e) => handleUpdateEmr('plan', 'advice', e.target.value)} />
-                        </FormControl>
-
-                        {/* Follow Up */}
-                        <FormControl>
-                          <FormLabel fontSize="xs">Follow-up Date</FormLabel>
-                          <Input type="date" size="sm" value={emrData.plan.follow_up_date} onChange={(e) => handleUpdateEmr('plan', 'follow_up_date', e.target.value)} />
-                        </FormControl>
-                      </Grid>
-
-                      {/* Medications */}
-                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Medications</Text>
-
-                        {/* Existing Meds */}
-                        {emrData.plan.medications.length > 0 && (
-                          <Flex wrap="wrap" gap={3} mb={4}>
-                            {emrData.plan.medications.map((m, idx) => (
-                              <Flex key={idx} justify="space-between" align="center" bg="gray.50" p={2} borderRadius="md" border="1px solid" borderColor="green.100" minW="max-content">
-                                <Box mr={3}>
-                                  <Text fontSize="xs" fontWeight="bold">{m.drug} <Badge colorScheme="gray">{m.quantity || 'N/A'}</Badge></Text>
-                                  <Text fontSize="2xs" color="gray.500">{m.dose || 'N/A'} | {m.route || 'N/A'} | {m.frequency || 'N/A'} | {m.duration || 'N/A'}</Text>
-                                </Box>
-                                <IconButton size="xs" variant="ghost" colorScheme="red" icon={<FiX />} onClick={() => handleRemoveMedication(idx)} aria-label="Remove" />
-                              </Flex>
-                            ))}
-                          </Flex>
-                        )}
-
-                        {/* Add Med Form */}
-                        <VStack align="stretch" spacing={3}>
-                          <Grid templateColumns="2fr 1fr 1fr 1fr 1fr 1fr" gap={2}>
-                            <FormControl>
-                              <FormLabel fontSize="xs">Drug Name</FormLabel>
-                              <InputGroup size="sm">
-                                <Input list="med-options" value={medInput.drug} onChange={(e) => setMedInput({ ...medInput, drug: e.target.value })} placeholder="Select or type..." />
-                                <datalist id="med-options">
-                                  {medicineOptions
-                                    .filter(opt => !emrData.plan.medications.some(m => m.drug.toLowerCase().trim() === opt.item_name.toLowerCase().trim()))
-                                    .map((opt, i) => <option key={i} value={opt.item_name} />)}
-                                </datalist>
-                              </InputGroup>
-                            </FormControl>
-                            <FormControl><FormLabel fontSize="xs">Dose</FormLabel><Input size="sm" value={medInput.dose} onChange={(e) => setMedInput({ ...medInput, dose: e.target.value })} placeholder="500mg" /></FormControl>
-                            <FormControl><FormLabel fontSize="xs">Route</FormLabel><Input size="sm" value={medInput.route} onChange={(e) => setMedInput({ ...medInput, route: e.target.value })} placeholder="Oral" /></FormControl>
-                            <FormControl><FormLabel fontSize="xs">Freq</FormLabel><Input size="sm" value={medInput.frequency} onChange={(e) => setMedInput({ ...medInput, frequency: e.target.value })} placeholder="1-0-1" /></FormControl>
-                            <FormControl><FormLabel fontSize="xs">Duration</FormLabel><Input size="sm" value={medInput.duration} onChange={(e) => setMedInput({ ...medInput, duration: e.target.value })} placeholder="5 days" /></FormControl>
-                            <FormControl><FormLabel fontSize="xs">Qty</FormLabel><Input type="number" size="sm" value={medInput.quantity} onChange={(e) => setMedInput({ ...medInput, quantity: e.target.value })} placeholder="10" /></FormControl>
-                          </Grid>
-                          <Button size="sm" colorScheme="green" onClick={handleAddMedication} alignSelf="flex-start" leftIcon={<FiPlus />}>Add Medication</Button>
-                        </VStack>
-                      </Box>
-
-                      {/* Lab Tests */}
-                      <Box border="1px solid" borderColor="gray.200" borderRadius="md" p={3}>
-                        <Text fontSize="sm" fontWeight="bold" mb={2}>Investigations (Lab Tests)</Text>
-
-                        {/* Existing Labs */}
-                        {emrData.plan.investigations.length > 0 && (
-                          <Flex wrap="wrap" gap={2} mb={4}>
-                            {emrData.plan.investigations.map((t, idx) => (
-                              <Badge key={idx} colorScheme="purple" variant="subtle" borderRadius="md" px={2} py={1} display="flex" alignItems="center">
-                                {t}
-                                <Box as={FiX} ml={2} cursor="pointer" onClick={() => handleRemoveInvestigation(idx)} />
-                              </Badge>
-                            ))}
-                          </Flex>
-                        )}
-
-                        <Flex gap={2}>
-                          <InputGroup size="sm" flex="1">
-                            <Input list="lab-options" value={labInput} onChange={(e) => setLabInput(e.target.value)} placeholder="Select or type test..." />
-                            <datalist id="lab-options">
-                              {labTestOptions
-                                .filter(opt => !emrData.plan.investigations.some(t => t.toLowerCase().trim() === opt.test_name.toLowerCase().trim()))
-                                .map((opt, i) => <option key={i} value={opt.test_name} />)}
-                            </datalist>
-                          </InputGroup>
-                          <Button size="sm" colorScheme="purple" onClick={handleAddInvestigation} leftIcon={<FiPlus />}>Add Test</Button>
-                        </Flex>
-                      </Box>
-
-                    </VStack>
-                  </AccordionPanel>
-                </AccordionItem>
-              </Accordion>
+              <EMRForm
+                initialEmrData={emrData}
+                onChange={setEmrData}
+                medicineOptions={medicineOptions}
+                labTestOptions={labTestOptions}
+                toast={toast}
+              />
             </Box>
 
           </ModalBody>

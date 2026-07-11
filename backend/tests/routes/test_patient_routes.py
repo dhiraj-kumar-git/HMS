@@ -352,6 +352,63 @@ def test_receptionist_book_appointment(client, mock_db, mocker, app):
     res = client.post("/api/receptionist/book-appointment", headers={"Authorization": f"Bearer {token}"}, json=data)
     assert res.status_code == 200
     assert "Appointment booked and confirmed successfully" in res.json["message"]
+
+def test_receptionist_confirm_appointment_email_success(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    
+    mock_visit = {
+        "visit_id": "v_test",
+        "institute_id": "p_test",
+        "doctor_name": "Dr. Smith",
+        "time": "2026-07-11T12:00:00",
+        "status": "booked"
+    }
+    mock_patient = {
+        "institute_id": "p_test",
+        "name": "Jane Doe",
+        "email": "jane@example.com"
+    }
+    
+    mocker.patch("database.visits.find_one", return_value=mock_visit)
+    mocker.patch("database.patients.find_one", return_value=mock_patient)
+    mocker.patch("database.update_appointment_status", return_value=True)
+    mock_send = mocker.patch("app.routes.lab_routes.send_email", return_value=None)
+    
+    res = client.post("/api/receptionist/appointment/v_test/status", headers={"Authorization": f"Bearer {token}"}, json={"status": "confirmed"})
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data["message"] == "Appointment status updated"
+    assert data["email_error"] is None
+    mock_send.assert_called_once()
+
+def test_receptionist_confirm_appointment_email_failure(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    
+    mock_visit = {
+        "visit_id": "v_test",
+        "institute_id": "p_test",
+        "doctor_name": "Dr. Smith",
+        "time": "2026-07-11T12:00:00",
+        "status": "booked"
+    }
+    mock_patient = {
+        "institute_id": "p_test",
+        "name": "Jane Doe",
+        "email": "jane@example.com"
+    }
+    
+    mocker.patch("database.visits.find_one", return_value=mock_visit)
+    mocker.patch("database.patients.find_one", return_value=mock_patient)
+    mocker.patch("database.update_appointment_status", return_value=True)
+    mocker.patch("app.routes.lab_routes.send_email", side_effect=Exception("SMTP Connection Error"))
+    
+    res = client.post("/api/receptionist/appointment/v_test/status", headers={"Authorization": f"Bearer {token}"}, json={"status": "confirmed"})
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data["message"] == "Appointment status updated"
+    assert "SMTP Connection Error" in data["email_error"]
 import json
 from unittest.mock import MagicMock
 from flask_jwt_extended import create_access_token
