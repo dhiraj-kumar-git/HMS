@@ -52,6 +52,7 @@ export default function ReceptionistQueue() {
 
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [printData, setPrintData] = useState(null);
+  const [updatingVisitId, setUpdatingVisitId] = useState(null);
 
   const toast = useToast();
 
@@ -91,18 +92,32 @@ export default function ReceptionistQueue() {
   }, [startDate, endDate, statusFilter]);
 
   const handleStatusChange = async (visitId, status) => {
+    setUpdatingVisitId(visitId);
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`${BASE_URL}/api/receptionist/appointment/${visitId}/status`,
+      const res = await axios.post(`${BASE_URL}/api/receptionist/appointment/${visitId}/status`,
         { status },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      toast({
-        title: `Status updated to ${status}`,
-        status: "success",
-        duration: 2000,
-        isClosable: true,
-      });
+
+      if (status === 'confirmed') {
+        if (res.data && res.data.email_error) {
+          toast({
+            title: "Email Notification Warning",
+            description: `Appointment confirmed, but failed to send email: ${res.data.email_error}`,
+            status: "warning",
+            duration: 5000,
+            isClosable: true,
+          });
+        }
+      } else {
+        toast({
+          title: `Status updated to ${status}`,
+          status: "success",
+          duration: 2000,
+          isClosable: true,
+        });
+      }
 
       if (status === 'checked_in') {
         const appointment = queue.find(q => q.visit_id === visitId);
@@ -118,10 +133,13 @@ export default function ReceptionistQueue() {
     } catch (err) {
       toast({
         title: "Error updating status",
+        description: err.response?.data?.error || err.message,
         status: "error",
         duration: 3000,
         isClosable: true,
       });
+    } finally {
+      setUpdatingVisitId(null);
     }
   };
 
@@ -137,7 +155,7 @@ export default function ReceptionistQueue() {
     }
   };
 
-  const renderTable = (title, data, currentPage = 1, setPage = () => {}, isPaginated = false) => {
+  const renderTable = (title, data, currentPage = 1, setPage = () => { }, isPaginated = false) => {
     if (data.length === 0 && title !== "Booked Appointments" && title !== "Confirmed Appointments") return null;
     const itemsPerPage = 5;
     const paginatedData = isPaginated
@@ -191,20 +209,37 @@ export default function ReceptionistQueue() {
                       <Td textAlign="center">
                         <HStack spacing={2} justify="center">
                           {appointment.status === 'booked' && (
-                            <Button size="xs" colorScheme="blue" onClick={() => handleStatusChange(appointment.visit_id, 'confirmed')}>
+                            <Button
+                              size="xs"
+                              colorScheme="blue"
+                              isLoading={updatingVisitId === appointment.visit_id}
+                              isDisabled={updatingVisitId !== null}
+                              onClick={() => handleStatusChange(appointment.visit_id, 'confirmed')}
+                            >
                               Confirm
                             </Button>
                           )}
                           {appointment.status === 'confirmed' && (
-                            <Button size="xs" colorScheme="green" onClick={() => handleStatusChange(appointment.visit_id, 'checked_in')}>
-                              Check-In
+                            <Button
+                              size="xs"
+                              colorScheme="green"
+                              isLoading={updatingVisitId === appointment.visit_id}
+                              isDisabled={updatingVisitId !== null}
+                              onClick={() => handleStatusChange(appointment.visit_id, 'checked_in')}
+                            >
+                              Check-in
                             </Button>
                           )}
                           {(appointment.status === 'booked' || appointment.status === 'confirmed') && (
-                            <Button size="xs" colorScheme="orange" onClick={() => {
-                              setSelectedVisitIdForNoShow(appointment.visit_id);
-                              setIsNoShowModalOpen(true);
-                            }}>
+                            <Button
+                              size="xs"
+                              colorScheme="orange"
+                              isDisabled={updatingVisitId !== null}
+                              onClick={() => {
+                                setSelectedVisitIdForNoShow(appointment.visit_id);
+                                setIsNoShowModalOpen(true);
+                              }}
+                            >
                               No Show
                             </Button>
                           )}

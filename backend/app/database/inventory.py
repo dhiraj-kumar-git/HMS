@@ -188,43 +188,133 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
             
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Filter items by type
+    med_items = [item for item in billed_items if item["type"] == "medicine"]
+    lab_items = [item for item in billed_items if item["type"] == "lab_test"]
+    
     count = bills.count_documents({"payment_date": {"$gte": today_start}})
-    invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
     
-    # Calculate round off and splits
-    total_unrounded = sum(item["item_total"] for item in billed_items)
-    total_rounded = round(total_unrounded)
-    round_off = round(total_rounded - total_unrounded, 2)
+    bill_docs_to_insert = []
+    invoice_no = ""
+    total_rounded = 0
     
-    if is_faculty_eligible:
-        # Reimbursed is 90% of sum of item totals, rounded to 2 decimal places
-        reimbursed = round(total_unrounded * 0.90, 2)
-        self_paid = round(total_rounded - reimbursed, 2)
-    else:
-        reimbursed = 0.00
-        self_paid = float(total_rounded)
+    if len(med_items) > 0 and len(lab_items) > 0:
+        # Scenario 3: Both Medicines and Labs -> Generate 2 distinct bills
+        invoice_no_med = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
+        invoice_no_lab = f"INV-{now.strftime('%Y%m%d')}-{(count + 2):04d}"
+        invoice_no = f"{invoice_no_med}, {invoice_no_lab}"
         
-    bill_doc = {
-        "invoice_no": invoice_no,
-        "payment_date": now,
-        "institute_id": patient.get("institute_id"),
-        "patient_name": patient.get("name"),
-        "patient_type": p_type,
-        "age": patient.get("date_of_birth"),
-        "gender": patient.get("gender"),
-        "items": billed_items,
-        "unrounded_total": round(total_unrounded, 2),
-        "round_off": round_off,
-        "total_amount": total_rounded,
-        "reimbursed_amount": reimbursed,
-        "self_paid_amount": self_paid,
-        "sponsor_name": sponsor_name,
-        "sponsor_psrn": sponsor_psrn,
-        "relation": relation,
-        "payment_mode": payment_mode,
-        "doctor_name": doctor_name
-    }
-    bills.insert_one(bill_doc)
+        # Med Bill
+        med_unrounded = sum(item["item_total"] for item in med_items)
+        med_rounded = round(med_unrounded)
+        med_round_off = round(med_rounded - med_unrounded, 2)
+        if is_faculty_eligible:
+            med_reimbursed = round(med_unrounded * 0.90, 2)
+            med_self_paid = round(med_rounded - med_reimbursed, 2)
+        else:
+            med_reimbursed = 0.00
+            med_self_paid = float(med_rounded)
+            
+        bill_doc_med = {
+            "invoice_no": invoice_no_med,
+            "payment_date": now,
+            "institute_id": patient.get("institute_id"),
+            "patient_name": patient.get("name"),
+            "patient_type": p_type,
+            "age": patient.get("date_of_birth"),
+            "gender": patient.get("gender"),
+            "items": med_items,
+            "unrounded_total": round(med_unrounded, 2),
+            "round_off": med_round_off,
+            "total_amount": med_rounded,
+            "reimbursed_amount": med_reimbursed,
+            "self_paid_amount": med_self_paid,
+            "sponsor_name": sponsor_name,
+            "sponsor_psrn": sponsor_psrn,
+            "relation": relation,
+            "payment_mode": payment_mode,
+            "doctor_name": doctor_name,
+            "bill_category": "medicine"
+        }
+        bill_docs_to_insert.append(bill_doc_med)
+        
+        # Lab Bill
+        lab_unrounded = sum(item["item_total"] for item in lab_items)
+        lab_rounded = round(lab_unrounded)
+        lab_round_off = round(lab_rounded - lab_unrounded, 2)
+        if is_faculty_eligible:
+            lab_reimbursed = round(lab_unrounded * 0.90, 2)
+            lab_self_paid = round(lab_rounded - lab_reimbursed, 2)
+        else:
+            lab_reimbursed = 0.00
+            lab_self_paid = float(lab_rounded)
+            
+        bill_doc_lab = {
+            "invoice_no": invoice_no_lab,
+            "payment_date": now,
+            "institute_id": patient.get("institute_id"),
+            "patient_name": patient.get("name"),
+            "patient_type": p_type,
+            "age": patient.get("date_of_birth"),
+            "gender": patient.get("gender"),
+            "items": lab_items,
+            "unrounded_total": round(lab_unrounded, 2),
+            "round_off": lab_round_off,
+            "total_amount": lab_rounded,
+            "reimbursed_amount": lab_reimbursed,
+            "self_paid_amount": lab_self_paid,
+            "sponsor_name": sponsor_name,
+            "sponsor_psrn": sponsor_psrn,
+            "relation": relation,
+            "payment_mode": payment_mode,
+            "doctor_name": doctor_name,
+            "bill_category": "lab_test"
+        }
+        bill_docs_to_insert.append(bill_doc_lab)
+        total_rounded = med_rounded + lab_rounded
+        
+    else:
+        # Scenario 1 & 2: Medicines only or Labs only -> Single bill
+        invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
+        total_unrounded = sum(item["item_total"] for item in billed_items)
+        total_rounded = round(total_unrounded)
+        round_off = round(total_rounded - total_unrounded, 2)
+        if is_faculty_eligible:
+            reimbursed = round(total_unrounded * 0.90, 2)
+            self_paid = round(total_rounded - reimbursed, 2)
+        else:
+            reimbursed = 0.00
+            self_paid = float(total_rounded)
+            
+        bill_category = "medicine" if len(med_items) > 0 else "lab_test"
+        bill_doc = {
+            "invoice_no": invoice_no,
+            "payment_date": now,
+            "institute_id": patient.get("institute_id"),
+            "patient_name": patient.get("name"),
+            "patient_type": p_type,
+            "age": patient.get("date_of_birth"),
+            "gender": patient.get("gender"),
+            "items": billed_items,
+            "unrounded_total": round(total_unrounded, 2),
+            "round_off": round_off,
+            "total_amount": total_rounded,
+            "reimbursed_amount": reimbursed,
+            "self_paid_amount": self_paid,
+            "sponsor_name": sponsor_name,
+            "sponsor_psrn": sponsor_psrn,
+            "relation": relation,
+            "payment_mode": payment_mode,
+            "doctor_name": doctor_name,
+            "bill_category": bill_category
+        }
+        bill_docs_to_insert.append(bill_doc)
+        total_rounded = total_rounded
+
+    # Insert bills
+    for doc in bill_docs_to_insert:
+        bills.insert_one(doc)
 
     has_labs = len(final_lab_tests) > 0
     current_workflow = patient.get("workflow_status", "active")
@@ -261,7 +351,8 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
             }}
         )
 
-    return {"success": result.modified_count > 0, "invoice_no": invoice_no, "total_amount": total_rounded, "bill": bill_doc}
+    returned_bill = bill_docs_to_insert if len(bill_docs_to_insert) > 1 else bill_docs_to_insert[0]
+    return {"success": True, "invoice_no": invoice_no, "total_amount": total_rounded, "bill": returned_bill}
 
 
 def cancel_bill(institute_id, visit_id=None):

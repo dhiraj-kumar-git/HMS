@@ -112,13 +112,13 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
         <Box>
           <Text fontWeight="bold" fontSize="sm" color="blue.700" mb={2}>Vitals</Text>
           <HStack spacing={2} wrap="wrap">
-            {bp && <Badge colorScheme="blue">BP: {bp}</Badge>}
-            {pulse && <Badge colorScheme="red">Pulse: {pulse}</Badge>}
-            {temp && <Badge colorScheme="orange">Temp: {temp}</Badge>}
-            {oxygen && <Badge colorScheme="cyan">SpO2: {oxygen}</Badge>}
-            {rr && <Badge colorScheme="gray">RR: {rr}</Badge>}
-            {wt && <Badge colorScheme="green">Wt: {wt}</Badge>}
-            {ht && <Badge colorScheme="purple">Ht: {ht}</Badge>}
+            {bp && <Badge colorScheme="blue">BP: {bp} mmHg</Badge>}
+            {pulse && <Badge colorScheme="red">Pulse: {pulse} bpm</Badge>}
+            {temp && <Badge colorScheme="orange">Temp: {temp} °F</Badge>}
+            {oxygen && <Badge colorScheme="cyan">SpO2: {oxygen}%</Badge>}
+            {rr && <Badge colorScheme="gray">RR: {rr}/min</Badge>}
+            {wt && <Badge colorScheme="green">Wt: {wt} kg</Badge>}
+            {ht && <Badge colorScheme="purple">Ht: {ht} cm</Badge>}
           </HStack>
         </Box>
       )}

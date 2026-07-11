@@ -22,7 +22,7 @@ import {
  ModalBody,
  ModalFooter,
  useDisclosure,
- useBreakpointValue,
+ useColorModeValue,
 } from "@chakra-ui/react";
 import { FiMail, FiCopy, FiRefreshCw, FiEye } from "react-icons/fi";
 import axios from "axios";
@@ -32,6 +32,7 @@ import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 
 export default function PatientLabReports() {
  const toast = useToast();
+ const tableHeaderBg = useColorModeValue('gray.100', 'gray.700');
  const [reports, setReports] = useState([]);
  const [loading, setLoading] = useState(true);
  const [refreshing, setRefreshing] = useState(false);
@@ -187,9 +188,6 @@ export default function PatientLabReports() {
   onViewOpen();
  };
 
- const compactFont = useBreakpointValue({ base: "xs", md: "sm" });
- const compactPadding = useBreakpointValue({ base: "2", md: "3" });
-
  if (loading) {
   return (
    <Flex h="100vh" align="center" justify="center" bg="gray.50">
@@ -214,135 +212,106 @@ export default function PatientLabReports() {
     />
    </Flex>
 
-   <Box
-    bg="white"
-    borderRadius="lg"
-    boxShadow="sm"
-    overflowX="auto"
-    py={2}
-    px={1}
-   >
-    <Flex
-     px={3}
-     py={2}
-     fontSize={compactFont}
-     fontWeight="semibold"
-     color="gray.600"
-     borderBottom="1px solid"
-     borderColor="gray.200"
-     minW="720px"
+    <Box
+     bg="white"
+     borderRadius="lg"
+     boxShadow="md"
+     overflowX="auto"
+     p={{ base: 4, md: 6 }}
     >
-     <Box flex="1.5">Name</Box>
-     <Box flex="1.3">Institute ID</Box>
-     <Box flex="0.9" textAlign="center">
-      Gender
-     </Box>
-     <Box flex="1.5">Test Name</Box>
-     <Box flex="1.5">Last Updated</Box>
-     <Box flex="1.2" textAlign="center">
-      Action
-     </Box>
-    </Flex>
-
-    {reports.length === 0 ? (
-     <Flex h="100px" align="center" justify="center">
-      <Text color="gray.500" fontSize="sm">
-       No lab reports available yet.
-      </Text>
-     </Flex>
-    ) : (
-     reports.map((patient, i) => {
-      const last = patient.lab_reports[patient.lab_reports.length - 1];
-      return (
-       <Flex
-        key={i}
-        align="center"
-        px={3}
-        py={compactPadding}
-        fontSize={compactFont}
-        borderBottom="1px solid"
-        borderColor="gray.100"
-        minW="720px"
-        _hover={{
-         bg: "gray.50",
-         boxShadow: "sm",
-         borderColor: "blue.200",
-        }}
-       >
-        <Box flex="1.5" display="flex" alignItems="center" gap="2">
-         <Text fontWeight="medium">{toTitleCase(patient.name)}</Text>
-        </Box>
-
-        <Box flex="1.3" display="flex" alignItems="center">
-         <Text>{patient.institute_id}</Text>
-         <IconButton
-          aria-label="Copy ID"
-          icon={<FiCopy size={12} />}
-          size="xs"
-          ml="1"
-          variant="ghost"
-          onClick={() => {
-           navigator.clipboard.writeText(patient.institute_id);
-           toast({
-            title: "Copied Institute ID",
-            status: "success",
-            duration: 1000,
-           });
-          }}
-         />
-        </Box>
-
-        <Box flex="0.7" textAlign="center">
-         {patient.age}
-        </Box>
-        <Box flex="0.9" textAlign="center">
-         {patient.gender}
-        </Box>
-
-        <Box flex="1.5" fontWeight="semibold" color="blue.700">
-         {last?.test_name || "—"}
-        </Box>
-
-        <Box flex="1.5">
-         {last?.timestamp
-          ? formatDateTimeIST(last.timestamp)
-          : "N/A"}
-        </Box>
-
-        <Box
-         flex="1.2"
-         display="flex"
-         justifyContent="center"
-         gap={{ base: 1, md: 2 }}
-         flexWrap="wrap"
-        >
-         <Button
-          leftIcon={<FiEye />}
-          size="sm"
-          variant="outline"
-          colorScheme="gray"
-          borderRadius="full"
-          px={3}
-          onClick={() => openViewModal(patient)}
-         >
-          View Report
-         </Button>
-         <Button
-          colorScheme="blue"
-          size="sm"
-          leftIcon={<FiMail />}
-          borderRadius="full"
-          px={3}
-          onClick={() => handleEmail(patient)}
-          isLoading={emailingPatientId === patient.institute_id}
-         >
-          Email
-         </Button>
-        </Box>
-       </Flex>
-      );
-     })
-    )}
+     <Table variant="simple" size="sm" fontSize="sm">
+      <Thead bg={tableHeaderBg}>
+       <Tr>
+        <Th>Institute ID</Th>
+        <Th>Patient Details</Th>
+        <Th>Test Name</Th>
+        <Th>Last Updated</Th>
+        <Th textAlign="center">Action</Th>
+       </Tr>
+      </Thead>
+      <Tbody>
+       {reports.length === 0 ? (
+        <Tr>
+         <Td colSpan={5} textAlign="center" py={6}>
+          <Text color="gray.500" fontSize="sm">
+           No lab reports available yet.
+          </Text>
+         </Td>
+        </Tr>
+       ) : (
+        reports.map((patient, i) => {
+         const last = patient.lab_reports[patient.lab_reports.length - 1];
+         return (
+          <Tr key={i} _hover={{ bg: "gray.50" }}>
+           <Td fontWeight="medium">
+            <Flex align="center" gap={1}>
+             <Text>{patient.institute_id}</Text>
+             <IconButton
+              aria-label="Copy ID"
+              icon={<FiCopy size={12} />}
+              size="xs"
+              variant="ghost"
+              onClick={() => {
+               navigator.clipboard.writeText(patient.institute_id);
+               toast({
+                title: "Copied Institute ID",
+                status: "success",
+                duration: 1000,
+               });
+              }}
+             />
+            </Flex>
+           </Td>
+           <Td>
+            <Box>
+             <Text fontWeight="semibold" color="blue.900">
+              {toTitleCase(patient.name)}
+             </Text>
+             <Text fontSize="xs" color="gray.500">
+              {patient.age} yrs • {patient.gender}
+             </Text>
+            </Box>
+           </Td>
+           <Td fontWeight="semibold" color="blue.700">
+            {last?.test_name || "—"}
+           </Td>
+           <Td>
+            {last?.timestamp
+             ? formatDateTimeIST(last.timestamp)
+             : "N/A"}
+           </Td>
+           <Td>
+            <Flex justify="center" gap={2}>
+             <Button
+              leftIcon={<FiEye />}
+              size="sm"
+              variant="outline"
+              colorScheme="gray"
+              borderRadius="full"
+              px={3}
+              onClick={() => openViewModal(patient)}
+             >
+              View Report
+             </Button>
+             <Button
+              colorScheme="blue"
+              size="sm"
+              leftIcon={<FiMail />}
+              borderRadius="full"
+              px={3}
+              onClick={() => handleEmail(patient)}
+              isLoading={emailingPatientId === patient.institute_id}
+             >
+              Email
+             </Button>
+            </Flex>
+           </Td>
+          </Tr>
+         );
+        })
+       )}
+      </Tbody>
+     </Table>
    </Box>
 
    {/* ─── View Report Modal ─── */}
