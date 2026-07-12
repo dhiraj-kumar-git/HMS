@@ -9,7 +9,7 @@ import { FiSearch, FiLogOut, FiCalendar, FiPrinter, FiChevronLeft, FiChevronRigh
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import bitsLogo from '../../assets/bits-logo.png';
-import { formatDateIST, toTitleCase, numberToWords, generateTextReceipt, calculateAge, amountToWords, formatDateIST_Short, formatDateTime12H, getPaymentNo } from '../../utils/utils';
+import { formatDateIST, toTitleCase, numberToWords, generateHtmlReceipt, calculateAge, amountToWords, formatDateIST_Short, formatDateTime12H, getPaymentNo } from '../../utils/utils';
 
 function BillHistory() {
     const [billHistory, setBillHistory] = useState([]);
@@ -112,18 +112,8 @@ function BillHistory() {
                 return;
             }
 
-            const receiptText = generateTextReceipt(patient, patient);
+            const htmlBody = generateHtmlReceipt(patient, patient, window.location.origin + bitsLogo);
             const subject = `Sale Bill Receipt for ${toTitleCase(patientData.name)} (Invoice: ${patient.invoice_no || 'DRAFT'})`;
-            const body = `Dear ${toTitleCase(patientData.name)},
-
-Please find below the sale bill receipt for your recent visit to the BITS Pilani Medical Centre.
-
-${receiptText}
-
-Best regards,
-Medical Centre Team
-BITS Pilani
-`;
 
             await axios.post(
                 `${BASE_URL}/lab/send_email`,
@@ -131,7 +121,7 @@ BITS Pilani
                     recipient_email: recipientEmail,
                     to_email: recipientEmail,
                     subject: subject,
-                    body: body
+                    body: htmlBody
                 },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
@@ -241,21 +231,21 @@ BITS Pilani
                             <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 5px; height: 60px;">
                                 <img src="${bitsLogo}" style="width: 48px; height: 48px; position: absolute; left: 10px; top: 5px;" />
                                 <div style="text-align: center;">
-                                    <div style="font-size: 14px; font-weight: bold; font-family: 'Times New Roman', serif;">Birla Institute of Technology & Science</div>
-                                    <div style="font-size: 11px; font-weight: bold; font-family: 'Times New Roman', serif; letter-spacing: 1px; margin-top: 2px;">MEDICAL CENTRE</div>
-                                    <div style="font-size: 10px; font-family: 'Times New Roman', serif; margin-top: 1px;">Vidya Vihar, Pilani, RAJASTHAN</div>
+                                    <div style="font-size: 14px; font-weight: bold; font-family: monospace, Arial, sans-serif;">Birla Institute of Technology & Science</div>
+                                    <div style="font-size: 11px; font-weight: bold; font-family: monospace, Arial, sans-serif; letter-spacing: 1px; margin-top: 2px;">MEDICAL CENTRE</div>
+                                    <div style="font-size: 10px; font-family: monospace, Arial, sans-serif; margin-top: 1px;">Vidya Vihar, Pilani, RAJASTHAN</div>
                                 </div>
                             </div>
                             
-                            <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: 'Times New Roman', serif; margin-top: 5px; border-top: 1px dashed #000; padding-top: 4px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: monospace, Arial, sans-serif; margin-top: 5px; border-top: 1px dashed #000; padding-top: 4px;">
                                 <div>Contact No.: 01596-515525 &nbsp; &nbsp;/</div>
                                 <div>Fax: 01596-244183</div>
                             </div>
-                            <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: 'Times New Roman', serif; margin-bottom: 2px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: monospace, Arial, sans-serif; margin-bottom: 2px;">
                                 <div>E-Mail : medc@pilani.bits-pilani.ac.in</div>
                                 <div>Date: ${formattedDateShort}</div>
                             </div>
-                            <div style="font-size: 10px; font-family: 'Times New Roman', serif; margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 4px;">
+                            <div style="font-size: 10px; font-family: monospace, Arial, sans-serif; margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 4px;">
                                 WebSite : www.bits-pilani.ac.in
                             </div>
 
@@ -299,13 +289,13 @@ BITS Pilani
                                 <thead>
                                     <tr style="border-bottom: 1px solid #000; border-top: 1px solid #000;">
                                         <th style="width: 5%; padding: 4px 2px; text-align: left;">S.No.</th>
-                                        <th style="text-align: left; width: 35%; padding: 4px 2px;">Service</th>
-                                        <th style="text-align: right; width: 10%; padding: 4px 2px;">Gross Amt</th>
-                                        <th style="text-align: right; width: 10%; padding: 4px 2px;">Disc(%)</th>
-                                        <th style="text-align: right; width: 10%; padding: 4px 2px;">Disc</th>
-                                        <th style="text-align: right; width: 10%; padding: 4px 2px;">Remb(%)</th>
-                                        <th style="text-align: right; width: 10%; padding: 4px 2px;">Remb Amt</th>
-                                        <th style="text-align: right; width: 10%; padding: 4px 2px;">Amount</th>
+                                        <th style="text-align: left; width: 25%; padding: 4px 2px;">Service</th>
+                                        <th style="text-align: right; width: 12%; padding: 4px 2px;">Gross Amt</th>
+                                        <th style="text-align: right; width: 11%; padding: 4px 2px;">Disc(%)</th>
+                                        <th style="text-align: right; width: 11%; padding: 4px 2px;">Disc</th>
+                                        <th style="text-align: right; width: 12%; padding: 4px 2px;">Remb(%)</th>
+                                        <th style="text-align: right; width: 12%; padding: 4px 2px;">Remb Amt</th>
+                                        <th style="text-align: right; width: 12%; padding: 4px 2px;">Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -513,7 +503,7 @@ BITS Pilani
                         </div>
 
                         <div class="footer-signature">
-                            <div>Checked By</div>
+                            <div></div>
                             <div>Authorised Signature</div>
                         </div>
                     </body>
@@ -610,21 +600,21 @@ BITS Pilani
                     <Flex align="center" justify="center" position="relative" mb={2} h="60px">
                         <Image src={bitsLogo} w="40px" h="40px" position="absolute" left="0" top="10px" />
                         <Box textAlign="center">
-                            <Text fontWeight="bold" fontSize="13px" fontFamily="'Times New Roman', serif">Birla Institute of Technology & Science</Text>
-                            <Text fontWeight="bold" fontSize="10px" fontFamily="'Times New Roman', serif" letterSpacing="1px">MEDICAL CENTRE</Text>
-                            <Text fontSize="9px" fontFamily="'Times New Roman', serif">Vidya Vihar, Pilani, RAJASTHAN</Text>
+                            <Text fontWeight="bold" fontSize="13px" fontFamily="monospace">Birla Institute of Technology & Science</Text>
+                            <Text fontWeight="bold" fontSize="10px" fontFamily="monospace" letterSpacing="1px">MEDICAL CENTRE</Text>
+                            <Text fontSize="9px" fontFamily="monospace">Vidya Vihar, Pilani, RAJASTHAN</Text>
                         </Box>
                     </Flex>
-
-                    <Flex justify="space-between" fontSize="9px" fontFamily="'Times New Roman', serif" mt={1} borderTop="1px dashed gray" pt={1}>
+ 
+                    <Flex justify="space-between" fontSize="9px" fontFamily="monospace" mt={1} borderTop="1px dashed gray" pt={1}>
                         <Text>Contact No.: 01596-515525 &nbsp; &nbsp;/</Text>
                         <Text>Fax: 01596-244183</Text>
                     </Flex>
-                    <Flex justify="space-between" fontSize="9px" fontFamily="'Times New Roman', serif" mb={1}>
+                    <Flex justify="space-between" fontSize="9px" fontFamily="monospace" mb={1}>
                         <Text>E-Mail : medc@pilani.bits-pilani.ac.in</Text>
                         <Text>Date: {formattedDateShort}</Text>
                     </Flex>
-                    <Text fontSize="9px" fontFamily="'Times New Roman', serif" mb={2} borderBottom="1px dashed gray" pb={1}>
+                    <Text fontSize="9px" fontFamily="monospace" mb={2} borderBottom="1px dashed gray" pb={1}>
                         WebSite : www.bits-pilani.ac.in
                     </Text>
 
@@ -660,14 +650,14 @@ BITS Pilani
                     <Table variant="simple" size="sm" fontSize="8.5px" p={0}>
                         <Thead>
                             <Tr borderTop="1px solid black" borderBottom="1px solid black">
-                                <Th p={1} color="black" fontSize="8px" textAlign="left">S.No.</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="left">Service</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="right">Gross</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="right">Disc%</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="right">Disc</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="right">Remb%</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="right">Remb</Th>
-                                <Th p={1} color="black" fontSize="8px" textAlign="right">Amount</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="left" w="5%">S.No.</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="left" w="25%">Service</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Gross</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="right" w="11%">Disc%</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="right" w="11%">Disc</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Remb%</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Remb</Th>
+                                <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Amount</Th>
                             </Tr>
                         </Thead>
                         <Tbody>

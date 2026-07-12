@@ -77,7 +77,8 @@ def send_email(recipient_email, subject, body, attachment_path=None):
         msg['To'] = recipient_email
         msg['Subject'] = subject
 
-        msg.attach(MIMEText(body, 'plain'))
+        is_html = body.strip().startswith('<!DOCTYPE') or body.strip().startswith('<html') or '<html>' in body or '<div' in body
+        msg.attach(MIMEText(body, 'html' if is_html else 'plain'))
 
         if attachment_path and os.path.exists(attachment_path):
             with open(attachment_path, 'rb') as f:

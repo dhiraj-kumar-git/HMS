@@ -43,7 +43,7 @@ import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, 
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
-import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase, generateTextReceipt, amountToWords, formatDateIST_Short, formatDateTime12H, getPaymentNo } from '../../utils/utils';
+import { calculateAge, formatDateTimeIST, numberToWords, toTitleCase, generateHtmlReceipt, amountToWords, formatDateIST_Short, formatDateTime12H, getPaymentNo } from '../../utils/utils';
 import bitsLogo from '../../assets/bits-logo.png';
 
 function MedicalCounterDashboard() {
@@ -414,18 +414,8 @@ function MedicalCounterDashboard() {
         return;
       }
 
-      const receiptText = generateTextReceipt(patient, bill);
+      const htmlBody = generateHtmlReceipt(patient, bill, window.location.origin + bitsLogo);
       const subject = `Sale Bill Receipt for ${toTitleCase(patientData.name)} (Invoice: ${patient.invoice_no || 'DRAFT'})`;
-      const body = `Dear ${toTitleCase(patientData.name)},
-
-Please find below the sale bill receipt for your recent visit to the BITS Pilani Medical Centre.
-
-${receiptText}
-
-Best regards,
-Medical Centre Team
-BITS Pilani
-`;
 
       await axios.post(
         `${BASE_URL}/lab/send_email`,
@@ -433,7 +423,7 @@ BITS Pilani
           recipient_email: recipientEmail,
           to_email: recipientEmail,
           subject: subject,
-          body: body
+          body: htmlBody
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -563,21 +553,21 @@ BITS Pilani
               <div style="display: flex; align-items: center; justify-content: center; position: relative; margin-bottom: 5px; height: 60px;">
                 <img src="${bitsLogo}" style="width: 48px; height: 48px; position: absolute; left: 10px; top: 5px;" />
                 <div style="text-align: center;">
-                  <div style="font-size: 14px; font-weight: bold; font-family: 'Times New Roman', serif;">Birla Institute of Technology & Science</div>
-                  <div style="font-size: 11px; font-weight: bold; font-family: 'Times New Roman', serif; letter-spacing: 1px; margin-top: 2px;">MEDICAL CENTRE</div>
-                  <div style="font-size: 10px; font-family: 'Times New Roman', serif; margin-top: 1px;">Vidya Vihar, Pilani, RAJASTHAN</div>
+                  <div style="font-size: 14px; font-weight: bold; font-family: monospace, Arial, sans-serif;">Birla Institute of Technology & Science</div>
+                  <div style="font-size: 11px; font-weight: bold; font-family: monospace, Arial, sans-serif; letter-spacing: 1px; margin-top: 2px;">MEDICAL CENTRE</div>
+                  <div style="font-size: 10px; font-family: monospace, Arial, sans-serif; margin-top: 1px;">Vidya Vihar, Pilani, RAJASTHAN</div>
                 </div>
               </div>
               
-              <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: 'Times New Roman', serif; margin-top: 5px; border-top: 1px dashed #000; padding-top: 4px;">
+              <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: monospace, Arial, sans-serif; margin-top: 5px; border-top: 1px dashed #000; padding-top: 4px;">
                 <div>Contact No.: 01596-515525 &nbsp; &nbsp;/</div>
                 <div>Fax: 01596-244183</div>
               </div>
-              <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: 'Times New Roman', serif; margin-bottom: 2px;">
+              <div style="display: flex; justify-content: space-between; font-size: 10px; font-family: monospace, Arial, sans-serif; margin-bottom: 2px;">
                 <div>E-Mail : medc@pilani.bits-pilani.ac.in</div>
                 <div>Date: ${formattedDateShort}</div>
               </div>
-              <div style="font-size: 10px; font-family: 'Times New Roman', serif; margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 4px;">
+              <div style="font-size: 10px; font-family: monospace, Arial, sans-serif; margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 4px;">
                 WebSite : www.bits-pilani.ac.in
               </div>
 
@@ -621,13 +611,13 @@ BITS Pilani
                 <thead>
                   <tr style="border-bottom: 1px solid #000; border-top: 1px solid #000;">
                     <th style="width: 5%; padding: 4px 2px; text-align: left;">S.No.</th>
-                    <th style="text-align: left; width: 35%; padding: 4px 2px;">Service</th>
-                    <th style="text-align: right; width: 10%; padding: 4px 2px;">Gross Amt</th>
-                    <th style="text-align: right; width: 10%; padding: 4px 2px;">Disc(%)</th>
-                    <th style="text-align: right; width: 10%; padding: 4px 2px;">Disc</th>
-                    <th style="text-align: right; width: 10%; padding: 4px 2px;">Remb(%)</th>
-                    <th style="text-align: right; width: 10%; padding: 4px 2px;">Remb Amt</th>
-                    <th style="text-align: right; width: 10%; padding: 4px 2px;">Amount</th>
+                    <th style="text-align: left; width: 25%; padding: 4px 2px;">Service</th>
+                    <th style="text-align: right; width: 12%; padding: 4px 2px;">Gross Amt</th>
+                    <th style="text-align: right; width: 11%; padding: 4px 2px;">Disc(%)</th>
+                    <th style="text-align: right; width: 11%; padding: 4px 2px;">Disc</th>
+                    <th style="text-align: right; width: 12%; padding: 4px 2px;">Remb(%)</th>
+                    <th style="text-align: right; width: 12%; padding: 4px 2px;">Remb Amt</th>
+                    <th style="text-align: right; width: 12%; padding: 4px 2px;">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -730,7 +720,7 @@ BITS Pilani
           <div class="receipt-section">
             <div style="display: flex; justify-content: space-between; font-size: 10px;">
               <div>D. L. # 4161-4162</div>
-              <div style="font-weight: bold; text-decoration: underline;">SALE BILL (${categoryTitle})</div>
+              <div style="font-weight: bold; text-decoration: underline;">SALE BILL</div>
               <div>GST # 08AACAB7763Q1Z2</div>
             </div>
             <div class="header-title">BITS Consumers Cooperative Stores Ltd.</div>
@@ -746,20 +736,21 @@ BITS Pilani
               </tr>
               ${isFacultyStaffOrDependent ? `<tr><td colspan="2" style="text-align: left;">${sponsorLineHtml}</td></tr>` : ''}
               <tr>
-                <td colspan="2" style="text-align: left;"><strong>Dr. :</strong> ${toTitleCase(doctorName)}</td>
+                <td colspan="2" style="text-align: left;"><strong>Dr. :</strong> ${toTitleCase(doctorName).toUpperCase()}</td>
               </tr>
             </table>
             
-            <table class="items-table">
+            <!-- Items Table -->
+            <table class="items-table" style="width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 5px;">
               <thead>
-                <tr>
-                  <th style="width: 5%;">SNo</th>
-                  <th style="text-align: left; width: 45%;">Item</th>
-                  <th style="width: 15%;">Rate<br/>Qty.</th>
-                  <th style="width: 7%;">Dis</th>
-                  <th style="width: 10%;">Amt.</th>
-                  <th style="width: 10%;">CGST<br/>SGST</th>
-                  <th style="text-align: right; width: 8%;">Total</th>
+                <tr style="border-top: 1px dashed #000; border-bottom: 1px dashed #000; font-weight: bold;">
+                  <th style="width: 8%; padding: 4px 2px;">SNo</th>
+                  <th style="text-align: left; width: 42%; padding: 4px 2px;">Item</th>
+                  <th style="width: 15%; padding: 4px 2px;">Rate<br/>Qty.</th>
+                  <th style="width: 8%; padding: 4px 2px;">Dis</th>
+                  <th style="width: 10%; padding: 4px 2px;">Amt.</th>
+                  <th style="width: 10%; padding: 4px 2px;">CGST<br/>SGST</th>
+                  <th style="text-align: right; width: 7%; padding: 4px 2px;">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -770,23 +761,23 @@ BITS Pilani
                   <td style="text-align: left;">Total</td>
                   <td></td>
                   <td></td>
-                  <td>${subBill.items.reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}</td>
-                  <td>
-                    <div>${subBill.items.reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</div>
-                    <div>${subBill.items.reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</div>
+                  <td style="text-align: center;">${(subBill.items || []).reduce((sum, item) => sum + (item.amount || 0), 0).toFixed(2)}</td>
+                  <td style="text-align: center;">
+                    <div>${(subBill.items || []).reduce((sum, item) => sum + (item.cgst || 0), 0).toFixed(2)}</div>
+                    <div>${(subBill.items || []).reduce((sum, item) => sum + (item.sgst || 0), 0).toFixed(2)}</div>
                   </td>
-                  <td style="text-align: right;">${subBill.unrounded_total.toFixed(2)}</td>
+                  <td style="text-align: right;">${(subBill.unrounded_total || subBill.total_amount || 0).toFixed(2)}</td>
                 </tr>
               </tbody>
             </table>
 
             <table style="width: 100%; font-size: 11px; margin-top: 5px; border-collapse: collapse;">
               <tr>
-                <td style="text-align: left;">Round Off :</td>
+                <td>Round Off :</td>
                 <td style="text-align: right; font-weight: bold;">${subBill.round_off.toFixed(2)}</td>
               </tr>
               <tr style="font-size: 12px; font-weight: bold;">
-                <td style="text-align: left;">Bill Total :</td>
+                <td>Bill Total :</td>
                 <td style="text-align: right; border-bottom: 2px double #000; padding: 2px 0;">Rs. ${subBill.total_amount.toFixed(2)}</td>
               </tr>
             </table>
@@ -808,7 +799,7 @@ BITS Pilani
             </div>
 
             <div class="footer-signature">
-              <div>Checked By</div>
+              <div></div>
               <div>Authorised Signature</div>
             </div>
           </div>
@@ -989,21 +980,21 @@ BITS Pilani
             <Flex align="center" justify="center" position="relative" mb={2} h="60px">
               <Image src={bitsLogo} w="40px" h="40px" position="absolute" left="0" top="10px" />
               <Box textAlign="center">
-                <Text fontWeight="bold" fontSize="13px" fontFamily="'Times New Roman', serif">Birla Institute of Technology & Science</Text>
-                <Text fontWeight="bold" fontSize="10px" fontFamily="'Times New Roman', serif" letterSpacing="1px">MEDICAL CENTRE</Text>
-                <Text fontSize="9px" fontFamily="'Times New Roman', serif">Vidya Vihar, Pilani, RAJASTHAN</Text>
+                <Text fontWeight="bold" fontSize="13px" fontFamily="monospace">Birla Institute of Technology & Science</Text>
+                <Text fontWeight="bold" fontSize="10px" fontFamily="monospace" letterSpacing="1px">MEDICAL CENTRE</Text>
+                <Text fontSize="9px" fontFamily="monospace">Vidya Vihar, Pilani, RAJASTHAN</Text>
               </Box>
             </Flex>
 
-            <Flex justify="space-between" fontSize="9px" fontFamily="'Times New Roman', serif" mt={1} borderTop="1px dashed gray" pt={1}>
+            <Flex justify="space-between" fontSize="9px" fontFamily="monospace" mt={1} borderTop="1px dashed gray" pt={1}>
               <Text>Contact No.: 01596-515525 &nbsp; &nbsp;/</Text>
               <Text>Fax: 01596-244183</Text>
             </Flex>
-            <Flex justify="space-between" fontSize="9px" fontFamily="'Times New Roman', serif" mb={1}>
+            <Flex justify="space-between" fontSize="9px" fontFamily="monospace" mb={1}>
               <Text>E-Mail : medc@pilani.bits-pilani.ac.in</Text>
               <Text>Date: {formattedDateShort}</Text>
             </Flex>
-            <Text fontSize="9px" fontFamily="'Times New Roman', serif" mb={2} borderBottom="1px dashed gray" pb={1}>
+            <Text fontSize="9px" fontFamily="monospace" mb={2} borderBottom="1px dashed gray" pb={1}>
               WebSite : www.bits-pilani.ac.in
             </Text>
 
@@ -1039,14 +1030,14 @@ BITS Pilani
             <Table variant="simple" size="sm" fontSize="8.5px" p={0}>
               <Thead>
                 <Tr borderTop="1px solid black" borderBottom="1px solid black">
-                  <Th p={1} color="black" fontSize="8px" textAlign="left">S.No.</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="left">Service</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="right">Gross</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="right">Disc%</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="right">Disc</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="right">Remb%</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="right">Remb</Th>
-                  <Th p={1} color="black" fontSize="8px" textAlign="right">Amount</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="left" w="5%">S.No.</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="left" w="25%">Service</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Gross</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="right" w="11%">Disc%</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="right" w="11%">Disc</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Remb%</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Remb</Th>
+                  <Th p={1} color="black" fontSize="8px" textAlign="right" w="12%">Amount</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -1148,7 +1139,8 @@ BITS Pilani
         >
           <Flex justify="space-between" fontSize="9px" fontWeight="bold" mb={1}>
             <Text>D. L. # 4161-4162</Text>
-            <Text textDecoration="underline">SALE BILL ({categoryTitle})</Text>
+            <Text textDecoration="underline">SALE BILL</Text>
+            <Text display="none">SALE BILL ({categoryTitle})</Text>
             <Text>GST # 08AACAB7763Q1Z2</Text>
           </Flex>
 
