@@ -34,10 +34,12 @@ import {
   IconButton,
   Tooltip
 } from '@chakra-ui/react';
-import { FiCalendar, FiCheckCircle, FiRefreshCw, FiAlertTriangle, FiArrowLeft } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiRefreshCw, FiAlertTriangle, FiArrowLeft, FiPrinter } from "react-icons/fi";
 import BASE_URL from '../../utils/Config';
 import { toTitleCase, formatDateTimeIST, getWeekdayIST } from '../../utils/utils';
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
+import PrescriptionSlip from '../../components/PrescriptionSlip';
+import PrescriptionModal from '../../components/PrescriptionModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
@@ -80,6 +82,9 @@ const PatientBooking = () => {
   const [showSlotWarningModal, setShowSlotWarningModal] = useState(false);
   const [slotWarningMessage, setSlotWarningMessage] = useState('');
   const [fullSlots, setFullSlots] = useState([]);
+
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printData, setPrintData] = useState(null);
 
   const fetchFullSlots = async (docUsername, dateStr) => {
     if (!docUsername || !dateStr) {
@@ -734,7 +739,46 @@ const PatientBooking = () => {
                               </AccordionButton>
                             </h2>
                             <AccordionPanel pb={4} bg="gray.50">
-                              <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
+                              <Box mb={4}>
+                                <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
+                              </Box>
+                              <Accordion allowToggle mt={4}>
+                                <AccordionItem border="1px solid" borderColor="gray.200" borderRadius="md" bg="white">
+                                  {({ isExpanded }) => (
+                                    <>
+                                      <h2>
+                                        <AccordionButton _expanded={{ bg: "gray.50" }} borderRadius="md">
+                                          <Flex flex="1" justify="space-between" align="center">
+                                            <Text fontWeight="bold" fontSize="sm" color="teal.700">
+                                              OPD Card / Prescription Slip Preview
+                                            </Text>
+                                            <Flex align="center" gap={2}>
+                                              <Button
+                                                size="xs"
+                                                colorScheme="teal"
+                                                leftIcon={<FiPrinter />}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  setPrintData({ ...verifiedPatient, ...app, emr_data: app.emr_data });
+                                                  setIsPrintModalOpen(true);
+                                                }}
+                                              >
+                                                Print Slip
+                                              </Button>
+                                              <AccordionIcon />
+                                            </Flex>
+                                          </Flex>
+                                        </AccordionButton>
+                                      </h2>
+                                      <AccordionPanel pb={4}>
+                                        {isExpanded && (
+                                          <PrescriptionSlip prescriptionData={{ ...verifiedPatient, ...app, emr_data: app.emr_data }} />
+                                        )}
+                                      </AccordionPanel>
+                                    </>
+                                  )}
+                                </AccordionItem>
+                              </Accordion>
                             </AccordionPanel>
                           </AccordionItem>
                         ))}
@@ -1155,6 +1199,14 @@ const PatientBooking = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+      {printData && (
+        <PrescriptionModal
+          isOpen={isPrintModalOpen}
+          onClose={() => setIsPrintModalOpen(false)}
+          prescriptionData={printData}
+        />
+      )}
 
     </Flex>
   );

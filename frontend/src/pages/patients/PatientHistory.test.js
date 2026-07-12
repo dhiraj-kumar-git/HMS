@@ -94,6 +94,15 @@ describe('PatientHistory Component', () => {
     expect(screen.getByText('• Take after meals')).toBeInTheDocument();
     expect(screen.getByText('• Fever')).toBeInTheDocument();
     expect(screen.getByText('• Blood Test')).toBeInTheDocument();
+
+    // Verify OPD Card nested accordion button is visible, but the slip itself is closed/not visible
+    const slipAccordionButton = screen.getByText('OPD Card / Prescription Slip Preview');
+    expect(slipAccordionButton).toBeInTheDocument();
+    expect(screen.queryByText('Birla Institute of Technology & Science')).not.toBeInTheDocument();
+
+    // Expand the OPD Card nested accordion
+    fireEvent.click(slipAccordionButton);
+    expect(screen.getByText('Birla Institute of Technology & Science')).toBeInTheDocument();
   });
 
   it('renders no history available when there are no completed appointments', async () => {
