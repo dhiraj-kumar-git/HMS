@@ -110,7 +110,7 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
         if i in selected_labs:
             test_name = t.get("lab_test", "")
             gross = get_test_price(test_name, config_list)
-            discPerc = 50 if is_faculty_eligible else t.get("discount", 0)
+            discPerc = 50
             discAmt = gross * discPerc / 100
             amt = gross - discAmt
             

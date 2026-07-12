@@ -48,6 +48,7 @@ import {
 import axios from "axios";
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
 import EMRForm from '../../components/EMRForm';
+import PrescriptionSlip from '../../components/PrescriptionSlip';
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, getWeekdayIST, toTitleCase } from '../../utils/utils';
 
@@ -944,37 +945,51 @@ export default function DoctorsDashboard() {
       </Modal>
 
       {/* CONFIRMATION MODAL */}
-      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} size="4xl" scrollBehavior="inside" isCentered>
+      <Modal isOpen={isConfirmOpen} onClose={onConfirmClose} scrollBehavior="inside" isCentered>
         <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>Patient Prescription Summary</ModalHeader>
+        <ModalContent maxW="92vw" width="1400px">
+          <ModalHeader fontSize="lg">Patient Prescription Summary</ModalHeader>
           <ModalCloseButton />
-          <ModalBody>
-            <Text fontWeight="bold" color="blue.600" mb={3}>
+          <ModalBody pb={6}>
+            <Text fontWeight="bold" color="blue.600" mb={2} fontSize="sm">
               Please Review the Prescription Summary
             </Text>
             {(!completionState.hasLabs && !completionState.hasMeds) && (
-              <Text fontSize="sm" mb={3} color="orange.600" fontWeight="medium">
+              <Text fontSize="xs" mb={2} color="orange.600" fontWeight="medium">
                 Note: You are completing this consultation without prescribing any medicines or lab tests.
               </Text>
             )}
-            <Text fontSize="sm" mb={4}>
+            <Text fontSize="11px" mb={4} color="gray.600">
               If anything looks incorrect, you can click "Cancel" to go back and edit the details. However, once you click "Confirm & Complete", the consultation will be finalized and changes can no longer be made.
             </Text>
 
-            <Box p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
-              <EMRHistoryDisplay emrData={completionState.emrData} />
-            </Box>
+            <Flex direction={{ base: 'column', lg: 'row' }} gap={4} align="stretch">
+              {/* Left Column: Doctor's Raw EMR Entries */}
+              <Box flex="1.1" p={4} borderWidth="1px" borderRadius="md" bg="gray.50" maxH="60vh" overflowY="auto" fontSize="12.5px">
+                <Text fontWeight="bold" fontSize="xs" color="blue.700" mb={2}>
+                  Doctor's EMR Notes
+                </Text>
+                <EMRHistoryDisplay emrData={completionState.emrData} />
+              </Box>
+
+              {/* Right Column: Visual OPD Card / Prescription Slip Preview */}
+              <Box flex="1.3" p={4} borderWidth="1px" borderRadius="md" bg="white" maxH="60vh" overflowY="auto" boxShadow="sm">
+                <Text fontWeight="bold" fontSize="xs" color="blue.700" mb={2}>
+                  OPD Card Visual Preview
+                </Text>
+                <PrescriptionSlip prescriptionData={{ ...selectedPatient, emr_data: completionState.emrData }} />
+              </Box>
+            </Flex>
           </ModalBody>
           <ModalFooter>
-            <Button variant="ghost" mr={3} onClick={onConfirmClose}>
+            <Button variant="ghost" mr={3} onClick={onConfirmClose} size="sm">
               Cancel
             </Button>
             <Button colorScheme="green" onClick={() => {
               if (selectedPatient) {
                 finalizeConsultation(selectedPatient.visit_id, completionState.hasLabs, completionState.hasMeds);
               }
-            }}>
+            }} size="sm">
               Confirm & Complete
             </Button>
           </ModalFooter>

@@ -6,137 +6,12 @@ import {
   ModalFooter,
   Button,
   Text,
-  Box,
-  Flex,
   useToast,
-  Image,
 } from '@chakra-ui/react';
-import { calculateAge, toTitleCase } from '../utils/utils';
-import bitsLogo from '../assets/bits-logo.png';
-
-// Code 39 encoding pattern map
-const CODE39_PATTERNS = {
-  '0': 'N N N W W N W N N',
-  '1': 'W N N W N N N N W',
-  '2': 'N N W W N N N N W',
-  '3': 'W N W W N N N N N',
-  '4': 'N N N W W N N N W',
-  '5': 'W N N W W N N N N',
-  '6': 'N N W W W N N N N',
-  '7': 'N N N W N N W N W',
-  '8': 'W N N W N N W N N',
-  '9': 'N N W W N N W N N',
-  'A': 'W N N N N W N N W',
-  'B': 'N N W N N W N N W',
-  'C': 'W N W N N W N N N',
-  'D': 'N N N N W W N N W',
-  'E': 'W N N N W W N N N',
-  'F': 'N N W N W W N N N',
-  'G': 'N N N N N W W N W',
-  'H': 'W N N N N W W N N',
-  'I': 'N N W N N W W N N',
-  'J': 'N N N N W W W N N',
-  'K': 'W N N N N N N W W',
-  'L': 'N N W N N N N W W',
-  'M': 'W N W N N N N W N',
-  'N': 'N N N N W N N W W',
-  'O': 'W N N N W N N W N',
-  'P': 'N N W N W N N W N',
-  'Q': 'N N N N N N W W W',
-  'R': 'W N N N N N W W N',
-  'S': 'N N W N N N W W N',
-  'T': 'N N N N W N W W N',
-  'U': 'W W N N N N N N W',
-  'V': 'N W W N N N N N W',
-  'W': 'W W W N N N N N N',
-  'X': 'N W N N W N N N W',
-  'Y': 'W W N N W N N N N',
-  'Z': 'N W W N W N N N N',
-  '-': 'N W N N N N W N W',
-  '.': 'W W N N N N W N N',
-  ' ': 'N W W N N N W N N',
-  '*': 'N W N N W N W N N',
-  '$': 'N W N W N W N N N',
-  '/': 'N W N W N N N W N',
-  '+': 'N W N N N W N W N',
-  '%': 'N N N W N W N W N'
-};
-
-const Code39Barcode = ({ value }) => {
-  if (!value) return null;
-  const cleanText = `*${String(value).toUpperCase()}*`;
-  const narrowWidth = 1.0;
-  const wideWidth = 2.5;
-
-  let x = 0;
-  const rects = [];
-
-  for (let i = 0; i < cleanText.length; i++) {
-    const char = cleanText[i];
-    const pattern = CODE39_PATTERNS[char] || CODE39_PATTERNS[' '];
-
-    const elements = pattern.split(' ');
-    for (let j = 0; j < 9; j++) {
-      const isBar = j % 2 === 0;
-      const isWide = elements[j] === 'W';
-      const w = isWide ? wideWidth : narrowWidth;
-
-      if (isBar) {
-        rects.push(
-          <rect
-            key={`${i}-${j}`}
-            x={x}
-            y={0}
-            width={w}
-            height={30}
-            fill="black"
-          />
-        );
-      }
-      x += w;
-    }
-    x += narrowWidth; // inter-character gap
-  }
-
-  return (
-    <svg
-      width="100%"
-      height="30"
-      viewBox={`0 0 ${x} 30`}
-      preserveAspectRatio="none"
-    >
-      {rects}
-    </svg>
-  );
-};
-
-const hashCode = (str) => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return Math.abs(hash);
-};
-
-const getOPDNumber = (visitId, dateStr) => {
-  if (!visitId) return `${dateStr}0001`;
-  const serial = (hashCode(visitId) % 9999) + 1;
-  const paddedSerial = String(serial).padStart(4, '0');
-  return `${dateStr}${paddedSerial}`;
-};
-
-const formatDateDMY = (dateObj) => {
-  const d = new Date(dateObj);
-  const day = String(d.getDate()).padStart(2, '0');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = months[d.getMonth()];
-  const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
-};
+import PrescriptionSlip from './PrescriptionSlip';
 
 function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
   const toast = useToast();
-
   const originalTitleRef = React.useRef(document.title);
 
   useEffect(() => {
@@ -145,7 +20,7 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
     const styleEl = document.createElement('style');
     styleEl.innerHTML = `
       .printable-content .monospace-text, .printable-content .monospace-text * {
-        font-family: 'Courier New', Courier, monospace !important;
+        font-family: Arial, Helvetica, sans-serif !important;
       }
 
       @media screen {
@@ -159,13 +34,13 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
           padding: 24px !important;
         }
         .printable-content, .printable-content * {
-          font-family: 'Times New Roman', Times, serif !important;
+          font-family: Arial, Helvetica, sans-serif !important;
         }
       }
 
       @media print {
         body, html, body * {
-          font-family: 'Times New Roman', Times, serif !important;
+          font-family: Arial, Helvetica, sans-serif !important;
         }
         .chakra-modal__content {
           zoom: 1 !important;
@@ -186,14 +61,13 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
         }
         .printable-content, .printable-content * {
           visibility: visible !important;
-          font-family: 'Times New Roman', Times, serif !important;
+          font-family: Arial, Helvetica, sans-serif !important;
         }
 
         .printable-content {
           position: absolute !important;
           top: 0; left: 0;
           width: 210mm !important;
-          height: 297mm !important;
           padding: 10mm !important;
           box-shadow: none !important;
           border: none !important;
@@ -209,10 +83,8 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
         }
         html, body {
           width: 210mm;
-          height: 297mm;
           margin: 0;
           padding: 0;
-          overflow: hidden;
         }
       }
     `;
@@ -276,179 +148,20 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
     }
   };
 
-  const todayObj = new Date();
-  const yyyy = todayObj.getFullYear();
-  const mm = String(todayObj.getMonth() + 1).padStart(2, '0');
-  const dd = String(todayObj.getDate()).padStart(2, '0');
-  const dateYYYYMMDD = `${yyyy}${mm}${dd}`;
-
-  const opdNo = prescriptionData?.opdNumber || getOPDNumber(prescriptionData?.visit_id, dateYYYYMMDD);
-  const formattedToday = formatDateDMY(todayObj);
-
   return (
     <>
-
-
-      <Modal isOpen={isOpen} onClose={onClose} size="xl">
+      <Modal isOpen={isOpen} onClose={onClose} size="5xl">
         <ModalOverlay />
         <ModalContent
           className="printable-content"
-          fontFamily="'Times New Roman', Times, serif"
+          fontFamily="Arial, Helvetica, sans-serif"
           p={0}
           maxW="800px"
         >
-          {/* Header Section */}
-          <Box position="relative" textAlign="center" pt={4} pb={2}>
-            <Image
-              src={bitsLogo}
-              alt="BITS Logo"
-              boxSize="65px"
-              position="absolute"
-              left="25px"
-              top="15px"
-            />
-            <Text fontSize="18px" fontWeight="bold">
-              Birla Institute of Technology & Science
-            </Text>
-            <Text fontSize="13px">
-              Pilani (Rajasthan) 333 031, India
-            </Text>
-            <Text fontSize="15px" fontWeight="bold" mt={1}>
-              MEDICAL CENTRE
-            </Text>
-            <Text fontSize="13px">
-              Vidya Vihar, Pilani, RAJASTHAN
-            </Text>
-          </Box>
+          {/* Hidden element for unit test backward compatibility */}
+          <Text display="none">: {prescriptionData?.email || '/'}</Text>
 
-          {/* Contact Details Grid */}
-          <Box borderTop="1px solid black" borderBottom="1px solid black" py={2} px={4}>
-            <Flex justify="space-between" fontSize="12px">
-              <Box width="60%" textAlign="left">
-                <Flex mb={0.5}>
-                  <Text width="100px" fontWeight="bold">Contact No.:</Text>
-                  <Text className="monospace-text">01596-515525 &nbsp; &nbsp; &nbsp; &nbsp;/</Text>
-                </Flex>
-                <Flex mb={0.5}>
-                  <Text width="100px" fontWeight="bold">E-Mail :</Text>
-                  <Text className="monospace-text">mcdc@pilani.bits-pilani.ac.in</Text>
-                </Flex>
-                <Flex mb={0.5}>
-                  <Text width="100px" fontWeight="bold">WebSite :</Text>
-                  <Text className="monospace-text">www.bits-pilani.ac.in</Text>
-                </Flex>
-              </Box>
-              <Box width="40%" pl={10} textAlign="left">
-                <Flex mb={0.5}>
-                  <Text width="90px" fontWeight="bold">Fax :</Text>
-                  <Text className="monospace-text">01596-244183</Text>
-                </Flex>
-                <Flex mb={0.5}>
-                  <Text width="90px" fontWeight="bold">Date:</Text>
-                  <Text className="monospace-text">{formattedToday}</Text>
-                </Flex>
-              </Box>
-            </Flex>
-          </Box>
-
-          {/* Title */}
-          <Box py={2} borderBottom="1px solid black" textAlign="center">
-            <Text fontSize="15px" fontWeight="bold" letterSpacing="1px" className="monospace-text">
-              OPD CARD / SLIP
-            </Text>
-          </Box>
-
-          {/* Patient Details */}
-          <Box px={4} py={3} fontSize="13px">
-            <Flex justify="space-between">
-              {/* Left Column */}
-              <Box width="55%" textAlign="left">
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">Name</Text>
-                  <Text flex="1" className="monospace-text">: {toTitleCase(prescriptionData?.name) || ''}</Text>
-                </Flex>
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">Sex & Age</Text>
-                  <Text flex="1" className="monospace-text">
-                    : {prescriptionData?.gender ? (prescriptionData.gender.toUpperCase() === 'M' ? 'MALE' : (prescriptionData.gender.toUpperCase() === 'F' ? 'FEMALE' : prescriptionData.gender.toUpperCase())) : ''} / {calculateAge(prescriptionData?.age || prescriptionData?.date_of_birth)}Yr
-                  </Text>
-                </Flex>
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">Address</Text>
-                  <Text flex="1" className="monospace-text">: {prescriptionData?.address || ''}</Text>
-                </Flex>
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">Ph/Mob No</Text>
-                  <Text flex="1" className="monospace-text">: {prescriptionData?.contact_no || ''} &nbsp; &nbsp; &nbsp; &nbsp;/</Text>
-                </Flex>
-                {/* Hidden element for unit test backward compatibility */}
-                <Text display="none">: {prescriptionData?.email || '/'}</Text>
-              </Box>
-
-              {/* Right Column */}
-              <Box width="45%" pl={4} textAlign="left">
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">O.P.D No</Text>
-                  <Text flex="1" className="monospace-text">: {opdNo}</Text>
-                </Flex>
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">PSRN/ID No</Text>
-                  <Text flex="1" className="monospace-text">: {prescriptionData?.institute_id || ''}</Text>
-                </Flex>
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">UHID No</Text>
-                  <Text flex="1" className="monospace-text">: {prescriptionData?.institute_id || ''}</Text>
-                </Flex>
-                <Flex mb={2} align="center">
-                  <Text width="110px" fontWeight="bold">Date</Text>
-                  <Text flex="1" className="monospace-text">: {formattedToday}</Text>
-                </Flex>
-              </Box>
-            </Flex>
-          </Box>
-
-          {/* Clinical and Treatment Section */}
-          <Box borderTop="1px solid black" borderBottom="1px solid black" minHeight="550px">
-            <Flex height="550px">
-              {/* Left Column: Complaint and Investigations */}
-              <Box width="35%" borderRight="1px solid black" pr={3} pt={2} display="flex" flexDirection="column">
-                <Box textAlign="left" height="330px">
-                  <Text fontSize="12px" fontWeight="bold" mb={2}>Complaint and Clinical Exam.</Text>
-                </Box>
-                <Box textAlign="left">
-                  <Text fontSize="12px" fontWeight="bold" mb={2}>Investigations</Text>
-                </Box>
-              </Box>
-
-              {/* Right Column: Treatment */}
-              <Box width="65%" pl={4} pt={2} textAlign="left">
-                <Text fontSize="12px" fontWeight="bold" mb={2}>Treatment</Text>
-              </Box>
-            </Flex>
-          </Box>
-
-          {/* Barcode Section */}
-          <Flex px={6} py={4} justify="space-between" align="center" borderBottom="1px solid black">
-            <Box width="30%" textAlign="center">
-              <Code39Barcode value={prescriptionData?.institute_id} />
-              <Text fontSize="11px" fontWeight="bold" mt={1} className="monospace-text">UHIDNo.</Text>
-            </Box>
-            <Box width="30%" textAlign="center">
-              <Code39Barcode value={prescriptionData?.institute_id} />
-              <Text fontSize="11px" fontWeight="bold" mt={1} className="monospace-text">INSID No.</Text>
-            </Box>
-            <Box width="30%" textAlign="center">
-              <Code39Barcode value={opdNo} />
-              <Text fontSize="11px" fontWeight="bold" mt={1} className="monospace-text">OPD No.</Text>
-            </Box>
-          </Flex>
-
-          {/* Footer Note */}
-          <Box textAlign="center" py={3}>
-            <Text fontSize="14px" fontWeight="bold" letterSpacing="0.5px" className="monospace-text">
-              * Please bring this prescription for next time *
-            </Text>
-          </Box>
+          <PrescriptionSlip prescriptionData={prescriptionData} />
 
           {/* Print Button */}
           <ModalFooter className="no-print" bg="gray.100">
@@ -466,3 +179,4 @@ function PrescriptionModal({ isOpen, onClose, prescriptionData }) {
 }
 
 export default PrescriptionModal;
+

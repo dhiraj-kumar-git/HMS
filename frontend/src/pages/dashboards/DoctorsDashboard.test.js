@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { ChakraProvider } from '@chakra-ui/react';
 import axios from 'axios';
@@ -332,6 +332,11 @@ describe('DoctorsDashboard Component', () => {
     // Type in advice
     const adviceInput = screen.getByLabelText(/Advice \/ General Instructions/i);
     fireEvent.change(adviceInput, { target: { value: 'Unsaved advice' } });
+
+    // Wait for the EMRForm 200ms debounce to run and update parent state
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
 
     // Click Close
     fireEvent.click(screen.getByText('Close'));

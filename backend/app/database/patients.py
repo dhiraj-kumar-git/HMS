@@ -415,12 +415,67 @@ def get_receptionist_queue(start_date=None, end_date=None, status_filter=None):
             "gender": "$patient_info.gender",
             "date_of_birth": "$patient_info.date_of_birth",
             "email": "$patient_info.email",
-            "address": "$patient_info.address"
+            "address": "$patient_info.address",
+            "registration_time": "$patient_info.registration_time",
+            "emr_data": 1,
+            "prescriptions": 1,
+            "lab_tests": 1
         }},
         COMPUTE_AGE_STAGE,
         {"$sort": {"time": 1}}
     ]
-    return list(visits.aggregate(pipeline))
+    results = list(visits.aggregate(pipeline))
+    for v in results:
+        # 1. OPD No calculation
+        v_time = v.get("time")
+        if v_time:
+            date_str = v_time.split("T")[0]
+            day_visits = list(visits.find({"time": {"$regex": f"^{date_str}"}}).sort([("time", 1), ("visit_id", 1)]))
+            visit_index = 1
+            for idx, item in enumerate(day_visits):
+                if item.get("visit_id") == v.get("visit_id"):
+                    visit_index = idx + 1
+                    break
+            v["opd_no"] = f"{date_str.replace('-', '')}{visit_index:04d}"
+        else:
+            v["opd_no"] = ""
+
+        # 2. UHID No calculation
+        reg_time = v.get("registration_time")
+        inst_id = v.get("institute_id", "")
+        if reg_time and inst_id:
+            if isinstance(reg_time, str):
+                try:
+                    reg_dt = datetime.fromisoformat(reg_time.replace("Z", "+00:00"))
+                except Exception:
+                    reg_dt = None
+            else:
+                reg_dt = reg_time
+                
+            if reg_dt:
+                reg_date_str = reg_dt.strftime("%Y-%m-%d")
+                start_of_day = datetime.strptime(reg_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+                end_of_day = start_of_day + timedelta(days=1)
+                
+                day_patients = list(patients.find({
+                    "registration_time": {
+                        "$gte": start_of_day,
+                        "$lt": end_of_day
+                    }
+                }).sort([("registration_time", 1), ("institute_id", 1)]))
+                
+                patient_index = 1
+                for idx, pt in enumerate(day_patients):
+                    if pt.get("institute_id") == inst_id:
+                        patient_index = idx + 1
+                        break
+                v["uhid_no"] = f"{reg_date_str.replace('-', '')}{patient_index:04d}"
+            else:
+                v["uhid_no"] = inst_id
+        else:
+            v["uhid_no"] = inst_id
+            
+    return results
 
 def update_appointment_status(visit_id, status):
     res = visits.update_one({"visit_id": visit_id}, {"$set": {"status": status}})
