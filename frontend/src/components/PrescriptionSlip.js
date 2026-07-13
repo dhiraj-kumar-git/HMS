@@ -143,7 +143,7 @@ const formatDateTimeDMY = (dateObj) => {
   return `${partMap.day}-${partMap.month}-${partMap.year} ${partMap.hour}:${partMap.minute}:${partMap.second}`;
 };
 
-export default function PrescriptionSlip({ prescriptionData }) {
+export default function PrescriptionSlip({ prescriptionData, isPreview = false }) {
   if (!prescriptionData) return null;
 
   // Extract EMR subfields
@@ -208,43 +208,43 @@ export default function PrescriptionSlip({ prescriptionData }) {
       <Box
         className="opd-page"
         w="100%"
-        maxW="800px"
+        maxW={isPreview ? "100%" : "800px"}
         bg="white"
         color="black"
-        p="24px"
+        p={isPreview ? "12px" : "24px"}
         border="2px double #000"
         fontFamily="Arial, Helvetica, sans-serif"
-        fontSize="13px"
+        fontSize={isPreview ? "11px" : "13px"}
         lineHeight="1.4"
         position="relative"
         boxShadow="0 4px 12px rgba(0,0,0,0.05)"
-        mb="20px"
+        mb={isPreview ? "10px" : "20px"}
         style={{ pageBreakAfter: 'always', pageBreakInside: 'avoid' }}
       >
         {/* Header Section */}
-        <Box position="relative" textAlign="center" pt={4} pb={2}>
+        <Box position="relative" textAlign="center" pt={isPreview ? 2 : 4} pb={isPreview ? 1 : 2}>
           <Image
             src={bitsLogo}
             alt="BITS Logo"
-            boxSize="60px"
+            boxSize={isPreview ? "40px" : "60px"}
             position="absolute"
-            left="20px"
-            top="12px"
+            left={isPreview ? "8px" : "20px"}
+            top={isPreview ? "4px" : "12px"}
           />
-          <Text fontSize="18px" fontWeight="bold">
+          <Text fontSize={isPreview ? "13px" : "18px"} fontWeight="bold">
             Birla Institute of Technology & Science
           </Text>
-          <Text fontSize="12px">
+          <Text fontSize={isPreview ? "9px" : "12px"}>
             Pilani (Rajasthan) 333 031, India
           </Text>
-          <Text fontSize="15px" fontWeight="bold" mt={1}>
+          <Text fontSize={isPreview ? "11px" : "15px"} fontWeight="bold" mt={1}>
             MEDICAL CENTRE
           </Text>
-          <Text fontSize="12px">
+          <Text fontSize={isPreview ? "9px" : "12px"}>
             Vidya Vihar, Pilani, RAJASTHAN
           </Text>
           {isPage2 && (
-            <Text fontSize="12px" fontWeight="bold" color="gray.600" mt={1} letterSpacing="1px">
+            <Text fontSize={isPreview ? "9px" : "12px"} fontWeight="bold" color="gray.600" mt={1} letterSpacing="1px">
               * PRESCRIPTION CONTINUATION SHEET *
             </Text>
           )}

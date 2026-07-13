@@ -457,7 +457,7 @@ const PatientBooking = () => {
     try {
       const userRole = localStorage.getItem('role');
       const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
-      
+
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
@@ -555,7 +555,7 @@ const PatientBooking = () => {
           .pulsing-dot { animation: pulse-green 2s infinite; }
         `}
       </style>
-      <Box w="100%" maxW={verifiedPatient ? "1100px" : "500px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
+      <Box w="100%" maxW={verifiedPatient ? "100%" : "500px"} bg="white" borderRadius={verifiedPatient ? "xl" : "2xl"} boxShadow="xl" p={{ base: 4, md: 6 }} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
@@ -575,18 +575,17 @@ const PatientBooking = () => {
         <Flex align="center" mb={6}>
           <Icon as={FiCalendar} w={8} h={8} color="teal.500" mr={3} />
           <Heading as="h2" size="xl" color="gray.800">
-            Book Appointment
+            Patient Portal
           </Heading>
         </Flex>
 
         {!verifiedPatient ? (
           <VStack spacing={6}>
             <Text color="gray.600" w="100%">
-              Enter your Institute ID to fetch your patient record and book an appointment.
-              Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
+              Enter your Institute ID or PSRN No. to fetch your patient record and book an appointment. Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
             </Text>
             <FormControl>
-              <FormLabel color="gray.700">Institute ID</FormLabel>
+              <FormLabel color="gray.700">Institute ID / PSRN No.</FormLabel>
               <Input
                 placeholder="e.g. 2025H1120147P"
                 value={instituteId}
@@ -608,185 +607,214 @@ const PatientBooking = () => {
           </VStack>
         ) : (
           <Box>
-            <Flex align="center" p={4} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200" mb={6}>
-              <Icon as={FiCheckCircle} w={6} h={6} color="teal.500" mr={3} />
-              <Box>
-                <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Patient</Text>
-                <Text fontSize="lg" color="teal.900">{toTitleCase(verifiedPatient.name)}</Text>
-                <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
-              </Box>
-            </Flex>
+            {bookingFlow === 'dashboard' && (() => {
+              const appointmentsWithHistory = verifiedPatient.appointments ? verifiedPatient.appointments.filter(a =>
+                a.status === 'completed' ||
+                a.status === 'cancelled' ||
+                (a.emr_data && Object.keys(a.emr_data).length > 0) ||
+                (a.prescription_summary && a.prescription_summary.length > 0)
+              ) : [];
+              const hasHistory = appointmentsWithHistory.length > 0;
 
-            {familyMembers.length > 1 && (
-              <Box mb={6} p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                <FormControl>
-                  <FormLabel fontWeight="bold" color="teal.800">Who is this appointment for?</FormLabel>
-                  <Select
-                    value={verifiedPatient.institute_id}
-                    onChange={(e) => {
-                      const selected = familyMembers.find(f => f.institute_id === e.target.value);
-                      if (selected) setVerifiedPatient(selected);
-                    }}
-                    focusBorderColor="teal.500"
-                    bg="gray.50"
-                  >
-                    {familyMembers.map(member => (
-                      <option key={member.institute_id} value={member.institute_id}>
-                        {toTitleCase(member.name)} ({member.relation || 'Self'})
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-            )}
+              const leftColumnContent = (
+                <VStack spacing={4} align="stretch">
+                  <Flex align="center" p={3} bg="teal.50" borderRadius="lg" border="1px solid" borderColor="teal.200">
+                    <Icon as={FiCheckCircle} w={5} h={5} color="teal.500" mr={2.5} />
+                    <Box>
+                      <Text fontSize="xs" color="teal.700" fontWeight="bold">Verified Patient</Text>
+                      <Text fontSize="md" color="teal.900" fontWeight="bold">{toTitleCase(verifiedPatient.name)}</Text>
+                      <Text fontSize="10px" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
+                    </Box>
+                  </Flex>
 
-
-            {bookingFlow === 'dashboard' && (
-              <VStack spacing={6} align="stretch">
-                {prevDoc && (
-                  <Box p={4} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200">
-                    <Text fontSize="sm" color="blue.800" mb={3}>
-                      You previously visited <strong>{toTitleCase(prevDoc.display_name)}</strong> ({prevDoc.department}).
-                    </Text>
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      onClick={() => handleQuickBookClick(prevDoc.username)}
-                    >
-                      Book with {toTitleCase(prevDoc.display_name)} Again
-                    </Button>
-                  </Box>
-                )}
-
-                <Box bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                  <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
-                    <Box w="3" h="3" bg="green.400" borderRadius="full" mr={3} className="pulsing-dot" />
-                    Doctors Available Today ({todayName})
-                  </Heading>
-                  {doctorsAvailableToday.length > 0 ? (
-                    <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={4}>
-                      {doctorsAvailableToday.map((doc, idx) => {
-                        const shift = doc.schedule.find(s => s.duty_days.includes(todayName));
-                        return (
-                          <GridItem key={idx}>
-                            <Flex direction="column" justify="space-between" h="100%" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                              <Box mb={4}>
-                                <Text fontWeight="bold" color="gray.700">{toTitleCase(doc.display_name)} ({doc.department})</Text>
-                                <Badge colorScheme="green" mt={2} borderRadius="md" textTransform="none">
-                                  Today: {shift.start_time} - {shift.end_time}
-                                </Badge>
-                              </Box>
-                              <Button
-                                w="100%"
-                                colorScheme="teal"
-                                variant="solid"
-                                onClick={() => handleQuickBookClick(doc.username)}
-                              >
-                                Book Now
-                              </Button>
-                            </Flex>
-                          </GridItem>
-                        )
-                      })}
-                    </Grid>
-                  ) : (
-                    <Text color="gray.500" fontSize="sm">No doctors are officially scheduled for today.</Text>
-                  )}
-                </Box>
-
-                <Flex direction="column" align="center" mt={2} bg="gray.50" p={6} borderRadius="xl" border="1px dashed" borderColor="gray.300">
-                  <Text color="gray.600" mb={3} textAlign="center">Don't see your doctor or want to plan ahead instead?</Text>
-                  <Button size="lg" colorScheme="gray" variant="outline" onClick={handleFutureBookingClick}>
-                    Schedule for a Later Date
-                  </Button>
-                </Flex>
-
-                {/* Visit History Section */}
-                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a =>
-                  a.status === 'completed' ||
-                  (a.emr_data && Object.keys(a.emr_data).length > 0) ||
-                  (a.prescription_summary && a.prescription_summary.length > 0)
-                ).length > 0 && (
-                    <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                      <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
-                        <Icon as={FiCalendar} mr={3} /> My Visit History
-                      </Heading>
-                      <Accordion allowMultiple>
-                        {verifiedPatient.appointments.filter(a =>
-                          a.status === 'completed' ||
-                          a.status === 'cancelled' ||
-                          (a.emr_data && Object.keys(a.emr_data).length > 0) ||
-                          (a.prescription_summary && a.prescription_summary.length > 0)
-                        ).slice().reverse().map((app, idx) => (
-                          <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
-                            <h2>
-                              <AccordionButton _expanded={{ bg: "gray.50" }}>
-                                <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
-                                  {formatDateTimeIST(app.time)} - {toTitleCase(app.doctor_name)}
-                                </Box>
-                                <Badge
-                                  colorScheme={
-                                    app.status === 'completed' ? "green" :
-                                      app.status === 'cancelled' ? "red" : "blue"
-                                  }
-                                  mr={3}
-                                  textTransform="none"
-                                >
-                                  {app.status === 'completed' ? "Completed" :
-                                    app.status === 'cancelled' ? "Cancelled" : "In Progress"}
-                                </Badge>
-                                <AccordionIcon />
-                              </AccordionButton>
-                            </h2>
-                            <AccordionPanel pb={4} bg="gray.50">
-                              <Box mb={4}>
-                                <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
-                              </Box>
-                              <Accordion allowToggle mt={4}>
-                                <AccordionItem border="1px solid" borderColor="gray.200" borderRadius="md" bg="white">
-                                  {({ isExpanded }) => (
-                                    <>
-                                      <h2>
-                                        <AccordionButton _expanded={{ bg: "gray.50" }} borderRadius="md">
-                                          <Flex flex="1" justify="space-between" align="center">
-                                            <Text fontWeight="bold" fontSize="sm" color="teal.700">
-                                              OPD Card / Prescription Slip Preview
-                                            </Text>
-                                            <Flex align="center" gap={2}>
-                                              <Button
-                                                size="xs"
-                                                colorScheme="teal"
-                                                leftIcon={<FiPrinter />}
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setPrintData({ ...verifiedPatient, ...app, emr_data: app.emr_data });
-                                                  setIsPrintModalOpen(true);
-                                                }}
-                                              >
-                                                Print Slip
-                                              </Button>
-                                              <AccordionIcon />
-                                            </Flex>
-                                          </Flex>
-                                        </AccordionButton>
-                                      </h2>
-                                      <AccordionPanel pb={4}>
-                                        {isExpanded && (
-                                          <PrescriptionSlip prescriptionData={{ ...verifiedPatient, ...app, emr_data: app.emr_data }} />
-                                        )}
-                                      </AccordionPanel>
-                                    </>
-                                  )}
-                                </AccordionItem>
-                              </Accordion>
-                            </AccordionPanel>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
+                  {familyMembers.length > 1 && (
+                    <Box p={3} bg="white" borderRadius="lg" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                      <FormControl>
+                        <FormLabel fontWeight="bold" color="teal.800" fontSize="xs" mb={1}>Who is this appointment for?</FormLabel>
+                        <Select
+                          value={verifiedPatient.institute_id}
+                          onChange={(e) => {
+                            const selected = familyMembers.find(f => f.institute_id === e.target.value);
+                            if (selected) setVerifiedPatient(selected);
+                          }}
+                          focusBorderColor="teal.500"
+                          size="sm"
+                          bg="gray.50"
+                        >
+                          {familyMembers.map(member => (
+                            <option key={member.institute_id} value={member.institute_id}>
+                              {toTitleCase(member.name)} ({member.relation || 'Self'})
+                            </option>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Box>
                   )}
-              </VStack>
-            )}
+
+                  {prevDoc && (
+                    <Box p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.200">
+                      <Text fontSize="xs" color="blue.800" mb={2}>
+                        You previously visited <strong>{toTitleCase(prevDoc.display_name)}</strong> ({prevDoc.department}).
+                      </Text>
+                      <Button
+                        size="xs"
+                        colorScheme="blue"
+                        onClick={() => handleQuickBookClick(prevDoc.username)}
+                      >
+                        Book with {toTitleCase(prevDoc.display_name)} Again
+                      </Button>
+                    </Box>
+                  )}
+
+                  <Box bg="white" p={4} borderRadius="lg" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                    <Heading size="xs" mb={3} color="teal.800" display="flex" alignItems="center">
+                      <Box w="2.5" h="2.5" bg="green.400" borderRadius="full" mr={2} className="pulsing-dot" />
+                      Doctors Available Today ({todayName})
+                    </Heading>
+                    {doctorsAvailableToday.length > 0 ? (
+                      <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={3}>
+                        {doctorsAvailableToday.map((doc, idx) => {
+                          const shift = doc.schedule.find(s => s.duty_days.includes(todayName));
+                          return (
+                            <GridItem key={idx}>
+                              <Flex direction="column" justify="space-between" h="100%" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                <Box mb={2}>
+                                  <Text fontWeight="bold" fontSize="xs" color="gray.700">{toTitleCase(doc.display_name)} ({doc.department})</Text>
+                                  <Badge colorScheme="green" mt={1.5} borderRadius="md" textTransform="none" fontSize="9px">
+                                    Today: {shift.start_time} - {shift.end_time}
+                                  </Badge>
+                                </Box>
+                                <Button
+                                  w="100%"
+                                  colorScheme="teal"
+                                  size="xs"
+                                  variant="solid"
+                                  onClick={() => handleQuickBookClick(doc.username)}
+                                >
+                                  Book Now
+                                </Button>
+                              </Flex>
+                            </GridItem>
+                          )
+                        })}
+                      </Grid>
+                    ) : (
+                      <Text color="gray.500" fontSize="xs">No doctors are officially scheduled for today.</Text>
+                    )}
+                  </Box>
+
+                  <Flex direction="column" align="center" bg="gray.50" p={4} borderRadius="lg" border="1px dashed" borderColor="gray.300">
+                    <Text color="gray.600" mb={2} textAlign="center" fontSize="xs">Don't see your doctor or want to plan ahead instead?</Text>
+                    <Button size="sm" colorScheme="gray" variant="outline" onClick={handleFutureBookingClick}>
+                      Schedule for a Later Date
+                    </Button>
+                  </Flex>
+                </VStack>
+              );
+
+              if (hasHistory) {
+                return (
+                  <Grid templateColumns={{ base: '1fr', lg: '3.5fr 6.5fr' }} gap={6} alignItems="start">
+                    <GridItem>
+                      {leftColumnContent}
+                    </GridItem>
+                    <GridItem>
+                      <Box bg="white" p={4} borderRadius="lg" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                        <Heading size="xs" mb={3} color="teal.800" display="flex" alignItems="center">
+                          <Icon as={FiCalendar} mr={2} /> My Visit History
+                        </Heading>
+                        <Accordion allowMultiple>
+                          {appointmentsWithHistory.slice().reverse().map((app, idx) => (
+                            <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={2}>
+                              <h2>
+                                <AccordionButton py={1.5} _expanded={{ bg: "gray.50" }}>
+                                  <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700" fontSize="xs">
+                                    {formatDateTimeIST(app.time)} - {toTitleCase(app.doctor_name)}
+                                  </Box>
+                                  <Badge
+                                    colorScheme={
+                                      app.status === 'completed' ? "green" :
+                                        app.status === 'cancelled' ? "red" : "blue"
+                                    }
+                                    mr={3}
+                                    fontSize="9px"
+                                    textTransform="none"
+                                  >
+                                    {app.status === 'completed' ? "Completed" :
+                                      app.status === 'cancelled' ? "Cancelled" : "In Progress"}
+                                  </Badge>
+                                  <AccordionIcon w={3.5} h={3.5} />
+                                </AccordionButton>
+                              </h2>
+                              <AccordionPanel pb={3} bg="gray.50">
+                                <Box mb={3}>
+                                  <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
+                                </Box>
+                                <Accordion allowToggle mt={3}>
+                                  <AccordionItem border="1px solid" borderColor="gray.200" borderRadius="md" bg="white">
+                                    {({ isExpanded }) => (
+                                      <>
+                                        <h2>
+                                          <AccordionButton _expanded={{ bg: "gray.50" }} py={1.5} borderRadius="md">
+                                            <Flex flex="1" justify="space-between" align="center">
+                                              <Text fontWeight="bold" fontSize="xs" color="teal.700">
+                                                OPD Card / Prescription Slip Preview
+                                              </Text>
+                                              <Flex align="center" gap={2}>
+                                                <Button
+                                                  size="xs"
+                                                  colorScheme="teal"
+                                                  leftIcon={<FiPrinter />}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setPrintData({ ...verifiedPatient, ...app, emr_data: app.emr_data });
+                                                    setIsPrintModalOpen(true);
+                                                  }}
+                                                >
+                                                  Print Slip
+                                                </Button>
+                                                <AccordionIcon w={3.5} h={3.5} />
+                                              </Flex>
+                                            </Flex>
+                                          </AccordionButton>
+                                        </h2>
+                                        <AccordionPanel pb={3}>
+                                          <Box overflowX="auto" w="100%">
+                                            {isExpanded && (
+                                              <PrescriptionSlip prescriptionData={{ ...verifiedPatient, ...app, emr_data: app.emr_data }} isPreview={false} />
+                                            )}
+                                          </Box>
+                                        </AccordionPanel>
+                                      </>
+                                    )}
+                                  </AccordionItem>
+                                </Accordion>
+                              </AccordionPanel>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
+                      </Box>
+                    </GridItem>
+                  </Grid>
+                );
+              }
+
+              // One-column layout fallback when there is no history
+              return (
+                <VStack spacing={4} align="stretch" maxW="800px" mx="auto">
+                  {leftColumnContent}
+                  <Box p={3} bg="orange.50" borderRadius="lg" border="1px solid" borderColor="orange.200">
+                    <Flex align="center">
+                      <Icon as={FiAlertTriangle} color="orange.500" w={4} h={4} mr={2} />
+                      <Box>
+                        <Text fontWeight="bold" color="orange.800" fontSize="xs">No Visit History Available</Text>
+                        <Text fontSize="10px" color="orange.700">You do not have any past medical visits or prescriptions recorded in our system yet.</Text>
+                      </Box>
+                    </Flex>
+                  </Box>
+                </VStack>
+              );
+            })()}
 
             {bookingFlow === 'quick_confirm' && (
               <Box bg="white" p={8} borderRadius="xl" border="1px solid" borderColor="teal.200" boxShadow="sm" maxW="600px" mx="auto">
