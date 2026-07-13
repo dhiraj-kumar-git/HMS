@@ -1,9 +1,25 @@
 from flask import Blueprint, request, jsonify, send_from_directory, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 import database
 import time
 import random
 from app.routes.lab_routes import send_email
+
+def strip_public_patient_emr(patient):
+    if not patient:
+        return
+    for k in ["prescriptions", "prescription_details", "remarks", "prescription_summary", 
+              "prescription_remarks_summary", "lab_test_summary", "diagnosis_note", 
+              "prescriptions_draft", "prescription_details_draft", "lab_tests_draft", 
+              "remarks_draft", "emr_data"]:
+        patient.pop(k, None)
+    if "appointments" in patient:
+        for appt in patient["appointments"]:
+            for k in ["emr_data", "prescriptions", "prescription_details", "remarks", 
+                      "prescription_summary", "prescription_remarks_summary", "lab_test_summary", 
+                      "diagnosis_note", "prescriptions_draft", "prescription_details_draft", 
+                      "lab_tests_draft", "remarks_draft"]:
+                appt.pop(k, None)
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -240,6 +256,21 @@ def public_verify_patient():
         
     if patient.get("account_status") == "archived":
         return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
+
+    # Check if receptionist JWT token is provided
+    is_receptionist = False
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        if claims and claims.get("role") == "receptionist":
+            is_receptionist = True
+    except:
+        pass
+
+    if is_receptionist:
+        patient_copy = dict(patient)
+        strip_public_patient_emr(patient_copy)
+        return jsonify(patient_copy), 200
         
     email = patient.get("email")
     if not email:
@@ -282,15 +313,29 @@ def public_verify_otp():
     patient = database.get_patient_by_id(institute_id)
     if not patient:
         return jsonify({"error": "No patient found"}), 404
+
+    # Check if receptionist JWT token is provided
+    is_receptionist = False
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        if claims and claims.get("role") == "receptionist":
+            is_receptionist = True
+    except:
+        pass
+
+    patient_copy = dict(patient)
+    if is_receptionist:
+        strip_public_patient_emr(patient_copy)
         
     return jsonify({
         "message": "OTP verified successfully", 
-        "institute_id": patient.get("institute_id"), 
-        "name": patient.get("name"),
-        "psrn_id": patient.get("psrn_id"),
-        "doctor_assigned": patient.get("doctor_assigned"),
-        "appointments": patient.get("appointments", []),
-        "bill_status": patient.get("bill_status", "none")
+        "institute_id": patient_copy.get("institute_id"), 
+        "name": patient_copy.get("name"),
+        "psrn_id": patient_copy.get("psrn_id"),
+        "doctor_assigned": patient_copy.get("doctor_assigned"),
+        "appointments": patient_copy.get("appointments", []),
+        "bill_status": patient_copy.get("bill_status", "none")
     }), 200
 
 @public_bp.route('/api/public/doctor-availability/<doctor_username>', methods=['GET'])
@@ -331,6 +376,25 @@ def public_doctor_availability(doctor_username):
     return jsonify({"full_slots": full_slots}), 200
 
 def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
+    # Check if doctor is on leave
+    try:
+        if "T" in appointment_time:
+            app_date_str = appointment_time.split("T")[0]
+        else:
+            app_date_str = appointment_time.split(" ")[0]
+        
+        leave_match = database.leaves.find_one({
+            "doctor_username": doctor_username,
+            "start_date": {"$lte": app_date_str},
+            "end_date": {"$gte": app_date_str}
+        })
+        if leave_match:
+            doctor = database.users.find_one({"username": doctor_username})
+            doc_name = doctor.get("display_name") if doctor else doctor_username
+            return False, (jsonify({"error": f"Doctor {doc_name} is on leave on this day."}), 400)
+    except Exception as e:
+        print("Error validating doctor leave:", str(e))
+
     active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
     
     # HARD BLOCK: Same doctor, same slot
@@ -480,6 +544,14 @@ def check_active_appointments(institute_id):
         })
     
     return jsonify({"active_appointments": active_appointments}), 200
+
+@public_bp.route('/api/public/leaves', methods=['GET'])
+def get_public_leaves():
+    try:
+        all_leaves = list(database.leaves.find({}, {"_id": 0}))
+        return jsonify(all_leaves), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # uploading lab reports to s3
 

@@ -18,7 +18,8 @@ import {
   useToast,
   useDisclosure,
   Icon,
-  IconButton
+  IconButton,
+  Spinner
 } from '@chakra-ui/react';
 import { FiRefreshCw, FiChevronDown, FiHelpCircle, FiChevronRight } from 'react-icons/fi';
 import { Select } from '@chakra-ui/react';
@@ -31,6 +32,7 @@ export default function PatientsList() {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const userRole = localStorage.getItem('role');
   const toast = useToast();
@@ -54,6 +56,7 @@ export default function PatientsList() {
   useEffect(() => { fetchPatients(); }, []);
 
   const fetchPatients = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.get(`${BASE_URL}/patients`, {
@@ -71,6 +74,8 @@ export default function PatientsList() {
     } catch (err) {
       console.error(err);
       toast({ title: 'Error loading patients', status: 'error', duration: 3000, isClosable: true });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -146,7 +151,12 @@ export default function PatientsList() {
 
       {/* Patients Table */}
       <Box overflowX="auto">
-        <Table variant="simple" size="sm" fontSize="sm">
+        {loading ? (
+          <Flex justify="center" align="center" py="10">
+            <Spinner size="xl" color="blue.500" thickness="4px" speed="0.65s" />
+          </Flex>
+        ) : (
+          <Table variant="simple" size="sm" fontSize="sm">
           <Thead bg="gray.100">
             <Tr>
               <Th w="40px"></Th>
@@ -299,6 +309,7 @@ export default function PatientsList() {
             )}
           </Tbody>
         </Table>
+        )}
       </Box>
 
       {/* Pagination Controls */}

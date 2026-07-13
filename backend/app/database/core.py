@@ -34,6 +34,7 @@ sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
 visits = db.visits # Collection for storing individual patient visits
 bills = db.bills # Collection for storing permanent billing ledger
+leaves = db.leaves # Collection for storing doctor leave dates
 
 # Ensure Indexes Configuration
 try:
@@ -50,6 +51,7 @@ try:
     visits.create_index("doctor_username")
     bills.create_index("institute_id")
     bills.create_index("payment_date")
+    leaves.create_index([("doctor_username", 1), ("start_date", 1), ("end_date", 1)])
 except Exception as e:
     print(f"Error creating indexes: {e}")
 

@@ -26,12 +26,14 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
   const [appointmentDate, setAppointmentDate] = useState('');
   const [appointmentTimeSlot, setAppointmentTimeSlot] = useState('');
   const [fullSlots, setFullSlots] = useState([]);
+  const [leaves, setLeaves] = useState([]);
   const [loading, setLoading] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
     if (isOpen) {
       fetchDoctors();
+      fetchLeaves();
       setDoctorUsername('');
       setAppointmentDate('');
       setAppointmentTimeSlot('');
@@ -51,6 +53,15 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
       setDoctors(res.data);
     } catch (err) {
       console.error('Error fetching doctors:', err);
+    }
+  };
+
+  const fetchLeaves = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/api/public/leaves`);
+      setLeaves(res.data || []);
+    } catch (e) {
+      console.error('Error fetching leaves:', e);
     }
   };
 
@@ -126,12 +137,12 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
       toast({ title: 'Please fill all fields', status: 'warning' });
       return;
     }
-    
+
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const formattedTime = `${appointmentDate}T${appointmentTimeSlot}`;
-      
+
       await axios.post(`${BASE_URL}/api/receptionist/book-appointment`, {
         institute_id: patient.institute_id,
         doctor_username: doctorUsername,
@@ -140,7 +151,7 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      
+
       toast({ title: 'Appointment Booked Successfully', status: 'success' });
       onSuccess();
       onClose();
@@ -195,13 +206,30 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
                   onChange={e => setAppointmentDate(e.target.value)}
                 />
               </FormControl>
+
+              {(() => {
+                const selectedDoctorLeave = doctorUsername && appointmentDate && leaves.find(l =>
+                  l.doctor_username === doctorUsername &&
+                  appointmentDate >= l.start_date &&
+                  appointmentDate <= l.end_date
+                );
+                if (selectedDoctorLeave) {
+                  return (
+                    <Text color="red.500" fontSize="xs" fontWeight="bold" textAlign="center" alignSelf="center">
+                      ⚠️ Doctor is on leave on this day. Booking is blocked.
+                    </Text>
+                  );
+                }
+                return null;
+              })()}
+
               <FormControl isRequired>
                 <FormLabel>Appointment Time</FormLabel>
                 <Select
                   value={appointmentTimeSlot}
                   onChange={e => setAppointmentTimeSlot(e.target.value)}
                   placeholder="Select Time"
-                  isDisabled={!appointmentDate || !doctorUsername}
+                  isDisabled={!appointmentDate || !doctorUsername || !!(doctorUsername && appointmentDate && leaves.find(l => l.doctor_username === doctorUsername && appointmentDate >= l.start_date && appointmentDate <= l.end_date))}
                 >
                   {availableTimeSlots.map((slot, idx) => {
                     const [h, m] = slot.split(':');
@@ -230,7 +258,14 @@ export default function BookAppointmentModal({ isOpen, onClose, patient, onSucce
           ) : (
             <>
               <Button variant="ghost" mr={3} onClick={onClose} isDisabled={loading}>Cancel</Button>
-              <Button colorScheme="brand" onClick={() => handleBook(false)} isLoading={loading}>Book</Button>
+              <Button
+                colorScheme="brand"
+                onClick={() => handleBook(false)}
+                isLoading={loading}
+                isDisabled={loading || !!(doctorUsername && appointmentDate && leaves.find(l => l.doctor_username === doctorUsername && appointmentDate >= l.start_date && appointmentDate <= l.end_date))}
+              >
+                Book
+              </Button>
             </>
           )}
         </ModalFooter>
