@@ -112,6 +112,22 @@ def register_patient():
         
     return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
 
+def strip_patient_emr(patient):
+    if not patient:
+        return
+    for k in ["prescriptions", "prescription_details", "remarks", "prescription_summary", 
+              "prescription_remarks_summary", "lab_test_summary", "diagnosis_note", 
+              "prescriptions_draft", "prescription_details_draft", "lab_tests_draft", 
+              "remarks_draft", "emr_data"]:
+        patient.pop(k, None)
+    if "appointments" in patient:
+        for appt in patient["appointments"]:
+            for k in ["emr_data", "prescriptions", "prescription_details", "remarks", 
+                      "prescription_summary", "prescription_remarks_summary", "lab_test_summary", 
+                      "diagnosis_note", "prescriptions_draft", "prescription_details_draft", 
+                      "lab_tests_draft", "remarks_draft"]:
+                appt.pop(k, None)
+
 # Protected route to fetch patient details
 @patient_bp.route('/get_patient/<institute_id>', methods=['GET'])
 @jwt_required()
@@ -126,6 +142,8 @@ def get_patient(institute_id):
                     v for v in patient["appointments"]
                     if v.get("doctor_username") == username
                 ]
+        elif claims.get("role") == "receptionist":
+            strip_patient_emr(patient)
         return jsonify(patient), 200
     return jsonify({"error": "Patient not found"}), 404
 
@@ -146,6 +164,9 @@ def get_patients():
         
     skip = (page - 1) * limit if limit > 0 else 0
     patients_list = database.get_all_patients(skip, limit)
+    if claims.get("role") == "receptionist":
+        for p in patients_list:
+            strip_patient_emr(p)
     return jsonify(patients_list), 200
 
 
@@ -295,6 +316,8 @@ def get_family(psrn_id):
     family = database.get_family_by_psrn(psrn_id)
     if not family:
         return jsonify({"error": "No family found for this PSRN ID"}), 404
+    for member in family:
+        strip_patient_emr(member)
     return jsonify(family), 200
 
 @patient_bp.route('/api/family/dependant/<institute_id>', methods=['PUT'])

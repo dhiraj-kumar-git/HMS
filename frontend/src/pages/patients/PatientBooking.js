@@ -235,7 +235,9 @@ const PatientBooking = () => {
     if (!id) return;
     setVerifying(true);
     try {
-      const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id });
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id }, { headers });
       const userRole = localStorage.getItem('role');
       const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
       if (response.data.requires_otp && !isReceptionist) {
@@ -266,10 +268,12 @@ const PatientBooking = () => {
     }
     setVerifyingOtp(true);
     try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(`${BASE_URL}/api/public/verify-otp`, {
         institute_id: instituteId,
         otp: otpInput
-      });
+      }, { headers });
       setVerifiedAndCheckFamily(response.data);
       setShowOtpModal(false);
       setOtpInput('');
@@ -527,6 +531,14 @@ const PatientBooking = () => {
     ? doctors.find(d => d.username === verifiedPatient.doctor_assigned)
     : null;
 
+  const appointmentsWithHistory = verifiedPatient?.appointments ? verifiedPatient.appointments.filter(a =>
+    a.status === 'completed' ||
+    a.status === 'cancelled' ||
+    (a.emr_data && Object.keys(a.emr_data).length > 0) ||
+    (a.prescription_summary && a.prescription_summary.length > 0)
+  ) : [];
+  const hasHistory = appointmentsWithHistory.length > 0;
+
   // Calculate Available Time Slots for UI Generation
   let availableTimeSlots = [];
   if (bookingData.doctor_username && bookingData.date) {
@@ -567,7 +579,7 @@ const PatientBooking = () => {
           .pulsing-dot { animation: pulse-green 2s infinite; }
         `}
       </style>
-      <Box w="100%" maxW={verifiedPatient ? "100%" : "500px"} bg="white" borderRadius={verifiedPatient ? "xl" : "2xl"} boxShadow="xl" p={{ base: 4, md: 6 }} transition="all 0.3s ease">
+      <Box w="100%" maxW={verifiedPatient ? ((location.state?.skipOtp || localStorage.getItem('role') === 'receptionist' || !hasHistory) ? "800px" : "100%") : "500px"} bg="white" borderRadius={verifiedPatient ? "xl" : "2xl"} boxShadow="xl" p={{ base: 4, md: 6 }} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
@@ -587,7 +599,7 @@ const PatientBooking = () => {
         <Flex align="center" mb={6}>
           <Icon as={FiCalendar} w={8} h={8} color="teal.500" mr={3} />
           <Heading as="h2" size="xl" color="gray.800">
-            Patient Portal
+            {(location.state?.skipOtp || localStorage.getItem('role') === 'receptionist') ? 'Book Patient Appointment' : 'Patient Portal'}
           </Heading>
         </Flex>
 
@@ -620,14 +632,6 @@ const PatientBooking = () => {
         ) : (
           <Box>
             {bookingFlow === 'dashboard' && (() => {
-              const appointmentsWithHistory = verifiedPatient.appointments ? verifiedPatient.appointments.filter(a =>
-                a.status === 'completed' ||
-                a.status === 'cancelled' ||
-                (a.emr_data && Object.keys(a.emr_data).length > 0) ||
-                (a.prescription_summary && a.prescription_summary.length > 0)
-              ) : [];
-              const hasHistory = appointmentsWithHistory.length > 0;
-
               const leftColumnContent = (
                 <VStack spacing={4} align="stretch">
                   <Flex align="center" p={3} bg="teal.50" borderRadius="lg" border="1px solid" borderColor="teal.200">
@@ -723,6 +727,17 @@ const PatientBooking = () => {
                   </Flex>
                 </VStack>
               );
+
+              const userRole = localStorage.getItem('role');
+              const isReceptionist = userRole === 'receptionist';
+
+              if (isReceptionist) {
+                return (
+                  <VStack spacing={4} align="stretch" maxW="800px" mx="auto" w="100%">
+                    {leftColumnContent}
+                  </VStack>
+                );
+              }
 
               if (hasHistory) {
                 return (
@@ -927,20 +942,20 @@ const PatientBooking = () => {
                 <GridItem>
                   <VStack spacing={6} align="stretch" bg="gray.50" p={6} borderRadius="xl" border="1px solid" borderColor="gray.100">
                     <Flex justify="space-between" align="center">
-                      <Heading size="md" color="gray.700">Advanced Booking</Heading>
+                      <Heading size="sm" color="gray.700">Advanced Booking</Heading>
                       <Button size="sm" variant="ghost" onClick={() => setBookingFlow('dashboard')}>Go Back</Button>
                     </Flex>
                     <Divider />
                     <form onSubmit={handleBooking}>
                       <VStack spacing={5}>
                         <FormControl isRequired>
-                          <FormLabel color="gray.700">Select Doctor</FormLabel>
+                          <FormLabel color="gray.700" fontSize="sm">Select Doctor</FormLabel>
                           <Select
                             placeholder="Choose a doctor"
                             value={bookingData.doctor_username}
                             onChange={handleDoctorChange}
                             focusBorderColor="teal.500"
-                            size="lg"
+                            size="md"
                             bg="white"
                           >
                             {doctors.map((doc, idx) => (
@@ -951,13 +966,13 @@ const PatientBooking = () => {
                           </Select>
                         </FormControl>
                         <FormControl isRequired>
-                          <FormLabel color="gray.700">Appointment Date</FormLabel>
+                          <FormLabel color="gray.700" fontSize="sm">Appointment Date</FormLabel>
                           <Input
                             type="date"
                             value={bookingData.date}
                             onChange={handleDateChange}
                             focusBorderColor="teal.500"
-                            size="lg"
+                            size="md"
                             bg="white"
                           />
                         </FormControl>
@@ -980,7 +995,7 @@ const PatientBooking = () => {
 
                         <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username || !!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}>
                           <Flex justify="space-between" align="center" mb={2}>
-                            <FormLabel color="gray.700" m={0}>Time Slot</FormLabel>
+                            <FormLabel color="gray.700" m={0} fontSize="sm">Time Slot</FormLabel>
                             <Tooltip label="Refresh slot availability">
                               <IconButton
                                 aria-label="Refresh slots"
@@ -998,7 +1013,7 @@ const PatientBooking = () => {
                             value={bookingData.timeSlot}
                             onChange={(e) => setBookingData({ ...bookingData, timeSlot: e.target.value })}
                             focusBorderColor="teal.500"
-                            size="lg"
+                            size="md"
                             bg="white"
                           >
                             {availableTimeSlots.map((slot, idx) => {
@@ -1054,7 +1069,7 @@ const PatientBooking = () => {
                         <Button
                           type="submit"
                           colorScheme="teal"
-                          size="lg"
+                          size="md"
                           w="100%"
                           borderRadius="xl"
                           mt={4}
