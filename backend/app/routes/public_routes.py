@@ -331,6 +331,25 @@ def public_doctor_availability(doctor_username):
     return jsonify({"full_slots": full_slots}), 200
 
 def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
+    # Check if doctor is on leave
+    try:
+        if "T" in appointment_time:
+            app_date_str = appointment_time.split("T")[0]
+        else:
+            app_date_str = appointment_time.split(" ")[0]
+        
+        leave_match = database.leaves.find_one({
+            "doctor_username": doctor_username,
+            "start_date": {"$lte": app_date_str},
+            "end_date": {"$gte": app_date_str}
+        })
+        if leave_match:
+            doctor = database.users.find_one({"username": doctor_username})
+            doc_name = doctor.get("display_name") if doctor else doctor_username
+            return False, (jsonify({"error": f"Doctor {doc_name} is on leave on this day."}), 400)
+    except Exception as e:
+        print("Error validating doctor leave:", str(e))
+
     active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
     
     # HARD BLOCK: Same doctor, same slot
@@ -480,6 +499,14 @@ def check_active_appointments(institute_id):
         })
     
     return jsonify({"active_appointments": active_appointments}), 200
+
+@public_bp.route('/api/public/leaves', methods=['GET'])
+def get_public_leaves():
+    try:
+        all_leaves = list(database.leaves.find({}, {"_id": 0}))
+        return jsonify(all_leaves), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # uploading lab reports to s3
 

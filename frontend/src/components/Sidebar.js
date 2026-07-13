@@ -10,6 +10,7 @@ import {
   FiUsers,
   FiCalendar,
   FiFileText,
+  FiLogOut,
   FiUpload,
   FiList,
   FiClock
@@ -152,6 +153,16 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
             icon={FiUsers}
             label="Patient Directory"
             to="/receptionist/patient-directory"
+          />
+          <SidebarItem
+            icon={FiCalendar}
+            label="Visiting Doctor Schedule"
+            to="/receptionist/schedule"
+          />
+          <SidebarItem
+            icon={FiLogOut}
+            label="Manage Doctor Leaves"
+            to="/receptionist/leaves"
           />
         </>
       )}

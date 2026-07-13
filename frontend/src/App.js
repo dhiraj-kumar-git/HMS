@@ -19,6 +19,7 @@ import ReceptionistStudentRegistration from './pages/dashboards/ReceptionistStud
 import ReceptionistStaffRegistration from './pages/dashboards/ReceptionistStaffRegistration';
 import ReceptionistHistory from './pages/dashboards/ReceptionistHistory';
 import DoctorSchedulePage from "./pages/staff/DoctorSchedulePage";
+import ManageLeaves from './pages/dashboards/ManageLeaves';
 import AdminDashboard from './pages/dashboards/AdminDashboard';
 import MedicalCounterDashboard from './pages/dashboards/MedicalCounterDashboard';
 import BillHistory from './pages/inventory/BillHistory';
@@ -202,6 +203,26 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             element={
               isLoggedIn && role === 'receptionist' ? (
                 <PatientHistory />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/schedule"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <DoctorSchedulePage />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/leaves"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ManageLeaves />
               ) : (
                 <Navigate to="/login" />
               )

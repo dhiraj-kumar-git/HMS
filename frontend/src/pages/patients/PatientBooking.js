@@ -183,9 +183,12 @@ const PatientBooking = () => {
     }
   }, [location]);
 
+  const [leaves, setLeaves] = useState([]);
+
   useEffect(() => {
     if (verifiedPatient) {
       fetchDoctors();
+      fetchLeaves();
     }
   }, [verifiedPatient]);
 
@@ -195,6 +198,15 @@ const PatientBooking = () => {
       setDoctors(response.data);
     } catch (err) {
       console.error("Failed to fetch doctors", err);
+    }
+  };
+
+  const fetchLeaves = async () => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/public/leaves`);
+      setLeaves(response.data || []);
+    } catch (e) {
+      console.error("Failed to fetch leaves", e);
     }
   };
 
@@ -874,11 +886,34 @@ const PatientBooking = () => {
                       </Text>
                     </FormControl>
 
+                    {(() => {
+                      const isDocOnLeave = bookingData.doctor_username && bookingData.date && leaves.find(l =>
+                        l.doctor_username === bookingData.doctor_username &&
+                        bookingData.date >= l.start_date &&
+                        bookingData.date <= l.end_date
+                      );
+                      if (isDocOnLeave) {
+                        return (
+                          <Text color="red.500" fontSize="xs" fontWeight="bold" textAlign="center" alignSelf="center">
+                            ⚠️ Doctor is on leave on this day. Booking is blocked.
+                          </Text>
+                        );
+                      }
+                      return null;
+                    })()}
+
                     <Flex gap={4} mt={4}>
                       <Button flex="1" size="lg" variant="outline" onClick={() => setBookingFlow('dashboard')}>
                         Cancel
                       </Button>
-                      <Button flex="2" size="lg" colorScheme="teal" type="submit" isLoading={bookingLoading}>
+                      <Button
+                        flex="2"
+                        size="lg"
+                        colorScheme="teal"
+                        type="submit"
+                        isLoading={bookingLoading}
+                        isDisabled={!!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}
+                      >
                         Confirm & Book
                       </Button>
                     </Flex>
@@ -926,7 +961,24 @@ const PatientBooking = () => {
                             bg="white"
                           />
                         </FormControl>
-                        <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username}>
+
+                        {(() => {
+                          const isDocOnLeave = bookingData.doctor_username && bookingData.date && leaves.find(l =>
+                            l.doctor_username === bookingData.doctor_username &&
+                            bookingData.date >= l.start_date &&
+                            bookingData.date <= l.end_date
+                          );
+                          if (isDocOnLeave) {
+                            return (
+                              <Text color="red.500" fontSize="xs" fontWeight="bold" textAlign="center" alignSelf="center">
+                                ⚠️ Doctor is on leave on this day. Booking is blocked.
+                              </Text>
+                            );
+                          }
+                          return null;
+                        })()}
+
+                        <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username || !!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}>
                           <Flex justify="space-between" align="center" mb={2}>
                             <FormLabel color="gray.700" m={0}>Time Slot</FormLabel>
                             <Tooltip label="Refresh slot availability">
@@ -1008,6 +1060,7 @@ const PatientBooking = () => {
                           mt={4}
                           isLoading={bookingLoading}
                           loadingText="Confirming..."
+                          isDisabled={!!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}
                         >
                           Confirm Appointment
                         </Button>

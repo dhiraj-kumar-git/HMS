@@ -55,4 +55,13 @@ describe('SidebarComponent', () => {
     expect(screen.getByText('Patient Lab Reports')).toBeInTheDocument();
     expect(screen.getByText('Upload Lab Reports')).toBeInTheDocument();
   });
+
+  it('renders receptionist links when role is receptionist', () => {
+    renderSidebar({ isLoggedIn: true, role: 'receptionist' });
+    expect(screen.getByText('Booked Appointments')).toBeInTheDocument();
+    expect(screen.getByText('Appointment History')).toBeInTheDocument();
+    expect(screen.getByText('Register Patient')).toBeInTheDocument();
+    expect(screen.getByText('Patient Directory')).toBeInTheDocument();
+    expect(screen.getAllByText('Visiting Doctor Schedule')[0]).toBeInTheDocument();
+  });
 });
