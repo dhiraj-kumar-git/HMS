@@ -96,6 +96,7 @@ def _process_lab_orders(raw_orders, is_confirmed):
         patient["visit_id"] = order.get("visit_id")
         patient["invoice_no"] = order.get("invoice_no")
         patient["consultation_completed_time"] = order.get("consultation_completed_time")
+        patient["doctor_name"] = order.get("doctor_name")
         
         # Convert any other dates
         if "registration_time" in patient and isinstance(patient["registration_time"], datetime):

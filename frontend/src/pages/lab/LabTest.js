@@ -34,6 +34,10 @@ import {
   AccordionButton,
   AccordionPanel,
   AccordionIcon,
+  FormControl,
+  FormLabel,
+  FormErrorMessage,
+  Stack,
 } from "@chakra-ui/react";
 import {
   FiBell,
@@ -105,11 +109,21 @@ export default function LabTestDashboard() {
 
   const currentTime = formatDateTimeIST(new Date());
 
+  const [uploadPatient, setUploadPatient] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadErrors, setUploadErrors] = useState({});
+
   const { isOpen, onOpen, onClose } = useDisclosure();
   const {
     isOpen: isSuccessOpen,
     onOpen: onSuccessOpen,
     onClose: onSuccessClose,
+  } = useDisclosure();
+  const {
+    isOpen: isUploadOpen,
+    onOpen: onUploadOpen,
+    onClose: onUploadClose,
   } = useDisclosure();
 
   // Fetch lab‑test config
@@ -241,6 +255,92 @@ export default function LabTestDashboard() {
   const openPatientModal = async (p) => {
     await handlePatientSelect(p);
     onOpen();
+  };
+
+  const handleOpenUploadModal = (patient) => {
+    setUploadPatient(patient);
+    setUploadFile(null);
+    setUploadErrors({});
+    onUploadOpen();
+  };
+
+  const handleUploadReport = async () => {
+    const errors = {};
+    if (!uploadFile) {
+      errors.file = "Lab report file is required";
+    }
+    if (Object.keys(errors).length > 0) {
+      setUploadErrors(errors);
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const token = localStorage.getItem("token");
+      const s3BaseUrl = BASE_URL.endsWith("/api") ? BASE_URL.slice(0, -4) : BASE_URL;
+
+      // 1. Get presigned URL
+      const presignedRes = await fetch(`${s3BaseUrl}/s3/upload-url`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          instituteId: uploadPatient.institute_id,
+          filename: uploadFile.name,
+          content_type: uploadFile.type
+        })
+      });
+      if (!presignedRes.ok) {
+        throw new Error("Failed to get S3 upload url");
+      }
+      const { upload_url, key } = await presignedRes.json();
+
+      // 2. Put file to S3
+      const uploadRes = await fetch(upload_url, {
+        method: "PUT",
+        headers: {
+          "Content-Type": uploadFile.type
+        },
+        body: uploadFile
+      });
+      if (!uploadRes.ok) throw new Error("S3 upload failed");
+
+      // 3. Save metadata
+      const saveRes = await fetch(`${s3BaseUrl}/s3/save-metadata`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          instituteId: uploadPatient.institute_id,
+          key,
+          filename: uploadFile.name
+        })
+      });
+      if (!saveRes.ok) throw new Error("Failed to save metadata");
+
+      toast({
+        title: "Report uploaded successfully",
+        status: "success",
+        duration: 3000,
+        isClosable: true
+      });
+      onUploadClose();
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Upload failed",
+        description: err.message,
+        status: "error",
+        duration: 4000,
+        isClosable: true
+      });
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // CHANGE HANDLERS
@@ -435,320 +535,335 @@ export default function LabTestDashboard() {
           p={{ base: 4, md: 6 }}
         >
           {/* Filter Toolbar */}
-        <Flex
-          mb="6"
-          align="center"
-          gap="4"
-          flexWrap="wrap"
-        >
-          <HStack spacing="2">
-            <Text fontWeight="semibold" color="gray.600" fontSize="sm">
-              FILTER
-            </Text>
-            <Input
-              placeholder="Search..."
-              size="sm"
-              borderRadius="md"
-              w="200px"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </HStack>
-
-          <HStack spacing="2">
-            <Text fontWeight="semibold" color="gray.600" fontSize="sm">
-              Date
-            </Text>
-            <Input
-              type="date"
-              size="sm"
-              borderRadius="md"
-              w="150px"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
-            <Text fontSize="xs" color="gray.400">
-              to
-            </Text>
-            <Input
-              type="date"
-              size="sm"
-              borderRadius="md"
-              w="150px"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-            />
-          </HStack>
-
-          <Box
-            bg="blue.100"
-            color="blue.800"
-            px="3"
-            py="1"
-            borderRadius="full"
-            fontSize="xs"
-            fontWeight="bold"
+          <Flex
+            mb="6"
+            align="center"
+            gap="4"
+            flexWrap="wrap"
           >
-            Pending Lab Orders: {filteredConfirmed.length}
-          </Box>
+            <HStack spacing="2">
+              <Text fontWeight="semibold" color="gray.600" fontSize="sm">
+                FILTER
+              </Text>
+              <Input
+                placeholder="Search..."
+                size="sm"
+                borderRadius="md"
+                w="200px"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </HStack>
 
-          <Button
-            aria-label="Refresh"
-            leftIcon={<FiRefreshCw />}
-            colorScheme="blue"
-            size="sm"
-            onClick={fetchPatients}
-            isLoading={listLoading}
-            variant="outline"
-            bg="white"
-            ml="auto"
-          >
-            Refresh
-          </Button>
-        </Flex>
+            <HStack spacing="2">
+              <Text fontWeight="semibold" color="gray.600" fontSize="sm">
+                Date
+              </Text>
+              <Input
+                type="date"
+                size="sm"
+                borderRadius="md"
+                w="150px"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+              <Text fontSize="xs" color="gray.400">
+                to
+              </Text>
+              <Input
+                type="date"
+                size="sm"
+                borderRadius="md"
+                w="150px"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </HStack>
 
-        {listLoading ? (
-          <Flex align="center" justify="center" py="10">
-            <Spinner size="lg" color="blue.500" />
-          </Flex>
-        ) : (
-          <>
-            {/* Confirmed Lab Test Orders Table */}
-            <Heading as="h3" size="md" color="gray.800" mb="4">
-              Confirmed Lab Test Orders ({filteredConfirmed.length})
-            </Heading>
-            <Box mb="8" overflowX="auto">
-              {filteredConfirmed.length === 0 ? (
-                <Flex h="100px" align="center" justify="center">
-                  <Text color="gray.500" fontSize="sm">
-                    No confirmed lab orders found.
-                  </Text>
-                </Flex>
-              ) : (
-                <>
-                  <Table variant="simple" size="sm">
-                    <Thead bg="gray.50">
-                      <Tr>
-                        <Th w="20%">Institute ID</Th>
-                        <Th w="35%">Patient Details</Th>
-                        <Th w="25%" textAlign="center">Lab Test Order Time</Th>
-                        <Th w="20%" textAlign="center">Actions</Th>
-                      </Tr>
-                    </Thead>
-                    <Tbody>
-                      {paginatedConfirmed.map((p, idx) => (
-                        <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                          <Td>
-                            <Flex align="center">
-                              <Text fontSize="sm" fontWeight="medium" color="gray.800">
-                                {p.institute_id}
-                              </Text>
-                              <IconButton
-                                aria-label="Copy ID"
-                                icon={<FiCopy size={12} />}
-                                size="xs"
-                                ml="2"
-                                variant="ghost"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigator.clipboard.writeText(p.institute_id);
-                                  toast({
-                                    title: "Copied!",
-                                    status: "success",
-                                    duration: 1000,
-                                  });
-                                }}
-                              />
-                            </Flex>
-                          </Td>
-                          <Td>
-                            <Flex align="center">
-                              <Box>
-                                <Text fontWeight="bold" fontSize="sm">
-                                  {toTitleCase(p.name)}
-                                </Text>
-                                <Text fontSize="xs" color="gray.500">
-                                  {p.age} yrs • {p.gender}
-                                </Text>
-                              </Box>
-                            </Flex>
-                          </Td>
-                          <Td textAlign="center">
-                            <Text fontSize="sm" color="gray.600">
-                              {p.consultation_completed_time
-                                ? formatDateTimeIST(p.consultation_completed_time)
-                                : p.visitingTime
-                                  ? formatDateTimeIST(p.visitingTime)
-                                  : "TBD"}
-                            </Text>
-                          </Td>
-                          <Td textAlign="center">
-                            <Button
-                              colorScheme="blue"
-                              size="sm"
-                              borderRadius="full"
-                              onClick={() => openPatientModal(p)}
-                            >
-                              View Lab Order
-                            </Button>
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                  <Flex justify="space-between" mt={4} align="center">
-                    <Text fontSize="sm" color="gray.500">
-                      Showing {paginatedConfirmed.length} of {filteredConfirmed.length} orders
-                    </Text>
-                    <HStack>
-                      <IconButton
-                        icon={<FiChevronLeft />}
-                        size="sm"
-                        isDisabled={confirmedPage === 1}
-                        onClick={() => setConfirmedPage(confirmedPage - 1)}
-                        aria-label="Previous Page"
-                      />
-                      <Text fontSize="sm">Page {confirmedPage} of {Math.ceil(filteredConfirmed.length / ITEMS_PER_PAGE) || 1}</Text>
-                      <IconButton
-                        icon={<FiChevronRight />}
-                        size="sm"
-                        isDisabled={confirmedPage * ITEMS_PER_PAGE >= filteredConfirmed.length}
-                        onClick={() => setConfirmedPage(confirmedPage + 1)}
-                        aria-label="Next Page"
-                      />
-                    </HStack>
-                  </Flex>
-                </>
-              )}
+            <Box
+              bg="blue.100"
+              color="blue.800"
+              px="3"
+              py="1"
+              borderRadius="full"
+              fontSize="xs"
+              fontWeight="bold"
+            >
+              Pending Lab Orders: {filteredConfirmed.length}
             </Box>
 
-            {/* Upcoming Lab Test Orders Table Accordion */}
-            <Accordion allowToggle defaultIndex={[]} mb="8">
-              <AccordionItem border="none">
-                <h2>
-                  <AccordionButton
-                    p={0}
-                    _hover={{ bg: "transparent" }}
-                    _focus={{ boxShadow: "none" }}
-                  >
-                    <Box flex="1" textAlign="left">
-                      <Heading as="h3" size="md" color="gray.800" mb="4" display="flex" alignItems="center">
-                        Upcoming Lab Test Orders ({filteredUpcoming.length})
-                        <AccordionIcon ml={2} />
-                      </Heading>
-                    </Box>
-                  </AccordionButton>
-                </h2>
-                <AccordionPanel p={0}>
-                  <Box overflowX="auto">
-                    {filteredUpcoming.length === 0 ? (
-                      <Flex h="100px" align="center" justify="center">
-                        <Text color="gray.500" fontSize="sm">
-                          No upcoming lab orders found.
-                        </Text>
-                      </Flex>
-                    ) : (
-                      <>
-                        <Table variant="simple" size="sm">
-                          <Thead bg="gray.50">
-                            <Tr>
-                              <Th w="20%">Institute ID</Th>
-                              <Th w="35%">Patient Details</Th>
-                              <Th w="25%" textAlign="center">Lab Test Order Time</Th>
-                              <Th w="20%" textAlign="center">Actions</Th>
-                            </Tr>
-                          </Thead>
-                          <Tbody>
-                            {paginatedUpcoming.map((p, idx) => (
-                              <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                                <Td>
-                                  <Flex align="center">
-                                    <Text fontSize="sm" fontWeight="medium" color="gray.800">
-                                      {p.institute_id}
-                                    </Text>
-                                    <IconButton
-                                      aria-label="Copy ID"
-                                      icon={<FiCopy size={12} />}
-                                      size="xs"
-                                      ml="2"
-                                      variant="ghost"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        navigator.clipboard.writeText(p.institute_id);
-                                        toast({
-                                          title: "Copied!",
-                                          status: "success",
-                                          duration: 1000,
-                                        });
-                                      }}
-                                    />
-                                  </Flex>
-                                </Td>
-                                <Td>
-                                  <Flex align="center">
-                                    <Box>
-                                      <Text fontWeight="bold" fontSize="sm">
-                                        {toTitleCase(p.name)}
-                                      </Text>
-                                      <Text fontSize="xs" color="gray.500">
-                                        {p.age} yrs • {p.gender}
-                                      </Text>
-                                    </Box>
-                                  </Flex>
-                                </Td>
-                                <Td textAlign="center">
-                                  <Text fontSize="sm" color="gray.600">
-                                    {p.consultation_completed_time
-                                      ? formatDateTimeIST(p.consultation_completed_time)
-                                      : p.visitingTime
-                                        ? formatDateTimeIST(p.visitingTime)
-                                        : "TBD"}
+            <Button
+              aria-label="Refresh"
+              leftIcon={<FiRefreshCw />}
+              colorScheme="blue"
+              size="sm"
+              onClick={fetchPatients}
+              isLoading={listLoading}
+              variant="outline"
+              bg="white"
+              ml="auto"
+            >
+              Refresh
+            </Button>
+          </Flex>
+
+          {listLoading ? (
+            <Flex align="center" justify="center" py="10">
+              <Spinner size="lg" color="blue.500" />
+            </Flex>
+          ) : (
+            <>
+              {/* Confirmed Lab Test Orders Table */}
+              <Heading as="h3" size="md" color="gray.800" mb="4">
+                Confirmed Lab Test Orders ({filteredConfirmed.length})
+              </Heading>
+              <Box mb="8" overflowX="auto">
+                {filteredConfirmed.length === 0 ? (
+                  <Flex h="100px" align="center" justify="center">
+                    <Text color="gray.500" fontSize="sm">
+                      No confirmed lab orders found.
+                    </Text>
+                  </Flex>
+                ) : (
+                  <>
+                    <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
+                      <Thead bg="gray.50">
+                        <Tr>
+                          <Th w="15%">Institute ID</Th>
+                          <Th w="20%">Patient Details</Th>
+                          <Th w="15%">Doctor</Th>
+                          <Th w="20%" textAlign="center">Lab Test Order Time</Th>
+                          <Th w="30%" textAlign="center">Actions</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {paginatedConfirmed.map((p, idx) => (
+                          <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                            <Td>
+                              <Flex align="center">
+                                <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                                  {p.institute_id}
+                                </Text>
+                                <IconButton
+                                  aria-label="Copy ID"
+                                  icon={<FiCopy size={12} />}
+                                  size="xs"
+                                  ml="2"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(p.institute_id);
+                                    toast({
+                                      title: "Copied!",
+                                      status: "success",
+                                      duration: 1000,
+                                    });
+                                  }}
+                                />
+                              </Flex>
+                            </Td>
+                            <Td>
+                              <Flex align="center">
+                                <Box>
+                                  <Text fontWeight="bold" fontSize="sm">
+                                    {toTitleCase(p.name)}
                                   </Text>
-                                </Td>
-                                <Td textAlign="center">
-                                  <Button
-                                    colorScheme="gray"
-                                    size="sm"
-                                    borderRadius="full"
-                                    isDisabled={true}
-                                  >
-                                    View Lab Order
-                                  </Button>
-                                </Td>
-                              </Tr>
-                            ))}
-                          </Tbody>
-                        </Table>
-                        <Flex justify="space-between" mt={4} align="center">
-                          <Text fontSize="sm" color="gray.500">
-                            Showing {paginatedUpcoming.length} of {filteredUpcoming.length} orders
+                                  <Text fontSize="xs" color="gray.500">
+                                    {p.age} yrs • {p.gender}
+                                  </Text>
+                                </Box>
+                              </Flex>
+                            </Td>
+                            <Td>
+                              <Text fontSize="sm" color="gray.700">
+                                {p.doctor_name || "N/A"}
+                              </Text>
+                            </Td>
+                            <Td textAlign="center">
+                              <Text fontSize="sm" color="gray.600">
+                                {p.consultation_completed_time
+                                  ? formatDateTimeIST(p.consultation_completed_time)
+                                  : p.visitingTime
+                                    ? formatDateTimeIST(p.visitingTime)
+                                    : "TBD"}
+                              </Text>
+                            </Td>
+                            <Td textAlign="center">
+                              <HStack spacing={2} justify="center">
+                                <Button
+                                  colorScheme="blue"
+                                  size="sm"
+                                  onClick={() => openPatientModal(p)}
+                                >
+                                  View Lab Order
+                                </Button>
+                                <Button
+                                  colorScheme="green"
+                                  size="sm"
+                                  onClick={() => handleOpenUploadModal(p)}
+                                >
+                                  Upload Lab Report
+                                </Button>
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                    <Flex justify="space-between" mt={4} align="center">
+                      <Text fontSize="sm" color="gray.500">
+                        Showing {paginatedConfirmed.length} of {filteredConfirmed.length} orders
+                      </Text>
+                      <HStack>
+                        <IconButton
+                          icon={<FiChevronLeft />}
+                          size="sm"
+                          isDisabled={confirmedPage === 1}
+                          onClick={() => setConfirmedPage(confirmedPage - 1)}
+                          aria-label="Previous Page"
+                        />
+                        <Text fontSize="sm">Page {confirmedPage} of {Math.ceil(filteredConfirmed.length / ITEMS_PER_PAGE) || 1}</Text>
+                        <IconButton
+                          icon={<FiChevronRight />}
+                          size="sm"
+                          isDisabled={confirmedPage * ITEMS_PER_PAGE >= filteredConfirmed.length}
+                          onClick={() => setConfirmedPage(confirmedPage + 1)}
+                          aria-label="Next Page"
+                        />
+                      </HStack>
+                    </Flex>
+                  </>
+                )}
+              </Box>
+
+              {/* Upcoming Lab Test Orders Table Accordion */}
+              <Accordion allowToggle defaultIndex={[]} mb="8">
+                <AccordionItem border="none">
+                  <h2>
+                    <AccordionButton
+                      p={0}
+                      _hover={{ bg: "transparent" }}
+                      _focus={{ boxShadow: "none" }}
+                    >
+                      <Box flex="1" textAlign="left">
+                        <Heading as="h3" size="md" color="gray.800" mb="4" display="flex" alignItems="center">
+                          Upcoming Lab Test Orders ({filteredUpcoming.length})
+                          <AccordionIcon ml={2} />
+                        </Heading>
+                      </Box>
+                    </AccordionButton>
+                  </h2>
+                  <AccordionPanel p={0}>
+                    <Box overflowX="auto">
+                      {filteredUpcoming.length === 0 ? (
+                        <Flex h="100px" align="center" justify="center">
+                          <Text color="gray.500" fontSize="sm">
+                            No upcoming lab orders found.
                           </Text>
-                          <HStack>
-                            <IconButton
-                              icon={<FiChevronLeft />}
-                              size="sm"
-                              isDisabled={upcomingPage === 1}
-                              onClick={() => setUpcomingPage(upcomingPage - 1)}
-                              aria-label="Previous Page"
-                            />
-                            <Text fontSize="sm">Page {upcomingPage} of {Math.ceil(filteredUpcoming.length / ITEMS_PER_PAGE) || 1}</Text>
-                            <IconButton
-                              icon={<FiChevronRight />}
-                              size="sm"
-                              isDisabled={upcomingPage * ITEMS_PER_PAGE >= filteredUpcoming.length}
-                              onClick={() => setUpcomingPage(upcomingPage + 1)}
-                              aria-label="Next Page"
-                            />
-                          </HStack>
                         </Flex>
-                      </>
-                    )}
-                  </Box>
-                </AccordionPanel>
-              </AccordionItem>
-            </Accordion>
-          </>
-        )}
+                      ) : (
+                        <>
+                          <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
+                            <Thead bg="gray.50">
+                              <Tr>
+                                <Th w="15%">Institute ID</Th>
+                                <Th w="20%">Patient Details</Th>
+                                <Th w="15%">Doctor</Th>
+                                <Th w="20%" textAlign="center">Lab Test Order Time</Th>
+                                <Th w="30%">Lab Test Name</Th>
+                              </Tr>
+                            </Thead>
+                            <Tbody>
+                              {paginatedUpcoming.map((p, idx) => (
+                                <Tr key={idx} _hover={{ bg: "gray.50" }}>
+                                  <Td>
+                                    <Flex align="center">
+                                      <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                                        {p.institute_id}
+                                      </Text>
+                                      <IconButton
+                                        aria-label="Copy ID"
+                                        icon={<FiCopy size={12} />}
+                                        size="xs"
+                                        ml="2"
+                                        variant="ghost"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigator.clipboard.writeText(p.institute_id);
+                                          toast({
+                                            title: "Copied!",
+                                            status: "success",
+                                            duration: 1000,
+                                          });
+                                        }}
+                                      />
+                                    </Flex>
+                                  </Td>
+                                  <Td>
+                                    <Flex align="center">
+                                      <Box>
+                                        <Text fontWeight="bold" fontSize="sm">
+                                          {toTitleCase(p.name)}
+                                        </Text>
+                                        <Text fontSize="xs" color="gray.500">
+                                          {p.age} yrs • {p.gender}
+                                        </Text>
+                                      </Box>
+                                    </Flex>
+                                  </Td>
+                                  <Td>
+                                    <Text fontSize="sm" color="gray.700">
+                                      {p.doctor_name || "N/A"}
+                                    </Text>
+                                  </Td>
+                                  <Td textAlign="center">
+                                    <Text fontSize="sm" color="gray.600">
+                                      {p.consultation_completed_time
+                                        ? formatDateTimeIST(p.consultation_completed_time)
+                                        : p.visitingTime
+                                          ? formatDateTimeIST(p.visitingTime)
+                                          : "TBD"}
+                                    </Text>
+                                  </Td>
+                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                    <Text fontSize="sm">
+                                      {p.lab_tests?.map((t) => t.lab_test).join(", ") || "N/A"}
+                                    </Text>
+                                  </Td>
+                                </Tr>
+                              ))}
+                            </Tbody>
+                          </Table>
+                          <Flex justify="space-between" mt={4} align="center">
+                            <Text fontSize="sm" color="gray.500">
+                              Showing {paginatedUpcoming.length} of {filteredUpcoming.length} orders
+                            </Text>
+                            <HStack>
+                              <IconButton
+                                icon={<FiChevronLeft />}
+                                size="sm"
+                                isDisabled={upcomingPage === 1}
+                                onClick={() => setUpcomingPage(upcomingPage - 1)}
+                                aria-label="Previous Page"
+                              />
+                              <Text fontSize="sm">Page {upcomingPage} of {Math.ceil(filteredUpcoming.length / ITEMS_PER_PAGE) || 1}</Text>
+                              <IconButton
+                                icon={<FiChevronRight />}
+                                size="sm"
+                                isDisabled={upcomingPage * ITEMS_PER_PAGE >= filteredUpcoming.length}
+                                onClick={() => setUpcomingPage(upcomingPage + 1)}
+                                aria-label="Next Page"
+                              />
+                            </HStack>
+                          </Flex>
+                        </>
+                      )}
+                    </Box>
+                  </AccordionPanel>
+                </AccordionItem>
+              </Accordion>
+            </>
+          )}
         </Box>
       </Box>
 
@@ -767,114 +882,155 @@ export default function LabTestDashboard() {
               <Flex align="center" justify="center" h="200px">
                 <Spinner size="xl" color="blue.500" />
               </Flex>
-            ) : (
+             ) : (
               <Box bg="white" borderRadius="lg" boxShadow="md" p={4}>
-                <Table variant="simple" size="md">
-                  <Thead>
-                    <Tr>
-                      <Th>Test Name</Th>
-                      <Th>Result</Th>
-                      <Th>Reference Range</Th>
-                      <Th>Units</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {tests.map((test, idx) => {
-                      if (test.type === "individual")
-                        return (
-                          <Tr key={idx}>
-                            <Td fontWeight="semibold" color="blue.700">
-                              {test.lab_test}
-                            </Td>
-                            <Td>
-                              <Input
-                                size="sm"
-                                value={test.result}
-                                onChange={(e) =>
-                                  handleIndividualResultChange(
-                                    idx,
-                                    e.target.value
-                                  )
-                                }
-                              />
-                            </Td>
-                            <Td>{test.reference_range}</Td>
-                            <Td>{test.units}</Td>
-                          </Tr>
-                        );
-                      if (test.type === "group")
-                        return (
-                          <React.Fragment key={idx}>
+                <Accordion allowMultiple defaultIndex={process.env.NODE_ENV === "test" ? tests.map((_, i) => i) : []}>
+                  {tests.map((test, idx) => (
+                    <AccordionItem key={idx} border="1px solid" borderColor="gray.200" borderRadius="md" mb={3} overflow="hidden">
+                      <h2>
+                        <AccordionButton _hover={{ bg: "blue.50" }} py={3} bg="gray.50">
+                          <Box flex="1" textAlign="left" fontWeight="bold" color="blue.800" fontSize="sm">
+                            {test.lab_test}
+                          </Box>
+                          <AccordionIcon />
+                        </AccordionButton>
+                      </h2>
+                      <AccordionPanel pb={4} pt={2}>
+                        <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
+                          <Thead bg="gray.100">
                             <Tr>
-                              <Td colSpan={4} fontWeight="bold" bg="blue.50">
-                                {test.lab_test}
-                              </Td>
+                              <Th w="30%">Test Name</Th>
+                              <Th w="25%">Result</Th>
+                              <Th w="30%">Reference Range</Th>
+                              <Th w="15%">Units</Th>
                             </Tr>
-                            {test.subTestNames.map((n, i) => (
-                              <Tr key={i}>
-                                <Td pl={6}>{n}</Td>
+                          </Thead>
+                          <Tbody>
+                            {test.type === "individual" && (
+                              <Tr>
+                                <Td fontWeight="semibold" color="blue.700" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                  {test.lab_test}
+                                </Td>
                                 <Td>
                                   <Input
                                     size="sm"
-                                    value={test.subResults[i]}
+                                    value={test.result}
                                     onChange={(e) =>
-                                      handleSubResultChange(
+                                      handleIndividualResultChange(
                                         idx,
-                                        i,
                                         e.target.value
                                       )
                                     }
                                   />
                                 </Td>
-                                <Td>
-                                  {test.subTestDetails[i]?.reference_range ||
-                                    "N/A"}
-                                </Td>
-                                <Td>{test.subTestDetails[i]?.units || "N/A"}</Td>
+                                <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{test.reference_range}</Td>
+                                <Td>{test.units}</Td>
                               </Tr>
-                            ))}
-                          </React.Fragment>
-                        );
-                      if (test.type === "multi")
-                        return (
-                          <React.Fragment key={idx}>
-                            <Tr>
-                              <Td colSpan={4} fontWeight="bold" bg="blue.50">
-                                {test.lab_test}
-                              </Td>
-                            </Tr>
-                            {test.reference_ranges.map((r, i) => (
-                              <Tr key={i}>
-                                <Td pl={6}>{r.split(":")[0]}</Td>
-                                <Td>
-                                  <Input
-                                    size="sm"
-                                    value={test.multiResults[i]}
-                                    onChange={(e) =>
-                                      handleMultiResultChange(
-                                        idx,
-                                        i,
-                                        e.target.value
-                                      )
-                                    }
-                                  />
-                                </Td>
-                                <Td>{r}</Td>
-                                <Td>{test.unitsArray[i] || "N/A"}</Td>
-                              </Tr>
-                            ))}
-                          </React.Fragment>
-                        );
-                      return null;
-                    })}
-                  </Tbody>
-                </Table>
+                            )}
+                            {test.type === "group" &&
+                              test.subTestNames.map((n, i) => (
+                                <Tr key={i}>
+                                  <Td pl={4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{n}</Td>
+                                  <Td>
+                                    <Input
+                                      size="sm"
+                                      value={test.subResults[i]}
+                                      onChange={(e) =>
+                                        handleSubResultChange(
+                                          idx,
+                                          i,
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  </Td>
+                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                    {test.subTestDetails[i]?.reference_range ||
+                                      "N/A"}
+                                  </Td>
+                                  <Td>{test.subTestDetails[i]?.units || "N/A"}</Td>
+                                </Tr>
+                              ))}
+                            {test.type === "multi" &&
+                              test.reference_ranges.map((r, i) => (
+                                <Tr key={i}>
+                                  <Td pl={4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{r.split(":")[0]}</Td>
+                                  <Td>
+                                    <Input
+                                      size="sm"
+                                      value={test.multiResults[i]}
+                                      onChange={(e) =>
+                                        handleMultiResultChange(
+                                          idx,
+                                          i,
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  </Td>
+                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{r}</Td>
+                                  <Td>{test.unitsArray[i] || "N/A"}</Td>
+                                </Tr>
+                              ))}
+                          </Tbody>
+                        </Table>
+                      </AccordionPanel>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </Box>
             )}
           </ModalBody>
           <ModalFooter bg="gray.50">
             <Button colorScheme="blue" onClick={submitResults}>
               Save Results
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* UPLOAD LAB REPORT MODAL */}
+      <Modal isOpen={isUploadOpen} onClose={onUploadClose} size="lg" isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader bg="green.600" color="white">
+            Upload Lab Report
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody p={6}>
+            {uploadPatient && (
+              <Stack spacing={4}>
+                <Box bg="gray.50" p={4} borderRadius="md" border="1px solid" borderColor="gray.200">
+                  <Text fontSize="sm" fontWeight="semibold">Patient: {toTitleCase(uploadPatient.name)}</Text>
+                  <Text fontSize="xs" color="gray.600">ID: {uploadPatient.institute_id} | {uploadPatient.age} yrs | {uploadPatient.gender}</Text>
+                  <Text fontSize="xs" fontWeight="bold" color="blue.600" mt={1}>Doctor: {uploadPatient.doctor_name || "N/A"}</Text>
+                </Box>
+
+                <FormControl isInvalid={uploadErrors.file}>
+                  <FormLabel>Upload Lab Report File (PDF/Image)</FormLabel>
+                  <Input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => setUploadFile(e.target.files[0])}
+                  />
+                  {uploadErrors.file && (
+                    <FormErrorMessage>{uploadErrors.file}</FormErrorMessage>
+                  )}
+                </FormControl>
+              </Stack>
+            )}
+          </ModalBody>
+          <ModalFooter bg="gray.50">
+            <Button variant="ghost" mr={3} onClick={onUploadClose} isDisabled={isUploading}>
+              Cancel
+            </Button>
+            <Button
+              colorScheme="green"
+              onClick={handleUploadReport}
+              isLoading={isUploading}
+              loadingText="Uploading..."
+            >
+              Upload
             </Button>
           </ModalFooter>
         </ModalContent>

@@ -53,7 +53,6 @@ describe('SidebarComponent', () => {
     renderSidebar({ isLoggedIn: true, role: 'lab_staff' });
     expect(screen.getByText('Lab Dashboard')).toBeInTheDocument();
     expect(screen.getByText('Patient Lab Reports')).toBeInTheDocument();
-    expect(screen.getByText('Upload Lab Reports')).toBeInTheDocument();
   });
 
   it('renders receptionist links when role is receptionist', () => {

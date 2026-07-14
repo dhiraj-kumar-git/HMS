@@ -194,9 +194,7 @@ describe('LabTest Component', () => {
       expect(screen.getByText('Jane Smith')).toBeInTheDocument();
       expect(screen.getByText('P999')).toBeInTheDocument();
       expect(screen.getByText('28 yrs • Female')).toBeInTheDocument();
+      expect(screen.getByText('Hemoglobin')).toBeInTheDocument();
     });
-
-    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
-    expect(viewBtn).toBeDisabled();
   });
 });

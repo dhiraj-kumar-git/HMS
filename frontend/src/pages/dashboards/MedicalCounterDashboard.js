@@ -1155,7 +1155,7 @@ function MedicalCounterDashboard() {
             <Text><strong>Invoice No:</strong> {invoiceNoForSubBill}</Text>
             <Text textAlign="right"><strong>Date :</strong> {todayStr}</Text>
             <Text colSpan={2} style={{ gridColumn: 'span 2' }}>
-              <strong>Name :</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}${relationSuffix}, City : ${city}
+              <strong>Name :</strong> {toTitleCase(selectedPatient.patient_name || selectedPatient.name || '')}{relationSuffix}, City : {city}
             </Text>
             {isFacultyStaffOrDependent && (
               <Text colSpan={2} style={{ gridColumn: 'span 2' }}>

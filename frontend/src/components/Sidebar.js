@@ -11,7 +11,6 @@ import {
   FiCalendar,
   FiFileText,
   FiLogOut,
-  FiUpload,
   FiList,
   FiClock
 } from "react-icons/fi";
@@ -137,7 +136,6 @@ function SidebarComponent({ isLoggedIn, username, role, onLogout }) {
         <>
           <SidebarItem icon={FiHome} label="Lab Dashboard" to="/lab" />
           <SidebarItem icon={FiFileText} label="Patient Lab Reports" to="/lab/all-reports" />
-          <SidebarItem icon={FiUpload} label="Upload Lab Reports" to="/lab/upload" />
         </>
       )}
       {isLoggedIn && role === "receptionist" && (
