@@ -69,3 +69,24 @@ def test_dropdown_labtests_no_cache(client, mocker, app):
     res = client.get("/dropdown/labtests", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
     assert "test1" in res.json
+
+def test_save_lab_draft_unauthorized(client, app):
+    with app.app_context():
+        token = create_access_token(identity="user", additional_claims={"role": "doctor"})
+    res = client.post("/lab/save_draft", headers={"Authorization": f"Bearer {token}"}, json={})
+    assert res.status_code == 403
+
+def test_save_lab_draft_success(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="lab1", additional_claims={"role": "lab_staff"})
+    mocker.patch("database.save_lab_results_draft", return_value=True)
+    payload = {"institute_id": "123", "visit_id": "v123", "results_draft": {"Hemoglobin": "15"}}
+    res = client.post("/lab/save_draft", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 200
+
+def test_save_lab_draft_missing_fields(client, app):
+    with app.app_context():
+        token = create_access_token(identity="lab1", additional_claims={"role": "lab_staff"})
+    payload = {"institute_id": "123"}
+    res = client.post("/lab/save_draft", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 400

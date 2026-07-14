@@ -35,7 +35,6 @@ import {
   AccordionPanel,
   AccordionIcon,
   FormControl,
-  FormLabel,
   FormErrorMessage,
   Stack,
 } from "@chakra-ui/react";
@@ -113,6 +112,8 @@ export default function LabTestDashboard() {
   const [uploadFile, setUploadFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadErrors, setUploadErrors] = useState({});
+  const [uploadFiles, setUploadFiles] = useState({}); // { [testName]: File }
+  const [uploadingTests, setUploadingTests] = useState({}); // { [testName]: boolean }
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const {
@@ -195,41 +196,181 @@ export default function LabTestDashboard() {
 
     try {
       setSelectedPatient(patient);
+      const drafts = patient.lab_results_draft || {};
+      // 1. Identify all prescribed group tests and gather all covered component/sub-field names
+        const prescribedGroupConfigs = [];
+        patient.lab_tests.forEach((lt) => {
+          const subCfg = configTests.find(
+            (ct) =>
+              ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
+              ct.test_id === lt.lab_test
+          );
+          if (subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"))) {
+            prescribedGroupConfigs.push(subCfg);
+          }
+        });
 
-      const processed = patient.lab_tests.map((t) => {
-        const cfg = configTests.find(
-          (ct) =>
-            ct.test_name.toLowerCase() === t.lab_test.toLowerCase() ||
-            ct.test_id === t.lab_test
-        );
+        const coveredNames = new Set();
+        prescribedGroupConfigs.forEach((gCfg) => {
+          if (gCfg.sub_tests) {
+            gCfg.sub_tests.forEach((st) => {
+              coveredNames.add(st.name.toLowerCase());
+              // Also add nested fields if st is multi-parameter
+              const subCfg = configTests.find(
+                (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
+              );
+              const refRange = subCfg?.reference_range || st.reference_range || "";
+              if (refRange.includes(",")) {
+                const refs = refRange.split(",").map((s) => s.trim());
+                refs.forEach((ref) => {
+                  const label = ref.split(":")[0];
+                  coveredNames.add(label.toLowerCase());
+                });
+              }
+            });
+          } else {
+            // Legacy prefix parsing fallback
+            const legacyNames = parseSubTestNames(gCfg.test_name);
+            legacyNames.forEach((ln) => {
+              coveredNames.add(ln.toLowerCase());
+              const sub = configTests.find(
+                (ct) => ct.test_name.toLowerCase() === ln.toLowerCase()
+              );
+              if (sub && sub.reference_range?.includes(",")) {
+                const refs = sub.reference_range.split(",").map((s) => s.trim());
+                refs.forEach((ref) => {
+                  const label = ref.split(":")[0];
+                  coveredNames.add(label.toLowerCase());
+                });
+              }
+            });
+          }
+        });
 
-        if (cfg && cfg.test_id.toLowerCase().startsWith("group")) {
-          const names = parseSubTestNames(cfg.test_name);
-          const details = names.map((n) => {
-            const sub = configTests.find(
-              (ct) => ct.test_name.toLowerCase() === n.toLowerCase()
-            );
+        // 2. Filter out any prescribed tests that are covered under group tests
+        const deduplicatedLabTests = patient.lab_tests.filter((lt) => {
+          // Keep group tests themselves
+          const subCfg = configTests.find(
+            (ct) =>
+              ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
+              ct.test_id === lt.lab_test
+          );
+          const isGroup = subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"));
+          if (isGroup) return true;
+
+          // Remove individual tests if covered
+          return !coveredNames.has(lt.lab_test.toLowerCase());
+        });
+
+        const processed = deduplicatedLabTests.map((t) => {
+          const cfg = configTests.find(
+            (ct) =>
+              ct.test_name.toLowerCase() === t.lab_test.toLowerCase() ||
+              ct.test_id === t.lab_test
+          );
+
+          if (cfg && cfg.sub_tests) {
+            const names = [];
+            const details = [];
+            cfg.sub_tests.forEach((st) => {
+              const subCfg = configTests.find(
+                (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
+              );
+              const refRange = subCfg?.reference_range || st.reference_range || "";
+              const unitVal = subCfg?.units || st.units || "";
+              if (refRange.includes(",")) {
+                // Add header row first
+                names.push(st.name);
+                details.push({
+                  isHeader: true,
+                  reference_range: "",
+                  units: "",
+                });
+
+                // Add nested fields
+                const refs = refRange.split(",").map((s) => s.trim());
+                const unitsArr = unitVal.split(",").map((s) => s.trim());
+                refs.forEach((ref, idx) => {
+                  const label = ref.split(":")[0];
+                  names.push(label);
+                  details.push({
+                    isSubField: true,
+                    reference_range: ref,
+                    units: unitsArr[idx] || "N/A",
+                    parentName: st.name,
+                  });
+                });
+              } else {
+                names.push(st.name);
+                details.push({
+                  reference_range: refRange || "N/A",
+                  units: unitVal || "N/A",
+                });
+              }
+            });
             return {
-              reference_range: sub ? sub.reference_range : "N/A",
-              units: sub ? sub.units : "N/A",
+              ...t,
+              type: "group",
+              subTestNames: names,
+              subResults: names.map((n) => drafts[n]?.value || ""),
+              groupReference: cfg.reference_range || "See individual components",
+              groupUnits: cfg.units || "Various",
+              subTestDetails: details,
             };
-          });
-          return {
-            ...t,
-            type: "group",
-            subTestNames: names,
-            subResults: Array(names.length).fill(""),
-            groupReference: cfg.reference_range,
-            groupUnits: cfg.units,
-            subTestDetails: details,
-          };
-        } else if (cfg && cfg.reference_range?.includes(",")) {
-          const refs = cfg.reference_range.split(",").map((s) => s.trim());
+          } else if (cfg && cfg.test_id.toLowerCase().startsWith("group")) {
+            const legacyNames = parseSubTestNames(cfg.test_name);
+            const names = [];
+            const details = [];
+            legacyNames.forEach((n) => {
+              const sub = configTests.find(
+                (ct) => ct.test_name.toLowerCase() === n.toLowerCase()
+              );
+              if (sub && sub.reference_range?.includes(",")) {
+                // Add header row first
+                names.push(n);
+                details.push({
+                  isHeader: true,
+                  reference_range: "",
+                  units: "",
+                });
+
+                // Add nested fields
+                const refs = sub.reference_range.split(",").map((s) => s.trim());
+                const unitsArr = (sub.units || "").split(",").map((s) => s.trim());
+                refs.forEach((ref, idx) => {
+                  const label = ref.split(":")[0];
+                  names.push(label);
+                  details.push({
+                    isSubField: true,
+                    reference_range: ref,
+                    units: unitsArr[idx] || "N/A",
+                    parentName: n,
+                  });
+                });
+              } else {
+                names.push(n);
+                details.push({
+                  reference_range: sub ? sub.reference_range : "N/A",
+                  units: sub ? sub.units : "N/A",
+                });
+              }
+            });
+            return {
+              ...t,
+              type: "group",
+              subTestNames: names,
+              subResults: names.map((n) => drafts[n]?.value || ""),
+              groupReference: cfg.reference_range,
+              groupUnits: cfg.units,
+              subTestDetails: details,
+            };
+          } else if (cfg && cfg.reference_range?.includes(",")) {
+            const refs = cfg.reference_range.split(",").map((s) => s.trim());
           const unitsArr = cfg.units.split(",").map((s) => s.trim());
           return {
             ...t,
             type: "multi",
-            multiResults: Array(refs.length).fill(""),
+            multiResults: refs.map((r) => drafts[r.split(":")[0]]?.value || ""),
             reference_ranges: refs,
             unitsArray: unitsArr,
           };
@@ -237,7 +378,7 @@ export default function LabTestDashboard() {
           return {
             ...t,
             type: "individual",
-            result: "",
+            result: drafts[t.lab_test]?.value || "",
             reference_range: cfg ? cfg.reference_range : "N/A",
             units: cfg ? cfg.units : "N/A",
           };
@@ -257,24 +398,89 @@ export default function LabTestDashboard() {
     onOpen();
   };
 
+  const getNonRedundantTests = (patient) => {
+    if (!patient || !patient.lab_tests) return [];
+    
+    // Get all group tests prescribed
+    const prescribedGroupConfigs = [];
+    patient.lab_tests.forEach((lt) => {
+      const subCfg = configTests.find(
+        (ct) =>
+          ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
+          ct.test_id === lt.lab_test
+      );
+      if (subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"))) {
+        prescribedGroupConfigs.push(subCfg);
+      }
+    });
+
+    const coveredNames = new Set();
+    prescribedGroupConfigs.forEach((gCfg) => {
+      if (gCfg.sub_tests) {
+        gCfg.sub_tests.forEach((st) => {
+          coveredNames.add(st.name.toLowerCase());
+          const subCfg = configTests.find(
+            (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
+          );
+          const refRange = subCfg?.reference_range || st.reference_range || "";
+          if (refRange.includes(",")) {
+            const refs = refRange.split(",").map((s) => s.trim());
+            refs.forEach((ref) => {
+              const label = ref.split(":")[0];
+              coveredNames.add(label.toLowerCase());
+            });
+          }
+        });
+      } else {
+        const legacyNames = parseSubTestNames(gCfg.test_name);
+        legacyNames.forEach((ln) => {
+          coveredNames.add(ln.toLowerCase());
+          const sub = configTests.find(
+            (ct) => ct.test_name.toLowerCase() === ln.toLowerCase()
+          );
+          if (sub && sub.reference_range?.includes(",")) {
+            const refs = sub.reference_range.split(",").map((s) => s.trim());
+            refs.forEach((ref) => {
+              const label = ref.split(":")[0];
+              coveredNames.add(label.toLowerCase());
+            });
+          }
+        });
+      }
+    });
+
+    return patient.lab_tests.filter((lt) => {
+      const subCfg = configTests.find(
+        (ct) =>
+          ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
+          ct.test_id === lt.lab_test
+      );
+      const isGroup = subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"));
+      if (isGroup) return true;
+      return !coveredNames.has(lt.lab_test.toLowerCase());
+    });
+  };
+
   const handleOpenUploadModal = (patient) => {
     setUploadPatient(patient);
-    setUploadFile(null);
+    setUploadFiles({});
     setUploadErrors({});
     onUploadOpen();
   };
 
-  const handleUploadReport = async () => {
-    const errors = {};
-    if (!uploadFile) {
-      errors.file = "Lab report file is required";
-    }
-    if (Object.keys(errors).length > 0) {
-      setUploadErrors(errors);
+  const handleUploadReport = async (testName) => {
+    const file = uploadFiles[testName];
+    if (!file) {
+      setUploadErrors(prev => ({ ...prev, [testName]: "Lab report file is required" }));
       return;
     }
+    setUploadErrors(prev => {
+      const copy = { ...prev };
+      delete copy[testName];
+      return copy;
+    });
 
-    setIsUploading(true);
+    setUploadingTests(prev => ({ ...prev, [testName]: true }));
     try {
       const token = localStorage.getItem("token");
       const s3BaseUrl = BASE_URL.endsWith("/api") ? BASE_URL.slice(0, -4) : BASE_URL;
@@ -288,8 +494,8 @@ export default function LabTestDashboard() {
         },
         body: JSON.stringify({
           instituteId: uploadPatient.institute_id,
-          filename: uploadFile.name,
-          content_type: uploadFile.type
+          filename: file.name,
+          content_type: file.type
         })
       });
       if (!presignedRes.ok) {
@@ -301,9 +507,9 @@ export default function LabTestDashboard() {
       const uploadRes = await fetch(upload_url, {
         method: "PUT",
         headers: {
-          "Content-Type": uploadFile.type
+          "Content-Type": file.type
         },
-        body: uploadFile
+        body: file
       });
       if (!uploadRes.ok) throw new Error("S3 upload failed");
 
@@ -317,18 +523,28 @@ export default function LabTestDashboard() {
         body: JSON.stringify({
           instituteId: uploadPatient.institute_id,
           key,
-          filename: uploadFile.name
+          filename: file.name,
+          testName: testName
         })
       });
       if (!saveRes.ok) throw new Error("Failed to save metadata");
 
       toast({
-        title: "Report uploaded successfully",
+        title: `${testName} report uploaded successfully`,
         status: "success",
         duration: 3000,
         isClosable: true
       });
-      onUploadClose();
+      
+      // Clear file selection for this test
+      setUploadFiles(prev => {
+        const copy = { ...prev };
+        delete copy[testName];
+        return copy;
+      });
+
+      // Refetch patients to update status
+      fetchPatients();
     } catch (err) {
       console.error(err);
       toast({
@@ -339,7 +555,7 @@ export default function LabTestDashboard() {
         isClosable: true
       });
     } finally {
-      setIsUploading(false);
+      setUploadingTests(prev => ({ ...prev, [testName]: false }));
     }
   };
 
@@ -401,11 +617,13 @@ export default function LabTestDashboard() {
             } else if (t.type === "group") {
               t.subTestNames.forEach((n, idx) => {
                 const det = t.subTestDetails[idx] || {};
-                acc[n] = {
-                  value: t.subResults[idx] || "",
-                  reference_range: det.reference_range || "N/A",
-                  units: det.units || "N/A"
-                };
+                if (!det.isHeader) {
+                  acc[n] = {
+                    value: t.subResults[idx] || "",
+                    reference_range: det.reference_range || "N/A",
+                    units: det.units || "N/A"
+                  };
+                }
               });
             } else if (t.type === "multi") {
               t.reference_ranges.forEach((r, idx) => {
@@ -438,6 +656,75 @@ export default function LabTestDashboard() {
       console.error("Error saving report:", e);
       toast({
         title: "Error saving report",
+        description: e.message,
+        status: "error",
+      });
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!selectedPatient || !tests.length) {
+      toast({
+        title: "No test data",
+        description: "Please select a patient first.",
+        status: "warning",
+      });
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(
+        `${BASE_URL}/lab/save_draft`,
+        {
+          institute_id: selectedPatient.institute_id,
+          visit_id: selectedPatient.visit_id,
+          results_draft: tests.reduce((acc, t) => {
+            if (t.type === "individual") {
+              acc[t.lab_test] = {
+                value: t.result || "",
+                reference_range: t.reference_range || "N/A",
+                units: t.units || "N/A"
+              };
+            } else if (t.type === "group") {
+              t.subTestNames.forEach((n, idx) => {
+                const det = t.subTestDetails[idx] || {};
+                if (!det.isHeader) {
+                  acc[n] = {
+                    value: t.subResults[idx] || "",
+                    reference_range: det.reference_range || "N/A",
+                    units: det.units || "N/A"
+                  };
+                }
+              });
+            } else if (t.type === "multi") {
+              t.reference_ranges.forEach((r, idx) => {
+                const label = r.split(":")[0];
+                acc[label] = {
+                  value: t.multiResults[idx] || "",
+                  reference_range: r,
+                  units: t.unitsArray[idx] || "N/A"
+                };
+              });
+            }
+            return acc;
+          }, {})
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast({
+        title: "Draft saved successfully",
+        description: "Partial results have been saved as a draft.",
+        status: "success",
+      });
+
+      onClose();
+      fetchPatients();
+    } catch (e) {
+      console.error("Error saving draft:", e);
+      toast({
+        title: "Error saving draft",
         description: e.message,
         status: "error",
       });
@@ -626,7 +913,7 @@ export default function LabTestDashboard() {
                   </Flex>
                 ) : (
                   <>
-                    <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
+                    <Table variant="simple" size="sm" minW="800px">
                       <Thead bg="gray.50">
                         <Tr>
                           <Th w="15%">Institute ID</Th>
@@ -763,7 +1050,7 @@ export default function LabTestDashboard() {
                         </Flex>
                       ) : (
                         <>
-                          <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
+                          <Table variant="simple" size="sm" minW="800px">
                             <Thead bg="gray.50">
                               <Tr>
                                 <Th w="15%">Institute ID</Th>
@@ -928,29 +1215,42 @@ export default function LabTestDashboard() {
                               </Tr>
                             )}
                             {test.type === "group" &&
-                              test.subTestNames.map((n, i) => (
-                                <Tr key={i}>
-                                  <Td pl={4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{n}</Td>
-                                  <Td>
-                                    <Input
-                                      size="sm"
-                                      value={test.subResults[i]}
-                                      onChange={(e) =>
-                                        handleSubResultChange(
-                                          idx,
-                                          i,
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </Td>
-                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                                    {test.subTestDetails[i]?.reference_range ||
-                                      "N/A"}
-                                  </Td>
-                                  <Td>{test.subTestDetails[i]?.units || "N/A"}</Td>
-                                </Tr>
-                              ))}
+                              test.subTestNames.map((n, i) => {
+                                const det = test.subTestDetails[i] || {};
+                                if (det.isHeader) {
+                                  return (
+                                    <Tr key={i} bg="gray.50">
+                                      <Td colSpan={4} fontWeight="bold" color="blue.800" pl={4}>
+                                        {n}
+                                      </Td>
+                                    </Tr>
+                                  );
+                                }
+                                return (
+                                  <Tr key={i}>
+                                    <Td pl={det.isSubField ? 8 : 4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                      {n}
+                                    </Td>
+                                    <Td>
+                                      <Input
+                                        size="sm"
+                                        value={test.subResults[i]}
+                                        onChange={(e) =>
+                                          handleSubResultChange(
+                                            idx,
+                                            i,
+                                            e.target.value
+                                          )
+                                        }
+                                      />
+                                    </Td>
+                                    <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                      {det.reference_range || "N/A"}
+                                    </Td>
+                                    <Td>{det.units || "N/A"}</Td>
+                                  </Tr>
+                                );
+                              })}
                             {test.type === "multi" &&
                               test.reference_ranges.map((r, i) => (
                                 <Tr key={i}>
@@ -982,15 +1282,20 @@ export default function LabTestDashboard() {
             )}
           </ModalBody>
           <ModalFooter bg="gray.50">
-            <Button colorScheme="blue" onClick={submitResults}>
-              Save Results
-            </Button>
+            <HStack spacing={3}>
+              <Button colorScheme="yellow" onClick={handleSaveDraft}>
+                Save Draft
+              </Button>
+              <Button colorScheme="blue" onClick={submitResults}>
+                Save Results
+              </Button>
+            </HStack>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
       {/* UPLOAD LAB REPORT MODAL */}
-      <Modal isOpen={isUploadOpen} onClose={onUploadClose} size="lg" isCentered>
+      <Modal isOpen={isUploadOpen} onClose={onUploadClose} size="xl" isCentered>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader bg="green.600" color="white">
@@ -999,38 +1304,134 @@ export default function LabTestDashboard() {
           <ModalCloseButton color="white" />
           <ModalBody p={6}>
             {uploadPatient && (
-              <Stack spacing={4}>
+              <Stack spacing={6}>
                 <Box bg="gray.50" p={4} borderRadius="md" border="1px solid" borderColor="gray.200">
                   <Text fontSize="sm" fontWeight="semibold">Patient: {toTitleCase(uploadPatient.name)}</Text>
                   <Text fontSize="xs" color="gray.600">ID: {uploadPatient.institute_id} | {uploadPatient.age} yrs | {uploadPatient.gender}</Text>
                   <Text fontSize="xs" fontWeight="bold" color="blue.600" mt={1}>Doctor: {uploadPatient.doctor_name || "N/A"}</Text>
                 </Box>
 
-                <FormControl isInvalid={uploadErrors.file}>
-                  <FormLabel>Upload Lab Report File (PDF/Image)</FormLabel>
-                  <Input
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={(e) => setUploadFile(e.target.files[0])}
-                  />
-                  {uploadErrors.file && (
-                    <FormErrorMessage>{uploadErrors.file}</FormErrorMessage>
-                  )}
-                </FormControl>
+                <Stack spacing={4}>
+                  <Text fontWeight="semibold" fontSize="sm" color="gray.700">Prescribed Lab Tests:</Text>
+                  {getNonRedundantTests(uploadPatient).map((lt, index) => {
+                    const isCompleted = lt.status === "completed";
+                    const isUploadingThis = !!uploadingTests[lt.lab_test];
+                    return (
+                      <Box key={index} p={4} borderWidth="1px" borderRadius="md" borderColor="gray.200">
+                        <Flex justify="space-between" align="center" mb={2}>
+                          <Text fontWeight="bold" fontSize="sm" color="blue.800">
+                            {lt.lab_test}
+                          </Text>
+                          <Box
+                            px={2}
+                            py={0.5}
+                            borderRadius="full"
+                            fontSize="xs"
+                            fontWeight="semibold"
+                            bg={isCompleted ? "green.100" : "orange.100"}
+                            color={isCompleted ? "green.800" : "orange.800"}
+                          >
+                            {isCompleted ? "Completed" : "Pending"}
+                          </Box>
+                        </Flex>
+
+                        {!isCompleted && (
+                          <FormControl isInvalid={!!uploadErrors[lt.lab_test]}>
+                            <Flex gap={3} align="center" mt={1}>
+                              {/* Modern File Input Wrapper */}
+                              <Box flex="1">
+                                <Input
+                                  id={`file-upload-${index}`}
+                                  type="file"
+                                  accept="image/*,application/pdf"
+                                  display="none"
+                                  onChange={(e) => {
+                                    const file = e.target.files[0];
+                                    setUploadFiles(prev => ({ ...prev, [lt.lab_test]: file }));
+                                  }}
+                                />
+                                <Button
+                                  as="label"
+                                  htmlFor={`file-upload-${index}`}
+                                  size="sm"
+                                  variant="outline"
+                                  colorScheme="blue"
+                                  width="100%"
+                                  cursor="pointer"
+                                  display="flex"
+                                  alignItems="center"
+                                  justifyContent="center"
+                                  gap={2}
+                                  bg="gray.50"
+                                  _hover={{ bg: "blue.50", borderColor: "blue.300" }}
+                                  fontWeight="medium"
+                                  textOverflow="ellipsis"
+                                  whiteSpace="nowrap"
+                                  overflow="hidden"
+                                  px={3}
+                                >
+                                  <svg
+                                    stroke="currentColor"
+                                    fill="none"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    height="16"
+                                    width="16"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                    <polyline points="17 8 12 3 7 8" />
+                                    <line x1="12" y1="3" x2="12" y2="15" />
+                                  </svg>
+                                  {uploadFiles[lt.lab_test]
+                                    ? uploadFiles[lt.lab_test].name
+                                    : "Choose Report File"}
+                                </Button>
+                              </Box>
+
+                              <Button
+                                colorScheme="green"
+                                size="sm"
+                                onClick={() => handleUploadReport(lt.lab_test)}
+                                isLoading={isUploadingThis}
+                                loadingText="Uploading..."
+                                leftIcon={
+                                  <svg
+                                    stroke="currentColor"
+                                    fill="none"
+                                    strokeWidth="2"
+                                    viewBox="0 0 24 24"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    height="16"
+                                    width="16"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                    <polyline points="22 4 12 14.01 9 11.01" />
+                                  </svg>
+                                }
+                              >
+                                Upload
+                              </Button>
+                            </Flex>
+                            {uploadErrors[lt.lab_test] && (
+                              <FormErrorMessage>{uploadErrors[lt.lab_test]}</FormErrorMessage>
+                            )}
+                          </FormControl>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Stack>
               </Stack>
             )}
           </ModalBody>
           <ModalFooter bg="gray.50">
-            <Button variant="ghost" mr={3} onClick={onUploadClose} isDisabled={isUploading}>
-              Cancel
-            </Button>
-            <Button
-              colorScheme="green"
-              onClick={handleUploadReport}
-              isLoading={isUploading}
-              loadingText="Uploading..."
-            >
-              Upload
+            <Button colorScheme="blue" onClick={onUploadClose}>
+              Close
             </Button>
           </ModalFooter>
         </ModalContent>

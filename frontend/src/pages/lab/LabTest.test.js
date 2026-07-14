@@ -136,13 +136,12 @@ describe('LabTest Component', () => {
       expect(screen.getByText(/John Doe \(ID: P123\)/i)).toBeInTheDocument();
     });
 
-    // Fill out inputs
+    // Fill out inputs (Hemoglobin is deduplicated as it is part of CBC)
     const inputs = screen.getAllByRole('textbox');
-    fireEvent.change(inputs[0], { target: { value: '15' } }); // Hemoglobin
-    fireEvent.change(inputs[1], { target: { value: '14' } }); // CBC Hemoglobin
-    fireEvent.change(inputs[2], { target: { value: '5' } }); // CBC WBC
-    fireEvent.change(inputs[3], { target: { value: '15' } }); // Param1
-    fireEvent.change(inputs[4], { target: { value: '35' } }); // Param2
+    fireEvent.change(inputs[0], { target: { value: '14' } }); // CBC HB
+    fireEvent.change(inputs[1], { target: { value: '5' } }); // CBC WBC
+    fireEvent.change(inputs[2], { target: { value: '15' } }); // Param1
+    fireEvent.change(inputs[3], { target: { value: '35' } }); // Param2
 
     // Submit report
     axios.post.mockResolvedValueOnce({ data: { message: 'success' } });
@@ -195,6 +194,136 @@ describe('LabTest Component', () => {
       expect(screen.getByText('P999')).toBeInTheDocument();
       expect(screen.getByText('28 yrs • Female')).toBeInTheDocument();
       expect(screen.getByText('Hemoglobin')).toBeInTheDocument();
+    });
+  });
+
+  it('comprehensively verifies redundancy deduplication rules for group, sub-group, and legacy group tests', async () => {
+    const customConfig = [
+      { test_id: 'group_1', test_name: 'CBC', reference_range: 'N/A', units: 'N/A', sub_tests: [
+        { name: 'BLOOD Hb', reference_range: '13-17', units: 'g/dL' },
+        { name: 'BLOOD TLC', reference_range: '4000-11000', units: '/cumm' },
+        { name: 'BLOOD DLC', reference_range: 'Neutrophils: 40-75, Lymphocytes: 20-45', units: '%, %' }
+      ]},
+      { test_id: 'hb_id', test_name: 'BLOOD Hb', reference_range: '13-17', units: 'g/dL' },
+      { test_id: 'tlc_id', test_name: 'BLOOD TLC', reference_range: '4000-11000', units: '/cumm' },
+      { test_id: 'dlc_id', test_name: 'BLOOD DLC', reference_range: 'Neutrophils: 40-75, Lymphocytes: 20-45', units: '%, %' },
+      { test_id: 'neut_id', test_name: 'Neutrophils', reference_range: '40-75', units: '%' },
+      { test_id: 'group_legacy', test_name: 'LIPID PROFILE (CHOLESTEROL, TRIGLYCERIDES)', reference_range: 'N/A', units: 'N/A' },
+      { test_id: 'chol_id', test_name: 'CHOLESTEROL', reference_range: '130-200', units: 'mg/dL' },
+      { test_id: 'other_id', test_name: 'Urine Routine', reference_range: 'Normal', units: 'N/A' }
+    ];
+
+    const customPatients = [
+      {
+        institute_id: 'P100',
+        visit_id: 10,
+        name: 'Deduplication Test Patient',
+        age: 45,
+        gender: 'Male',
+        lab_tests: [
+          { lab_test: 'CBC' },
+          { lab_test: 'BLOOD Hb' }, // Redundant! Covered under CBC
+          { lab_test: 'Neutrophils' }, // Redundant! Covered under BLOOD DLC which is under CBC
+          { lab_test: 'LIPID PROFILE (CHOLESTEROL, TRIGLYCERIDES)' },
+          { lab_test: 'CHOLESTEROL' }, // Redundant! Covered under LIPID PROFILE legacy naming
+          { lab_test: 'Urine Routine' } // Not redundant!
+        ]
+      }
+    ];
+
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: customConfig });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: customPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
+    });
+
+    await act(async () => {
+      renderComponent();
+    });
+
+    // Expand the patient modal
+    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
+    await act(async () => {
+      fireEvent.click(viewBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Deduplication Test Patient \(ID: P100\)/i)).toBeInTheDocument();
+      
+      // Group tests themselves must be present
+      expect(screen.getAllByText('CBC').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('LIPID PROFILE (CHOLESTEROL, TRIGLYCERIDES)').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Urine Routine').length).toBeGreaterThan(0);
+
+      // Verify that the redundant standalone tests (BLOOD Hb, CHOLESTEROL) only render once
+      // (within their parent groups) instead of having separate standalone entry headers.
+      expect(screen.getAllByText('BLOOD Hb').length).toBe(1);
+      expect(screen.getAllByText('CHOLESTEROL').length).toBe(1);
+    });
+  });
+
+  it('verifies per-test report upload options in the upload modal', async () => {
+    const customConfig = [
+      { test_id: 'group_1', test_name: 'CBC (Hemoglobin, WBC)', reference_range: 'N/A', units: 'N/A' },
+      { test_id: 'hb_id', test_name: 'Hemoglobin', reference_range: '13-17', units: 'g/dL' },
+      { test_id: 'other_id', test_name: 'Urine Routine', reference_range: 'Normal', units: 'N/A' }
+    ];
+
+    const customPatients = [
+      {
+        institute_id: 'P102',
+        visit_id: 11,
+        name: 'Upload Test Patient',
+        age: 35,
+        gender: 'Female',
+        lab_tests: [
+          { lab_test: 'CBC (Hemoglobin, WBC)', status: 'pending' },
+          { lab_test: 'Urine Routine', status: 'completed' }
+        ]
+      }
+    ];
+
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: customConfig });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: customPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
+    });
+
+    global.fetch = jest.fn().mockImplementation((url) => {
+      if (url.includes('/s3/upload-url')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ upload_url: 'http://fake-s3/upload', key: 'report-key' })
+        });
+      }
+      if (url.includes('/s3/save-metadata')) {
+        return Promise.resolve({ ok: true });
+      }
+      if (url.includes('http://fake-s3/upload')) {
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.reject(new Error('Fetch error'));
+    });
+
+    await act(async () => {
+      renderComponent();
+    });
+
+    // Find and click the Upload Lab Report button
+    const uploadBtn = screen.getByRole('button', { name: /Upload Lab Report/i });
+    await act(async () => {
+      fireEvent.click(uploadBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Upload Lab Report').length).toBeGreaterThan(0);
+      // Should show both tests
+      expect(screen.getByText('CBC (Hemoglobin, WBC)')).toBeInTheDocument();
+      expect(screen.getByText('Urine Routine')).toBeInTheDocument();
+
+      // Urine Routine is completed, so it should show Completed badge and not have file input/upload button
+      expect(screen.getByText('Completed')).toBeInTheDocument();
+      expect(screen.getByText('Pending')).toBeInTheDocument();
     });
   });
 });

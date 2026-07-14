@@ -18,23 +18,43 @@ def add_lab_report(institute_id, visit_id, report_details):
         {"$push": {"lab_reports": {**report_details, "timestamp": datetime.now(timezone.utc).isoformat()}}}
     )
     
-    # Mark all tests in this visit as completed, since frontend submits them together as one master report
-    visits.update_one(
-        {"visit_id": visit["visit_id"]},
-        {"$set": {"lab_tests.$[].status": "completed"}}
-    )
+    # Mark specified test or all tests as completed
+    target_test = report_details.get("test_name")
+    if target_test:
+        visits.update_one(
+            {"visit_id": visit["visit_id"], "lab_tests.lab_test": target_test},
+            {"$set": {"lab_tests.$.status": "completed"}}
+        )
+        # Clear draft if all tests are now completed
+        updated_visit = visits.find_one({"visit_id": visit["visit_id"]})
+        if updated_visit and all(t.get("status") == "completed" for t in updated_visit.get("lab_tests", [])):
+            visits.update_one(
+                {"visit_id": visit["visit_id"]},
+                {"$unset": {"lab_results_draft": ""}}
+            )
+    else:
+        visits.update_one(
+            {"visit_id": visit["visit_id"]},
+            {"$set": {"lab_tests.$[].status": "completed"}, "$unset": {"lab_results_draft": ""}}
+        )
     
     patient = patients.find_one({"institute_id": institute_id})
     if patient:
         new_workflow_status = patient.get("workflow_status", "completed")
-        # Note: We no longer rely on patient.lab_status for the Lab Queue, but we keep this for legacy safety
         if new_workflow_status == "lab test pending":
-            new_workflow_status = "completed"
-            
-        patients.update_one(
-            {"institute_id": institute_id},
-            {"$set": {"workflow_status": new_workflow_status, "lab_status": "completed"}}
-        )
+            # Check if all tests in the last visit are completed
+            last_visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+            if last_visit and all(t.get("status") == "completed" for t in last_visit.get("lab_tests", [])):
+                new_workflow_status = "completed"
+                patients.update_one(
+                    {"institute_id": institute_id},
+                    {"$set": {"workflow_status": new_workflow_status, "lab_status": "completed"}}
+                )
+            else:
+                patients.update_one(
+                    {"institute_id": institute_id},
+                    {"$set": {"lab_status": "partially completed"}}
+                )
     
     return result.modified_count > 0
 
@@ -80,6 +100,7 @@ def _process_lab_orders(raw_orders, is_confirmed):
         patient["lab_tests"] = order.get("lab_tests", [])
         patient["lab_reports"] = order.get("lab_reports", [])
         patient["remarks"] = order.get("remarks", [])
+        patient["lab_results_draft"] = order.get("lab_results_draft", {})
         
         # Override global statuses with order-specific logical statuses
         patient["bill_status"] = "paid" if is_confirmed else "pending"
@@ -162,7 +183,7 @@ def submit_lab_results(institute_id, results):
     if visit_id:
         visits.update_one(
             {"visit_id": visit_id},
-            {"$set": {"lab_results": results}}
+            {"$set": {"lab_results": results}, "$unset": {"lab_results_draft": ""}}
         )
 
     new_workflow_status = patient.get("workflow_status", "completed")
@@ -173,6 +194,20 @@ def submit_lab_results(institute_id, results):
     return patients.update_one(
         {"institute_id": institute_id},
         {"$set": {"workflow_status": new_workflow_status, "lab_status": "completed"}}
+    ).modified_count > 0
+
+
+def save_lab_results_draft(institute_id, visit_id, results_draft):
+    if visit_id:
+        visit = visits.find_one({"visit_id": visit_id})
+    else:
+        visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+        
+    if not visit: return False
+    
+    return visits.update_one(
+        {"visit_id": visit["visit_id"]},
+        {"$set": {"lab_results_draft": results_draft}}
     ).modified_count > 0
 
 

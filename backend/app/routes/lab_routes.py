@@ -57,6 +57,29 @@ def save_lab_report():
     else:
         return jsonify({"error": "Failed to save report"}), 400
 
+@lab_bp.route('/lab/save_draft', methods=['POST'])
+@jwt_required()
+def save_lab_draft():
+    claims = get_jwt()
+    if claims.get("role") != "lab_staff":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    institute_id = data.get("institute_id")
+    visit_id = data.get("visit_id")
+    results_draft = data.get("results_draft")
+
+    if not institute_id or results_draft is None:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    from database import save_lab_results_draft
+    success = save_lab_results_draft(institute_id, visit_id, results_draft)
+
+    if success:
+        return jsonify({"message": "Draft saved successfully"}), 200
+    else:
+        return jsonify({"error": "Failed to save draft"}), 400
+
 # Get all the lab reports for patients (Lab staff only)
 @lab_bp.route('/lab/reports', methods=['GET'])
 @jwt_required()

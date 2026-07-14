@@ -530,6 +530,7 @@ def save_s3_metadata():
     institute_id = data.get("instituteId")
     key = data.get("key")
     filename = data.get("filename")
+    test_name = data.get("testName")
 
     if not institute_id or not key or not filename:
         return jsonify({"error": "Missing fields"}), 400
@@ -537,6 +538,7 @@ def save_s3_metadata():
     user = get_jwt_identity()
 
     report_data = {
+        "test_name": test_name,
         "file_name": filename,
         "s3_key": key,
         "uploaded_by": user,
