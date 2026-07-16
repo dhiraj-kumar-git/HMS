@@ -37,6 +37,7 @@ import {
   FormControl,
   FormErrorMessage,
   Stack,
+  Badge,
 } from "@chakra-ui/react";
 import {
   FiBell,
@@ -47,6 +48,7 @@ import {
   FiRefreshCw,
   FiChevronLeft,
   FiChevronRight,
+  FiCheckCircle,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -125,6 +127,23 @@ export default function LabTestDashboard() {
     isOpen: isUploadOpen,
     onOpen: onUploadOpen,
     onClose: onUploadClose,
+  } = useDisclosure();
+  const {
+    isOpen: isCompleteOpen,
+    onOpen: onCompleteOpen,
+    onClose: onCompleteClose,
+  } = useDisclosure();
+  const [isCompleting, setIsCompleting] = useState(false);
+  const {
+    isOpen: isDeleteConfirmOpen,
+    onOpen: onDeleteConfirmOpen,
+    onClose: onDeleteConfirmClose,
+  } = useDisclosure();
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const {
+    isOpen: isSaveConfirmOpen,
+    onOpen: onSaveConfirmOpen,
+    onClose: onSaveConfirmClose,
   } = useDisclosure();
 
   // Fetch lab‑test config
@@ -461,6 +480,122 @@ export default function LabTestDashboard() {
     });
   };
 
+  const isPatientLabComplete = (patient) => {
+    if (!patient || !patient.lab_tests) return false;
+    const draft = patient.lab_results_draft || {};
+    const uploadedReports = patient.lab_reports || [];
+    const deduplicatedTests = getNonRedundantTests(patient);
+    if (deduplicatedTests.length === 0) return false;
+
+    for (const lt of deduplicatedTests) {
+      const testName = lt.lab_test;
+      const hasFile = uploadedReports.some(r => r.test_name && r.test_name.toLowerCase() === testName.toLowerCase() && r.s3_key);
+      if (hasFile) continue;
+
+      const cfg = configTests.find(ct => ct.test_name.toLowerCase() === testName.toLowerCase() || ct.test_id === testName);
+      if (!cfg) {
+        if (!draft[testName] || !draft[testName].value || !draft[testName].value.trim()) {
+          return false;
+        }
+        continue;
+      }
+
+      if (cfg.sub_tests) {
+        for (const st of cfg.sub_tests) {
+          const subCfg = configTests.find(ct => ct.test_name.toLowerCase() === st.name.toLowerCase());
+          const refRange = subCfg?.reference_range || st.reference_range || "";
+          if (refRange.includes(",")) {
+            const refs = refRange.split(",").map(s => s.trim());
+            for (const r of refs) {
+              const label = r.split(":")[0];
+              if (!draft[label] || !draft[label].value || !draft[label].value.trim()) {
+                return false;
+              }
+            }
+          } else {
+            if (!draft[st.name] || !draft[st.name].value || !draft[st.name].value.trim()) {
+              return false;
+            }
+          }
+        }
+      } else if (cfg.test_id.toLowerCase().startsWith("group")) {
+        const legacyNames = parseSubTestNames(cfg.test_name);
+        for (const ln of legacyNames) {
+          const sub = configTests.find(ct => ct.test_name.toLowerCase() === ln.toLowerCase());
+          const refRange = sub?.reference_range || "";
+          if (refRange.includes(",")) {
+            const refs = refRange.split(",").map(s => s.trim());
+            for (const r of refs) {
+              const label = r.split(":")[0];
+              if (!draft[label] || !draft[label].value || !draft[label].value.trim()) {
+                return false;
+              }
+            }
+          } else {
+            if (!draft[ln] || !draft[ln].value || !draft[ln].value.trim()) {
+              return false;
+            }
+          }
+        }
+      } else if (cfg.reference_range && cfg.reference_range.includes(",")) {
+        const refs = cfg.reference_range.split(",").map(s => s.trim());
+        for (const r of refs) {
+          const label = r.split(":")[0];
+          if (!draft[label] || !draft[label].value || !draft[label].value.trim()) {
+            return false;
+          }
+        }
+      } else {
+        if (!draft[testName] || !draft[testName].value || !draft[testName].value.trim()) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const handleCompleteLabTestClick = async (patient) => {
+    if (!configTests.length) await fetchConfigTests();
+    await handlePatientSelect(patient);
+    onCompleteOpen();
+  };
+
+  const executeCompleteReport = async () => {
+    if (!selectedPatient) return;
+    setIsCompleting(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post(`${BASE_URL}/lab/complete_patient_report`, {
+        institute_id: selectedPatient.institute_id,
+        visit_id: selectedPatient.visit_id
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      toast({
+        title: "Report Completed Successfully",
+        description: res.data.message || "All lab test reports have been confirmed.",
+        status: "success",
+        duration: 3000,
+        isClosable: true
+      });
+
+      onCompleteClose();
+      fetchPatients();
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error Completing Report",
+        description: err.response?.data?.error || err.message,
+        status: "error",
+        duration: 4000,
+        isClosable: true
+      });
+    } finally {
+      setIsCompleting(false);
+    }
+  };
+
   const handleOpenUploadModal = (patient) => {
     setUploadPatient(patient);
     setUploadFiles({});
@@ -539,6 +674,16 @@ export default function LabTestDashboard() {
         return copy;
       });
 
+      setUploadPatient(prev => {
+        if (!prev) return null;
+        const currentReports = prev.lab_reports || [];
+        const filtered = currentReports.filter(r => r.test_name?.toLowerCase() !== testName.toLowerCase());
+        return {
+          ...prev,
+          lab_reports: [...filtered, { test_name: testName, file_name: file.name, s3_key: key }]
+        };
+      });
+
       // Refetch patients to update status
       fetchPatients();
     } catch (err) {
@@ -553,6 +698,244 @@ export default function LabTestDashboard() {
     } finally {
       setUploadingTests(prev => ({ ...prev, [testName]: false }));
     }
+  };
+
+  const handleViewFile = async (s3Key) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      window.open(res.data.url, "_blank");
+    } catch (err) {
+      toast({
+        title: "Error viewing file",
+        description: err.response?.data?.error || err.message,
+        status: "error",
+        duration: 3000,
+        isClosable: true
+      });
+    }
+  };
+
+  const handleDeleteFileClick = (visitId, s3Key, testName) => {
+    setDeleteTarget({ visitId, s3Key, testName });
+    onDeleteConfirmOpen();
+  };
+
+  const handleConfirmDeleteFile = async () => {
+    if (!deleteTarget) return;
+    const { visitId, s3Key, testName } = deleteTarget;
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(`${BASE_URL}/lab/delete_report`, {
+        headers: { Authorization: `Bearer ${token}` },
+        data: {
+          visit_id: visitId,
+          s3_key: s3Key,
+          test_name: testName
+        }
+      });
+
+      toast({
+        title: "File deleted successfully",
+        status: "success",
+        duration: 3000,
+        isClosable: true
+      });
+
+      if (selectedPatient) {
+        setSelectedPatient(prev => ({
+          ...prev,
+          lab_reports: prev.lab_reports?.filter(r => r.s3_key !== s3Key)
+        }));
+      }
+      if (uploadPatient) {
+        setUploadPatient(prev => ({
+          ...prev,
+          lab_reports: prev.lab_reports?.filter(r => r.s3_key !== s3Key)
+        }));
+      }
+
+      fetchPatients();
+    } catch (err) {
+      toast({
+        title: "Error deleting file",
+        description: err.response?.data?.error || err.message,
+        status: "error",
+        duration: 3000,
+        isClosable: true
+      });
+    } finally {
+      onDeleteConfirmClose();
+      setDeleteTarget(null);
+    }
+  };
+
+  const isIndividualTestComplete = (test, patient) => {
+    if (!test || !patient) return false;
+    const hasFile = patient.lab_reports?.some(
+      r => r.test_name && r.test_name.toLowerCase() === test.lab_test.toLowerCase() && r.s3_key
+    );
+    if (hasFile) return true;
+
+    const draft = patient.lab_results_draft || {};
+    const testName = test.lab_test;
+    const cfg = configTests.find(ct => ct.test_name.toLowerCase() === testName.toLowerCase() || ct.test_id === testName);
+    if (!cfg) {
+      return !!(draft[testName] && draft[testName].value && draft[testName].value.trim());
+    }
+
+    if (cfg.sub_tests) {
+      for (const st of cfg.sub_tests) {
+        const subCfg = configTests.find(ct => ct.test_name.toLowerCase() === st.name.toLowerCase());
+        const refRange = subCfg?.reference_range || st.reference_range || "";
+        if (refRange.includes(",")) {
+          const refs = refRange.split(",").map(s => s.trim());
+          for (const r of refs) {
+            const label = r.split(":")[0];
+            if (!draft[label] || !draft[label].value || !draft[label].value.trim()) return false;
+          }
+        } else {
+          if (!draft[st.name] || !draft[st.name].value || !draft[st.name].value.trim()) return false;
+        }
+      }
+      return true;
+    } else if (cfg.test_id.toLowerCase().startsWith("group")) {
+      const legacyNames = parseSubTestNames(cfg.test_name);
+      for (const ln of legacyNames) {
+        const sub = configTests.find(ct => ct.test_name.toLowerCase() === ln.toLowerCase());
+        const refRange = sub?.reference_range || "";
+        if (refRange.includes(",")) {
+          const refs = refRange.split(",").map(s => s.trim());
+          for (const r of refs) {
+            const label = r.split(":")[0];
+            if (!draft[label] || !draft[label].value || !draft[label].value.trim()) return false;
+          }
+        } else {
+          if (!draft[ln] || !draft[ln].value || !draft[ln].value.trim()) return false;
+        }
+      }
+      return true;
+    } else if (cfg.reference_range && cfg.reference_range.includes(",")) {
+      const refs = cfg.reference_range.split(",").map(s => s.trim());
+      for (const r of refs) {
+        const label = r.split(":")[0];
+        if (!draft[label] || !draft[label].value || !draft[label].value.trim()) return false;
+      }
+      return true;
+    } else {
+      return !!(draft[testName] && draft[testName].value && draft[testName].value.trim());
+    }
+  };
+
+  const hasDraftValues = (testName, patient) => {
+    if (!patient || !patient.lab_results_draft) return false;
+    const draft = patient.lab_results_draft;
+    const cfg = configTests.find(ct => ct.test_name.toLowerCase() === testName.toLowerCase() || ct.test_id === testName);
+    if (!cfg) {
+      return !!(draft[testName] && draft[testName].value && draft[testName].value.trim());
+    }
+    if (cfg.sub_tests) {
+      for (const st of cfg.sub_tests) {
+        const subCfg = configTests.find(ct => ct.test_name.toLowerCase() === st.name.toLowerCase());
+        const refRange = subCfg?.reference_range || st.reference_range || "";
+        if (refRange.includes(",")) {
+          const refs = refRange.split(",").map(s => s.trim());
+          for (const r of refs) {
+            const label = r.split(":")[0];
+            if (draft[label] && draft[label].value && draft[label].value.trim()) return true;
+          }
+        } else {
+          if (draft[st.name] && draft[st.name].value && draft[st.name].value.trim()) return true;
+        }
+      }
+    } else if (cfg.test_id.toLowerCase().startsWith("group")) {
+      const legacyNames = parseSubTestNames(cfg.test_name);
+      for (const ln of legacyNames) {
+        const sub = configTests.find(ct => ct.test_name.toLowerCase() === ln.toLowerCase());
+        const refRange = sub?.reference_range || "";
+        if (refRange.includes(",")) {
+          const refs = refRange.split(",").map(s => s.trim());
+          for (const r of refs) {
+            const label = r.split(":")[0];
+            if (draft[label] && draft[label].value && draft[label].value.trim()) return true;
+          }
+        } else {
+          if (draft[ln] && draft[ln].value && draft[ln].value.trim()) return true;
+        }
+      }
+    } else if (cfg.reference_range && cfg.reference_range.includes(",")) {
+      const refs = cfg.reference_range.split(",").map(s => s.trim());
+      for (const r of refs) {
+        const label = r.split(":")[0];
+        if (draft[label] && draft[label].value && draft[label].value.trim()) return true;
+      }
+    } else {
+      if (draft[testName] && draft[testName].value && draft[testName].value.trim()) return true;
+    }
+    return false;
+  };
+
+  const getTestDraftStatus = (testName, patient) => {
+    if (!patient || !patient.lab_results_draft) return "pending";
+    const draft = patient.lab_results_draft;
+
+    const cfg = configTests.find(ct => ct.test_name.toLowerCase() === testName.toLowerCase() || ct.test_id === testName);
+    if (!cfg) {
+      const val = draft[testName]?.value;
+      return val && val.trim() ? "completed" : "pending";
+    }
+
+    let totalFields = 0;
+    let filledFields = 0;
+
+    const checkField = (fieldName) => {
+      totalFields++;
+      if (draft[fieldName]?.value && draft[fieldName].value.trim()) {
+        filledFields++;
+      }
+    };
+
+    if (cfg.sub_tests) {
+      for (const st of cfg.sub_tests) {
+        const subCfg = configTests.find(ct => ct.test_name.toLowerCase() === st.name.toLowerCase());
+        const refRange = subCfg?.reference_range || st.reference_range || "";
+        if (refRange.includes(",")) {
+          const refs = refRange.split(",").map(s => s.trim());
+          for (const r of refs) {
+            checkField(r.split(":")[0]);
+          }
+        } else {
+          checkField(st.name);
+        }
+      }
+    } else if (cfg.test_id.toLowerCase().startsWith("group")) {
+      const legacyNames = parseSubTestNames(cfg.test_name);
+      for (const ln of legacyNames) {
+        const sub = configTests.find(ct => ct.test_name.toLowerCase() === ln.toLowerCase());
+        const refRange = sub?.reference_range || "";
+        if (refRange.includes(",")) {
+          const refs = refRange.split(",").map(s => s.trim());
+          for (const r of refs) {
+            checkField(r.split(":")[0]);
+          }
+        } else {
+          checkField(ln);
+        }
+      }
+    } else if (cfg.reference_range && cfg.reference_range.includes(",")) {
+      const refs = cfg.reference_range.split(",").map(s => s.trim());
+      for (const r of refs) {
+        checkField(r.split(":")[0]);
+      }
+    } else {
+      checkField(testName);
+    }
+
+    if (filledFields === 0) return "pending";
+    if (filledFields === totalFields) return "completed";
+    return "partial";
   };
 
   // CHANGE HANDLERS
@@ -639,8 +1022,8 @@ export default function LabTestDashboard() {
       );
 
       toast({
-        title: "Report saved successfully",
-        description: `${toTitleCase(selectedPatient.name)}'s lab report has been generated.`,
+        title: "Draft saved successfully",
+        description: `${toTitleCase(selectedPatient.name)}'s lab report draft has been saved.`,
         status: "success",
       });
 
@@ -727,6 +1110,59 @@ export default function LabTestDashboard() {
     }
   };
 
+
+  // Compute filled/unfilled summary for the save confirmation modal.
+  // Tests that already have a file uploaded are treated as complete and excluded.
+  const getSaveReportSummary = () => {
+    let total = 0;
+    let filled = 0;
+    const unfilled = [];
+
+    const labReports = selectedPatient?.lab_reports || [];
+
+    const hasUploadedFile = (testName) =>
+      labReports.some(
+        (r) => r.test_name && r.test_name.toLowerCase() === testName.toLowerCase()
+      );
+
+    tests.forEach((t) => {
+      // Skip the entire test if a file has already been uploaded for it
+      if (hasUploadedFile(t.lab_test)) return;
+
+      if (t.type === "individual") {
+        total++;
+        if (t.result && t.result.trim() !== "") {
+          filled++;
+        } else {
+          unfilled.push(t.lab_test);
+        }
+      } else if (t.type === "group") {
+        t.subTestNames.forEach((n, idx) => {
+          const det = t.subTestDetails[idx] || {};
+          if (!det.isHeader) {
+            total++;
+            if (t.subResults[idx] && t.subResults[idx].trim() !== "") {
+              filled++;
+            } else {
+              unfilled.push(n);
+            }
+          }
+        });
+      } else if (t.type === "multi") {
+        t.reference_ranges.forEach((r, idx) => {
+          const label = r.split(":")[0];
+          total++;
+          if (t.multiResults[idx] && t.multiResults[idx].trim() !== "") {
+            filled++;
+          } else {
+            unfilled.push(label);
+          }
+        });
+      }
+    });
+
+    return { total, filled, unfilled };
+  };
 
 
   const handleLogout = () => {
@@ -987,6 +1423,16 @@ export default function LabTestDashboard() {
                                 >
                                   Upload Lab Report
                                 </Button>
+                                {isPatientLabComplete(p) && (
+                                  <IconButton
+                                    aria-label="Complete Lab Test Report"
+                                    icon={<FiCheckCircle />}
+                                    colorScheme="green"
+                                    size="sm"
+                                    onClick={() => handleCompleteLabTestClick(p)}
+                                    title="Complete Lab Test Report"
+                                  />
+                                )}
                               </HStack>
                             </Td>
                           </Tr>
@@ -1168,71 +1614,116 @@ export default function LabTestDashboard() {
              ) : (
               <Box bg="white" borderRadius="lg" boxShadow="md" p={4}>
                 <Accordion allowMultiple defaultIndex={process.env.NODE_ENV === "test" ? tests.map((_, i) => i) : []}>
-                  {tests.map((test, idx) => (
-                    <AccordionItem key={idx} border="1px solid" borderColor="gray.200" borderRadius="md" mb={3} overflow="hidden">
-                      <h2>
-                        <AccordionButton _hover={{ bg: "blue.50" }} py={3} bg="gray.50">
-                          <Box flex="1" textAlign="left" fontWeight="bold" color="blue.800" fontSize="sm">
-                            {test.lab_test}
-                          </Box>
-                          <AccordionIcon />
-                        </AccordionButton>
-                      </h2>
-                      <AccordionPanel pb={4} pt={2}>
-                        <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
-                          <Thead bg="gray.100">
-                            <Tr>
-                              <Th w="30%">Test Name</Th>
-                              <Th w="25%">Result</Th>
-                              <Th w="30%">Reference Range</Th>
-                              <Th w="15%">Units</Th>
-                            </Tr>
-                          </Thead>
-                          <Tbody>
-                            {test.type === "individual" && (
+                  {tests.map((test, idx) => {
+                    const reportFile = selectedPatient?.lab_reports?.find(
+                      r => r.test_name && r.test_name.toLowerCase() === test.lab_test.toLowerCase()
+                    );
+                    const hasFile = !!reportFile;
+                    return (
+                      <AccordionItem key={idx} border="1px solid" borderColor="gray.200" borderRadius="md" mb={3} overflow="hidden">
+                        <h2>
+                          <AccordionButton _hover={{ bg: "blue.50" }} py={3} bg="gray.50">
+                            <Box flex="1" textAlign="left" fontWeight="bold" color="blue.800" fontSize="sm" display="flex" alignItems="center">
+                              {test.lab_test}
+                              {isIndividualTestComplete(test, selectedPatient) && (
+                                <Badge colorScheme="green" ml={2} fontSize="10px">Complete</Badge>
+                              )}
+                            </Box>
+                            <AccordionIcon />
+                          </AccordionButton>
+                        </h2>
+                        <AccordionPanel pb={4} pt={2}>
+                          {hasFile && (
+                            <Box mb={3} p={2} bg="orange.50" borderRadius="md" border="1px solid" borderColor="orange.200">
+                              <Text fontSize="xs" color="orange.800" fontWeight="medium" display="flex" alignItems="center" gap={2}>
+                                📄 File report uploaded: <strong>{reportFile.file_name}</strong>. Manual entry disabled.
+                                <Button size="xs" colorScheme="blue" variant="link" onClick={() => handleViewFile(reportFile.s3_key)}>
+                                  View File
+                                </Button>
+                              </Text>
+                            </Box>
+                          )}
+                          <Table variant="simple" size="sm" style={{ tableLayout: "fixed" }}>
+                            <Thead bg="gray.100">
                               <Tr>
-                                <Td fontWeight="semibold" color="blue.700" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                                  {test.lab_test}
-                                </Td>
-                                <Td>
-                                  <Input
-                                    size="sm"
-                                    value={test.result}
-                                    onChange={(e) =>
-                                      handleIndividualResultChange(
-                                        idx,
-                                        e.target.value
-                                      )
-                                    }
-                                  />
-                                </Td>
-                                <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{test.reference_range}</Td>
-                                <Td>{test.units}</Td>
+                                <Th w="30%">Test Name</Th>
+                                <Th w="25%">Result</Th>
+                                <Th w="30%">Reference Range</Th>
+                                <Th w="15%">Units</Th>
                               </Tr>
-                            )}
-                            {test.type === "group" &&
-                              test.subTestNames.map((n, i) => {
-                                const det = test.subTestDetails[i] || {};
-                                if (det.isHeader) {
+                            </Thead>
+                            <Tbody>
+                              {test.type === "individual" && (
+                                <Tr>
+                                  <Td fontWeight="semibold" color="blue.700" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                    {test.lab_test}
+                                  </Td>
+                                  <Td>
+                                    <Input
+                                      size="sm"
+                                      value={test.result}
+                                      isDisabled={hasFile}
+                                      onChange={(e) =>
+                                        handleIndividualResultChange(
+                                          idx,
+                                          e.target.value
+                                        )
+                                      }
+                                    />
+                                  </Td>
+                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{test.reference_range}</Td>
+                                  <Td>{test.units}</Td>
+                                </Tr>
+                              )}
+                              {test.type === "group" &&
+                                test.subTestNames.map((n, i) => {
+                                  const det = test.subTestDetails[i] || {};
+                                  if (det.isHeader) {
+                                    return (
+                                      <Tr key={i} bg="gray.50">
+                                        <Td colSpan={4} fontWeight="bold" color="blue.800" pl={4}>
+                                          {n}
+                                        </Td>
+                                      </Tr>
+                                    );
+                                  }
                                   return (
-                                    <Tr key={i} bg="gray.50">
-                                      <Td colSpan={4} fontWeight="bold" color="blue.800" pl={4}>
+                                    <Tr key={i}>
+                                      <Td pl={det.isSubField ? 8 : 4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
                                         {n}
                                       </Td>
+                                      <Td>
+                                        <Input
+                                          size="sm"
+                                          value={test.subResults[i]}
+                                          isDisabled={hasFile}
+                                          onChange={(e) =>
+                                            handleSubResultChange(
+                                              idx,
+                                              i,
+                                              e.target.value
+                                            )
+                                          }
+                                        />
+                                      </Td>
+                                      <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                                        {det.reference_range || "N/A"}
+                                      </Td>
+                                      <Td>{det.units || "N/A"}</Td>
                                     </Tr>
                                   );
-                                }
-                                return (
+                                })}
+                              {test.type === "multi" &&
+                                test.reference_ranges.map((r, i) => (
                                   <Tr key={i}>
-                                    <Td pl={det.isSubField ? 8 : 4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                                      {n}
-                                    </Td>
+                                    <Td pl={4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{r.split(":")[0]}</Td>
                                     <Td>
                                       <Input
                                         size="sm"
-                                        value={test.subResults[i]}
+                                        value={test.multiResults[i]}
+                                        isDisabled={hasFile}
                                         onChange={(e) =>
-                                          handleSubResultChange(
+                                          handleMultiResultChange(
                                             idx,
                                             i,
                                             e.target.value
@@ -1240,50 +1731,24 @@ export default function LabTestDashboard() {
                                         }
                                       />
                                     </Td>
-                                    <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                                      {det.reference_range || "N/A"}
-                                    </Td>
-                                    <Td>{det.units || "N/A"}</Td>
+                                    <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{r}</Td>
+                                    <Td>{test.unitsArray[i] || "N/A"}</Td>
                                   </Tr>
-                                );
-                              })}
-                            {test.type === "multi" &&
-                              test.reference_ranges.map((r, i) => (
-                                <Tr key={i}>
-                                  <Td pl={4} style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{r.split(":")[0]}</Td>
-                                  <Td>
-                                    <Input
-                                      size="sm"
-                                      value={test.multiResults[i]}
-                                      onChange={(e) =>
-                                        handleMultiResultChange(
-                                          idx,
-                                          i,
-                                          e.target.value
-                                        )
-                                      }
-                                    />
-                                  </Td>
-                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>{r}</Td>
-                                  <Td>{test.unitsArray[i] || "N/A"}</Td>
-                                </Tr>
-                              ))}
-                          </Tbody>
-                        </Table>
-                      </AccordionPanel>
-                    </AccordionItem>
-                  ))}
+                                ))}
+                            </Tbody>
+                          </Table>
+                        </AccordionPanel>
+                      </AccordionItem>
+                    );
+                  })}
                 </Accordion>
               </Box>
             )}
           </ModalBody>
           <ModalFooter bg="gray.50">
             <HStack spacing={3}>
-              <Button colorScheme="yellow" onClick={handleSaveDraft}>
-                Save Draft
-              </Button>
-              <Button colorScheme="blue" onClick={submitResults}>
-                Save Results
+              <Button colorScheme="yellow" onClick={onSaveConfirmOpen}>
+                Save Report Details
               </Button>
             </HStack>
           </ModalFooter>
@@ -1310,28 +1775,124 @@ export default function LabTestDashboard() {
                 <Stack spacing={4}>
                   <Text fontWeight="semibold" fontSize="sm" color="gray.700">Prescribed Lab Tests:</Text>
                   {getNonRedundantTests(uploadPatient).map((lt, index) => {
-                    const isCompleted = lt.status === "completed";
+                    const reportFile = uploadPatient.lab_reports?.find(
+                      r => r.test_name && r.test_name.toLowerCase() === lt.lab_test.toLowerCase()
+                    );
+                    const hasFile = !!reportFile;
+                    const isCompleted = lt.status === "completed" || hasFile;
+                    const hasDraft = hasDraftValues(lt.lab_test, uploadPatient);
+                    const draftStatus = getTestDraftStatus(lt.lab_test, uploadPatient);
                     const isUploadingThis = !!uploadingTests[lt.lab_test];
+
+                    let badgeText = "Pending";
+                    let badgeBg = "orange.50";
+                    let badgeColor = "orange.700";
+                    let badgeBorder = "orange.300";
+                    let badgeDot = "#ED8936";
+                    let badgeIcon = "⏳";
+                    let cardBorderLeft = "4px solid #ED8936";
+
+                    if (isCompleted) {
+                      badgeText = "Completed";
+                      badgeBg = "green.50";
+                      badgeColor = "green.700";
+                      badgeBorder = "green.300";
+                      badgeDot = "#38A169";
+                      badgeIcon = "✅";
+                      cardBorderLeft = "4px solid #38A169";
+                    } else if (draftStatus === "completed") {
+                      badgeText = "Manually Filled";
+                      badgeBg = "blue.50";
+                      badgeColor = "blue.700";
+                      badgeBorder = "blue.300";
+                      badgeDot = "#3182CE";
+                      badgeIcon = "✍️";
+                      cardBorderLeft = "4px solid #3182CE";
+                    } else if (draftStatus === "partial") {
+                      badgeText = "Partially Filled";
+                      badgeBg = "yellow.50";
+                      badgeColor = "yellow.800";
+                      badgeBorder = "yellow.400";
+                      badgeDot = "#D69E2E";
+                      badgeIcon = "⚠️";
+                      cardBorderLeft = "4px solid #D69E2E";
+                    }
+
                     return (
-                      <Box key={index} p={4} borderWidth="1px" borderRadius="md" borderColor="gray.200">
+                      <Box
+                        key={index}
+                        p={4}
+                        borderWidth="1px"
+                        borderRadius="md"
+                        borderColor="gray.200"
+                        borderLeft={cardBorderLeft}
+                        bg="white"
+                        boxShadow="sm"
+                        _hover={{ boxShadow: "md" }}
+                        transition="box-shadow 0.15s"
+                      >
                         <Flex justify="space-between" align="center" mb={2}>
                           <Text fontWeight="bold" fontSize="sm" color="blue.800">
                             {lt.lab_test}
                           </Text>
-                          <Box
-                            px={2}
-                            py={0.5}
+                          <Flex
+                            align="center"
+                            gap={1.5}
+                            px={3}
+                            py={1}
                             borderRadius="full"
-                            fontSize="xs"
-                            fontWeight="semibold"
-                            bg={isCompleted ? "green.100" : "orange.100"}
-                            color={isCompleted ? "green.800" : "orange.800"}
+                            border="1px solid"
+                            borderColor={badgeBorder}
+                            bg={badgeBg}
+                            boxShadow="xs"
                           >
-                            {isCompleted ? "Completed" : "Pending"}
-                          </Box>
+                            <Box
+                              w={2}
+                              h={2}
+                              borderRadius="full"
+                              bg={badgeDot}
+                              flexShrink={0}
+                            />
+                            <Text
+                              fontSize="xs"
+                              fontWeight="semibold"
+                              color={badgeColor}
+                              whiteSpace="nowrap"
+                            >
+                              {badgeText}
+                            </Text>
+                          </Flex>
                         </Flex>
 
-                        {!isCompleted && (
+                        {hasFile && (
+                          <Box mt={2} p={2} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                            <Flex justify="space-between" align="center">
+                              <Text fontSize="xs" color="gray.600" isTruncated maxW="60%">
+                                Uploaded: <strong>{reportFile.file_name}</strong>
+                              </Text>
+                              <HStack spacing={2}>
+                                <Button size="xs" colorScheme="blue" onClick={() => handleViewFile(reportFile.s3_key)}>
+                                  View File
+                                </Button>
+                                <Button size="xs" colorScheme="red" variant="outline" onClick={() => handleDeleteFileClick(uploadPatient.visit_id, reportFile.s3_key, lt.lab_test)}>
+                                  Delete File
+                                </Button>
+                              </HStack>
+                            </Flex>
+                          </Box>
+                        )}
+
+                        {!isCompleted && hasDraft && (
+                          <Box mt={1} p={2} bg="yellow.50" borderRadius="md" border="1px solid" borderColor="yellow.200">
+                            <Text fontSize="xs" color="yellow.800" fontWeight="medium">
+                              {draftStatus === "completed"
+                                ? "✍️ All values were entered manually. Clear values inside 'View Lab Order' first to upload a file."
+                                : "✍️ Draft values entered. Clear values inside 'View Lab Order' first to upload a file."}
+                            </Text>
+                          </Box>
+                        )}
+
+                        {!isCompleted && !hasDraft && (
                           <FormControl isInvalid={!!uploadErrors[lt.lab_test]}>
                             <Flex gap={3} align="center" mt={1}>
                               {/* Modern File Input Wrapper */}
@@ -1433,6 +1994,154 @@ export default function LabTestDashboard() {
         </ModalContent>
       </Modal>
 
+      {/* COMPLETE LAB REPORT CONFIRMATION MODAL */}
+      <Modal isOpen={isCompleteOpen} onClose={onCompleteClose} size="3xl" isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader bg="green.600" color="white">
+            Confirm Lab Test Report Completion
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody bg="gray.50" p={5}>
+            {selectedPatient && (
+              <Stack spacing={3}>
+                <Box bg="white" p={3} borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
+                  <Text fontSize="xs" fontWeight="bold">{toTitleCase(selectedPatient.name)}</Text>
+                  <Text fontSize="xs" color="gray.500">ID: {selectedPatient.institute_id} | {selectedPatient.age} yrs | {selectedPatient.gender} | Dr. {selectedPatient.doctor_name || "N/A"}</Text>
+                </Box>
+
+                <Text fontSize="xs" fontWeight="semibold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
+                  Summary of Uploaded Files / Entered Values
+                </Text>
+
+                <Stack spacing={2} maxH="440px" overflowY="auto" pr={1}>
+                  {tests.map((test, index) => {
+                    const reportFile = selectedPatient.lab_reports?.find(
+                      r => r.test_name && r.test_name.toLowerCase() === test.lab_test.toLowerCase()
+                    );
+
+                    return (
+                      <Box
+                        key={index}
+                        bg="white"
+                        p={3}
+                        borderRadius="md"
+                        border="1px solid"
+                        borderColor="gray.200"
+                        borderLeft={reportFile ? "3px solid #38A169" : "3px solid #3182CE"}
+                        boxShadow="xs"
+                      >
+                        <Flex justify="space-between" align="center" mb={reportFile ? 1.5 : 2}>
+                          <Text fontWeight="bold" fontSize="xs" color="gray.800" noOfLines={2} maxW="70%">
+                            {test.lab_test}
+                          </Text>
+                          <Flex
+                            align="center"
+                            gap={1.5}
+                            px={2.5}
+                            py={0.5}
+                            borderRadius="full"
+                            border="1px solid"
+                            borderColor={reportFile ? "green.300" : "blue.300"}
+                            bg={reportFile ? "green.50" : "blue.50"}
+                          >
+                            <Box
+                              w={1.5}
+                              h={1.5}
+                              borderRadius="full"
+                              bg={reportFile ? "#38A169" : "#3182CE"}
+                              flexShrink={0}
+                            />
+                            <Text fontSize="2xs" fontWeight="semibold" color={reportFile ? "green.700" : "blue.700"} whiteSpace="nowrap">
+                              {reportFile ? "File Uploaded" : "Results Entered"}
+                            </Text>
+                          </Flex>
+                        </Flex>
+
+                        {reportFile ? (
+                          <Flex align="center" justify="space-between" bg="gray.50" px={2} py={1} borderRadius="sm">
+                            <Text fontSize="2xs" color="gray.600" isTruncated maxW="70%">
+                              📎 <strong>{reportFile.file_name}</strong>
+                            </Text>
+                            <Button
+                              size="xs"
+                              colorScheme="blue"
+                              variant="ghost"
+                              fontSize="2xs"
+                              px={2}
+                              h={5}
+                              onClick={() => handleViewFile(reportFile.s3_key)}
+                            >
+                              View File ↗
+                            </Button>
+                          </Flex>
+                        ) : (
+                          <Table variant="simple" size="xs" mt={1}>
+                            <Thead>
+                              <Tr>
+                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Field</Th>
+                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Value</Th>
+                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Reference</Th>
+                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Units</Th>
+                              </Tr>
+                            </Thead>
+                            <Tbody>
+                              {test.type === "individual" && (
+                                <Tr>
+                                  <Td fontSize="2xs" py={0.5} px={1} fontWeight="medium">{test.lab_test}</Td>
+                                  <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.result || "—"}</Td>
+                                  <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{test.reference_range}</Td>
+                                  <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{test.units}</Td>
+                                </Tr>
+                              )}
+                              {test.type === "group" &&
+                                test.subTestNames.map((n, i) => {
+                                  const det = test.subTestDetails[i] || {};
+                                  if (det.isHeader) return null;
+                                  return (
+                                    <Tr key={i}>
+                                      <Td fontSize="2xs" py={0.5} px={1} pl={det.isSubField ? 4 : 1} color="gray.700">{n}</Td>
+                                      <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.subResults[i] || "—"}</Td>
+                                      <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{det.reference_range || "N/A"}</Td>
+                                      <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{det.units || "N/A"}</Td>
+                                    </Tr>
+                                  );
+                                })}
+                              {test.type === "multi" &&
+                                test.reference_ranges.map((r, i) => (
+                                  <Tr key={i}>
+                                    <Td fontSize="2xs" py={0.5} px={1} color="gray.700">{r.split(":")[0]}</Td>
+                                    <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.multiResults[i] || "—"}</Td>
+                                    <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{r}</Td>
+                                    <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{test.unitsArray[i] || "N/A"}</Td>
+                                  </Tr>
+                                ))}
+                            </Tbody>
+                          </Table>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </Stack>
+            )}
+          </ModalBody>
+          <ModalFooter bg="gray.50">
+            <HStack spacing={3}>
+              <Button onClick={onCompleteClose}>Cancel</Button>
+              <Button
+                colorScheme="green"
+                onClick={executeCompleteReport}
+                isLoading={isCompleting}
+                loadingText="Completing..."
+              >
+                Confirm & Complete Report
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
       {/* SUCCESS MODAL */}
       <Modal isOpen={isSuccessOpen} onClose={onSuccessClose} isCentered>
         <ModalOverlay />
@@ -1443,6 +2152,107 @@ export default function LabTestDashboard() {
             <Button colorScheme="blue" onClick={onSuccessClose}>
               Close
             </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* DELETE CONFIRMATION MODAL */}
+      <Modal isOpen={isDeleteConfirmOpen} onClose={onDeleteConfirmClose} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader bg="red.600" color="white">
+            Confirm File Deletion
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody py={6}>
+            <Text>Are you sure you want to delete the uploaded report for <strong>{deleteTarget?.testName}</strong>?</Text>
+            <Text fontSize="xs" color="gray.500" mt={2}>This action cannot be undone and will remove the file from storage.</Text>
+          </ModalBody>
+          <ModalFooter bg="gray.50">
+            <HStack spacing={3}>
+              <Button onClick={onDeleteConfirmClose}>Cancel</Button>
+              <Button colorScheme="red" onClick={handleConfirmDeleteFile}>
+                Confirm Delete
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* SAVE REPORT DETAILS CONFIRMATION MODAL */}
+      <Modal isOpen={isSaveConfirmOpen} onClose={onSaveConfirmClose} isCentered size="md">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader bg="yellow.500" color="white">
+            Confirm Save Report Details
+          </ModalHeader>
+          <ModalCloseButton color="white" />
+          <ModalBody py={6}>
+            {(() => {
+              const { total, filled, unfilled } = getSaveReportSummary();
+              const allFilled = filled === total && total > 0;
+              return (
+                <>
+                  <Text fontWeight="semibold" mb={3}>
+                    Have you entered all the required fields before saving?
+                  </Text>
+                  <Box
+                    bg={allFilled ? "green.50" : "orange.50"}
+                    border="1px solid"
+                    borderColor={allFilled ? "green.200" : "orange.200"}
+                    borderRadius="md"
+                    p={4}
+                    mb={3}
+                  >
+                    <Text
+                      fontWeight="bold"
+                      color={allFilled ? "green.700" : "orange.700"}
+                      fontSize="sm"
+                    >
+                      {allFilled
+                        ? `✅ All ${total} field${total !== 1 ? "s" : ""} filled`
+                        : `⚠️ ${filled} of ${total} field${total !== 1 ? "s" : ""} filled`}
+                    </Text>
+                    {!allFilled && unfilled.length > 0 && (
+                      <Box mt={2}>
+                        <Text fontSize="xs" color="orange.600" mb={1}>
+                          The following fields are still empty:
+                        </Text>
+                        <Box
+                          as="ul"
+                          pl={4}
+                          maxH="120px"
+                          overflowY="auto"
+                          fontSize="xs"
+                          color="gray.700"
+                        >
+                          {unfilled.map((name, idx) => (
+                            <Box as="li" key={idx}>{name}</Box>
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+                  </Box>
+                  <Text fontSize="sm" color="gray.600">
+                    You can still save with partial data. Empty fields will not overwrite existing values.
+                  </Text>
+                </>
+              );
+            })()}
+          </ModalBody>
+          <ModalFooter bg="gray.50">
+            <HStack spacing={3}>
+              <Button onClick={onSaveConfirmClose}>Cancel</Button>
+              <Button
+                colorScheme="yellow"
+                onClick={() => {
+                  onSaveConfirmClose();
+                  handleSaveDraft();
+                }}
+              >
+                Confirm & Save
+              </Button>
+            </HStack>
           </ModalFooter>
         </ModalContent>
       </Modal>

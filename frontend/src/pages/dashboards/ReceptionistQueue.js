@@ -31,7 +31,7 @@ import {
 import { FiRefreshCw, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
-import { getDateISTString, toTitleCase } from '../../utils/utils';
+import { getDateISTString, toTitleCase, formatReceptionistDateTime } from '../../utils/utils';
 import PrescriptionModal from '../../components/PrescriptionModal';
 
 export default function ReceptionistQueue() {
@@ -185,7 +185,7 @@ export default function ReceptionistQueue() {
                   {paginatedData.map((appointment) => (
                     <Tr key={appointment.visit_id}>
                       <Td fontWeight="bold">
-                        {new Date(appointment.time).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        {formatReceptionistDateTime(appointment.time)}
                       </Td>
                       <Td>
                         <Flex align="center" justify="flex-start">

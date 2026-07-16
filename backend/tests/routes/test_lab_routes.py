@@ -11,7 +11,7 @@ def test_save_lab_report_unauthorized(client, app):
 def test_save_lab_report_success(client, mocker, app):
     with app.app_context():
         token = create_access_token(identity="lab1", additional_claims={"role": "lab_staff"})
-    mocker.patch("database.add_lab_report", return_value=True)
+    mocker.patch("database.save_lab_results_draft", return_value=True)
     payload = {"institute_id": "123", "visit_id": "v123", "test_name": "Blood", "results": "Normal", "remarks": "None"}
     res = client.post("/lab/save_report", headers={"Authorization": f"Bearer {token}"}, json=payload)
     assert res.status_code == 200
@@ -90,3 +90,36 @@ def test_save_lab_draft_missing_fields(client, app):
     payload = {"institute_id": "123"}
     res = client.post("/lab/save_draft", headers={"Authorization": f"Bearer {token}"}, json=payload)
     assert res.status_code == 400
+
+def test_complete_patient_report_unauthorized(client, app):
+    with app.app_context():
+        token = create_access_token(identity="user", additional_claims={"role": "doctor"})
+    res = client.post("/lab/complete_patient_report", headers={"Authorization": f"Bearer {token}"}, json={})
+    assert res.status_code == 403
+
+def test_complete_patient_report_success(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="lab1", additional_claims={"role": "lab_staff"})
+    mocker.patch("database.validate_and_complete_lab_report", return_value=(True, "Lab report completed successfully"))
+    payload = {"institute_id": "123", "visit_id": "v123"}
+    res = client.post("/lab/complete_patient_report", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 200
+    assert res.json["message"] == "Lab report completed successfully"
+
+
+def test_delete_lab_report_unauthorized(client, app):
+    with app.app_context():
+        token = create_access_token(identity="user", additional_claims={"role": "doctor"})
+    res = client.delete("/lab/delete_report", headers={"Authorization": f"Bearer {token}"}, json={})
+    assert res.status_code == 403
+
+
+def test_delete_lab_report_success(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="lab1", additional_claims={"role": "lab_staff"})
+    mocker.patch("database.delete_lab_report", return_value=True)
+    mocker.patch("app.routes.lab_routes.s3.delete_object", return_value={})
+    payload = {"visit_id": 123, "s3_key": "test_key", "test_name": "Hemoglobin"}
+    res = client.delete("/lab/delete_report", headers={"Authorization": f"Bearer {token}"}, json=payload)
+    assert res.status_code == 200
+    assert res.json["message"] == "Lab report file deleted successfully"

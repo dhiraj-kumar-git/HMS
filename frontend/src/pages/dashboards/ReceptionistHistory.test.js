@@ -169,4 +169,28 @@ describe('ReceptionistHistory Component', () => {
     // Modal should NOT open
     expect(screen.queryByText('OPD CARD / SLIP')).not.toBeInTheDocument();
   });
+
+  it('formats Date & Time in DD/MM/YY, H:MM PM format for receptionist view', async () => {
+    const testDate = new Date(2026, 6, 16, 17, 30); // 16 July 2026 17:30
+    const mockData = [
+      {
+        visit_id: 1,
+        time: testDate.toISOString(),
+        name: 'John Doe',
+        age: 30,
+        gender: 'Male',
+        institute_id: 'H2023001',
+        doctor_name: 'Dr. Smith',
+        status: 'completed'
+      }
+    ];
+
+    axios.get.mockResolvedValueOnce({ data: mockData });
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('16/7/26, 5:30 PM')).toBeInTheDocument();
+    });
+  });
 });

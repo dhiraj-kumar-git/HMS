@@ -36,22 +36,40 @@ def save_lab_report():
     visit_id = data.get("visit_id")
     test_name = data.get("test_name")
     results = data.get("results")
-    remarks = data.get("remarks")
 
     if not institute_id or not test_name or not results:
         return jsonify({"error": "Missing required fields"}), 400
 
-    from database import add_lab_report
-    success = add_lab_report(institute_id, visit_id, {
-        "test_name": test_name,
-        "results": results,
-        "remarks": remarks,
-    })
+    from database import save_lab_results_draft
+    success = save_lab_results_draft(institute_id, visit_id, results)
 
     if success:
-        return jsonify({"message": "Lab report saved successfully"}), 200
+        return jsonify({"message": "Lab report saved as draft successfully"}), 200
     else:
-        return jsonify({"error": "Failed to save report"}), 400
+        return jsonify({"error": "Failed to save report draft"}), 400
+
+
+@lab_bp.route('/lab/complete_patient_report', methods=['POST'])
+@jwt_required()
+def complete_patient_report():
+    claims = get_jwt()
+    if claims.get("role") != "lab_staff":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    institute_id = data.get("institute_id")
+    visit_id = data.get("visit_id")
+
+    if not institute_id or not visit_id:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    from database import validate_and_complete_lab_report
+    success, message = validate_and_complete_lab_report(institute_id, visit_id)
+
+    if success:
+        return jsonify({"message": message}), 200
+    else:
+        return jsonify({"error": message}), 400
 
 @lab_bp.route('/lab/save_draft', methods=['POST'])
 @jwt_required()
@@ -180,6 +198,34 @@ def submit_lab_results():
     if database.submit_lab_results(institute_id, results):
         return jsonify({"message": "Results submitted successfully"}), 200
     return jsonify({"error": "Failed to submit results"}), 400
+
+
+@lab_bp.route('/lab/delete_report', methods=['DELETE'])
+@jwt_required()
+def delete_lab_report_route():
+    claims = get_jwt()
+    if claims.get("role") != "lab_staff":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    data = request.json
+    visit_id = data.get("visit_id")
+    s3_key = data.get("s3_key")
+    test_name = data.get("test_name")
+
+    if not visit_id or not s3_key:
+        return jsonify({"error": "Missing required fields"}), 400
+
+    try:
+        s3.delete_object(Bucket=BUCKET, Key=s3_key)
+    except Exception as e:
+        print(f"Error deleting object from S3: {e}")
+
+    from database import delete_lab_report
+    if delete_lab_report(visit_id, s3_key, test_name):
+        return jsonify({"message": "Lab report file deleted successfully"}), 200
+    else:
+        return jsonify({"error": "Failed to delete report metadata"}), 400
+
 
 # Updated dropdown endpoint to return lab tests using the JSON config file.
 @lab_bp.route('/dropdown/labtests', methods=['GET'])

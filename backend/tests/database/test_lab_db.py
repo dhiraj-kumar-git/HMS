@@ -62,3 +62,25 @@ def test_get_test_price():
     
     res = get_test_price("unknown", config)
     assert res == 0
+
+def test_validate_and_complete_lab_report(mocker):
+    mock_visits = mocker.patch.object(lab_db, 'visits')
+    mock_patients = mocker.patch.object(lab_db, 'patients')
+    mocker.patch("app.database.lab.load_lab_tests_from_config", return_value=[{"test_name": "Blood", "test_id": "T1"}])
+
+    # Case 1: Visit not found
+    mock_visits.find_one.return_value = None
+    success, msg = lab_db.validate_and_complete_lab_report("123", "v123")
+    assert success is False
+    assert "Visit not found" in msg
+
+    # Case 2: Validation success
+    mock_visits.find_one.return_value = {
+        "visit_id": "v123",
+        "institute_id": "123",
+        "lab_tests": [{"lab_test": "Blood"}],
+        "lab_results_draft": {"Blood": {"value": "Normal"}}
+    }
+    success, msg = lab_db.validate_and_complete_lab_report("123", "v123")
+    assert success is True
+    assert "completed" in msg

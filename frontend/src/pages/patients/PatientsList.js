@@ -26,7 +26,7 @@ import { Select } from '@chakra-ui/react';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
-import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import { formatDateTimeIST, toTitleCase, formatReceptionistDateTime } from '../../utils/utils';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
@@ -255,7 +255,9 @@ export default function PatientsList() {
                             <Tbody>
                               {p.appointments.map((appt, idx) => (
                                 <Tr key={idx} borderBottom="1px solid" borderColor="gray.100">
-                                  <Td color="gray.600">{formatDateTimeIST(appt.booked_at)}</Td>
+                                  <Td color="gray.600">
+                                    {userRole === 'receptionist' ? formatReceptionistDateTime(appt.booked_at) : formatDateTimeIST(appt.booked_at)}
+                                  </Td>
                                   <Td color="gray.600">{toTitleCase(appt.doctor_name)}</Td>
                                   <Td>
                                     <Badge

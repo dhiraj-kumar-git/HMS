@@ -143,17 +143,28 @@ describe('LabTest Component', () => {
     fireEvent.change(inputs[2], { target: { value: '15' } }); // Param1
     fireEvent.change(inputs[3], { target: { value: '35' } }); // Param2
 
-    // Submit report
-    axios.post.mockResolvedValueOnce({ data: { message: 'success' } });
-    
-    const saveBtn = screen.getByRole('button', { name: /Save Results/i });
+    // Click "Save Report Details" — should open the confirmation modal
+    const saveBtn = screen.getByRole('button', { name: /Save Report Details/i });
     await act(async () => {
       fireEvent.click(saveBtn);
     });
 
+    // Confirmation modal should now be visible
+    await waitFor(() => {
+      expect(screen.getByText(/Confirm Save Report Details/i)).toBeInTheDocument();
+      expect(screen.getByText(/Have you entered all the required fields before saving/i)).toBeInTheDocument();
+    });
+
+    // Click "Confirm & Save" to actually trigger the save
+    axios.post.mockResolvedValueOnce({ data: { message: 'success' } });
+    const confirmSaveBtn = screen.getByRole('button', { name: /Confirm & Save/i });
+    await act(async () => {
+      fireEvent.click(confirmSaveBtn);
+    });
+
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
-        expect.stringContaining('/lab/save_report'),
+        expect.stringContaining('/lab/save_draft'),
         expect.objectContaining({
           institute_id: 'P123',
           visit_id: 1,
@@ -324,6 +335,212 @@ describe('LabTest Component', () => {
       // Urine Routine is completed, so it should show Completed badge and not have file input/upload button
       expect(screen.getByText('Completed')).toBeInTheDocument();
       expect(screen.getByText('Pending')).toBeInTheDocument();
+    });
+  });
+
+  it('verifies report completion workflow checkmark visibility, modal display, and API submission', async () => {
+    const customConfig = [
+      { test_id: 'hb_id', test_name: 'Hemoglobin', reference_range: '13-17', units: 'g/dL' }
+    ];
+
+    const customPatients = [
+      {
+        institute_id: 'P_INCOMPLETE',
+        visit_id: 101,
+        name: 'Incomplete Patient',
+        age: 30,
+        gender: 'Male',
+        lab_tests: [{ lab_test: 'Hemoglobin' }],
+        lab_results_draft: {}, // empty
+        lab_reports: []
+      },
+      {
+        institute_id: 'P_COMPLETE_VAL',
+        visit_id: 102,
+        name: 'Complete Val Patient',
+        age: 40,
+        gender: 'Female',
+        lab_tests: [{ lab_test: 'Hemoglobin' }],
+        lab_results_draft: { 'Hemoglobin': { value: '14.5', reference_range: '13-17', units: 'g/dL' } },
+        lab_reports: []
+      },
+      {
+        institute_id: 'P_COMPLETE_FILE',
+        visit_id: 103,
+        name: 'Complete File Patient',
+        age: 50,
+        gender: 'Male',
+        lab_tests: [{ lab_test: 'Hemoglobin' }],
+        lab_results_draft: {},
+        lab_reports: [{ test_name: 'Hemoglobin', file_name: 'hb.pdf', s3_key: 'key1' }]
+      }
+    ];
+
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: customConfig });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: customPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
+    });
+
+    axios.post.mockResolvedValue({ data: { message: 'Lab report completed successfully' } });
+
+    await act(async () => {
+      renderComponent();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Incomplete Patient')).toBeInTheDocument();
+      expect(screen.getByText('Complete Val Patient')).toBeInTheDocument();
+      expect(screen.getByText('Complete File Patient')).toBeInTheDocument();
+    });
+
+    // Checkmark button (labeled 'Complete Lab Test Report' via aria-label/title)
+    // should NOT render for Incomplete Patient (only P_COMPLETE_VAL and P_COMPLETE_FILE)
+    const checkBtns = screen.getAllByRole('button', { name: /Complete Lab Test Report/i });
+    expect(checkBtns.length).toBe(2); // One for P_COMPLETE_VAL, one for P_COMPLETE_FILE
+
+    // Click checkmark button for P_COMPLETE_VAL
+    await act(async () => {
+      fireEvent.click(checkBtns[0]);
+    });
+
+    // Verify modal is shown
+    await waitFor(() => {
+      expect(screen.getByText('Confirm Lab Test Report Completion')).toBeInTheDocument();
+      expect(screen.getAllByText('Complete Val Patient').length).toBeGreaterThan(0);
+      expect(screen.getByText('Results Entered')).toBeInTheDocument();
+    });
+
+    // Click confirm
+    const confirmBtn = screen.getByRole('button', { name: /Confirm & Complete Report/i });
+    await act(async () => {
+      fireEvent.click(confirmBtn);
+    });
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/lab/complete_patient_report'),
+        expect.objectContaining({
+          institute_id: 'P_COMPLETE_VAL',
+          visit_id: 102
+        }),
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('verifies exclusivity rules, checkmark headers, and file view/delete operations', async () => {
+    const customConfig = [
+      { test_id: 'hb_id', test_name: 'Hemoglobin', reference_range: '13-17', units: 'g/dL' },
+      { test_id: 'tlc_id', test_name: 'WBC', reference_range: '4000-11000', units: '/cumm' }
+    ];
+
+    const customPatients = [
+      {
+        institute_id: 'P_EXCLUSIVITY',
+        visit_id: 104,
+        name: 'Exclusivity Patient',
+        age: 32,
+        gender: 'Male',
+        lab_tests: [
+          { lab_test: 'Hemoglobin', status: 'pending' },
+          { lab_test: 'WBC', status: 'pending' }
+        ],
+        lab_results_draft: {
+          'Hemoglobin': { value: '15.0', reference_range: '13-17', units: 'g/dL' }
+        },
+        lab_reports: [
+          { test_name: 'WBC', file_name: 'wbc.pdf', s3_key: 'wbc-key' }
+        ]
+      }
+    ];
+
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: customConfig });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: customPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
+    });
+
+    axios.delete.mockResolvedValue({ data: { message: 'Lab report file deleted successfully' } });
+
+    await act(async () => {
+      renderComponent();
+    });
+
+    // 1. Open View Lab Order Modal
+    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
+    await act(async () => {
+      fireEvent.click(viewBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Hemoglobin').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('WBC').length).toBeGreaterThan(0);
+    });
+
+    // Check complete badges on accordion headers
+    // Hemoglobin is complete due to draft value
+    // WBC is complete due to S3 file upload
+    const completeBadges = screen.getAllByText('Complete');
+    expect(completeBadges.length).toBe(2);
+
+    // WBC has a file, so its inputs should be disabled
+    // Let's find the inputs inside the WBC accordion panel.
+    // In our mock, Hemoglobin input should be enabled, and WBC input should be disabled.
+    const inputs = screen.getAllByRole('textbox');
+    // The Hemoglobin input is first, WBC input is second
+    expect(inputs[0]).not.toBeDisabled();
+    expect(inputs[1]).toBeDisabled();
+
+    // Check presence of View File button inside WBC panel
+    expect(screen.getByRole('button', { name: /View File/i })).toBeInTheDocument();
+
+    // Close the View Lab Order Modal
+    const closeBtn = screen.getByRole('button', { name: /Close/i });
+    fireEvent.click(closeBtn);
+
+    // 2. Open Upload Lab Report Modal
+    const uploadBtn = screen.getByRole('button', { name: /Upload Lab Report/i });
+    await act(async () => {
+      fireEvent.click(uploadBtn);
+    });
+
+    await waitFor(() => {
+      // Hemoglobin has draft values, so it should display the note:
+      expect(screen.getByText(/All values were entered manually. Clear values inside 'View Lab Order' first to upload a file./i)).toBeInTheDocument();
+      
+      // WBC has a file uploaded, so it should show the file name and the Delete File option
+      expect(screen.getByText(/wbc.pdf/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Delete File/i })).toBeInTheDocument();
+    });
+
+    // 3. Delete the file
+    const deleteBtn = screen.getByRole('button', { name: /Delete File/i });
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Confirm File Deletion')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Confirm Delete/i })).toBeInTheDocument();
+    });
+
+    const confirmDeleteBtn = screen.getByRole('button', { name: /Confirm Delete/i });
+    await act(async () => {
+      fireEvent.click(confirmDeleteBtn);
+    });
+
+    await waitFor(() => {
+      expect(axios.delete).toHaveBeenCalledWith(
+        expect.stringContaining('/lab/delete_report'),
+        expect.objectContaining({
+          data: expect.objectContaining({
+            visit_id: 104,
+            s3_key: 'wbc-key',
+            test_name: 'WBC'
+          })
+        })
+      );
     });
   });
 });

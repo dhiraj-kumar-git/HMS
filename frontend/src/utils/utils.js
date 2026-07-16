@@ -30,6 +30,31 @@ export const formatDateTimeIST = (dateInput) => {
   });
 };
 
+export const formatReceptionistDateTime = (dateInput) => {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const day = d.getDate();
+  const month = d.getMonth() + 1;
+  const year = String(d.getFullYear()).slice(-2);
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  return `${day}/${month}/${year}, ${hours}:${minutes} ${ampm}`;
+};
+
+export const formatReceptionistDate = (dateInput) => {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  const day = d.getDate();
+  const month = d.getMonth() + 1;
+  const year = String(d.getFullYear()).slice(-2);
+  return `${day}/${month}/${year}`;
+};
+
 export const formatDateIST = (dateInput) => {
   if (!dateInput) return '';
   const date = new Date(dateInput);
