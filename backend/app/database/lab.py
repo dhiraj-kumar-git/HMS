@@ -356,18 +356,62 @@ def validate_and_complete_lab_report(institute_id, visit_id):
         {"$set": {"lab_tests.$[].status": "completed"}}
     )
 
-    # 2. Package draft results if any exist
+    # 2. Package draft results split by test
     if draft:
-        report_data = {
-            "test_name": lab_tests[0]["lab_test"],  # Use first test name
-            "results": draft,
-            "remarks": "",
-            "timestamp": datetime.now(timezone.utc).isoformat()
-        }
-        visits.update_one(
-            {"visit_id": visit["visit_id"]},
-            {"$push": {"lab_reports": report_data}}
-        )
+        for lt in deduplicated_tests:
+            test_name = lt["lab_test"]
+            has_file = any(r.get("test_name", "").lower() == test_name.lower() and r.get("s3_key") for r in uploaded_reports)
+            if has_file:
+                continue
+
+            cfg = next((ct for ct in config_list if ct.get("test_name", "").lower() == test_name.lower() or ct.get("test_id", "") == test_name), None)
+            test_params = set()
+            
+            if cfg and cfg.get("sub_tests"):
+                for st in cfg["sub_tests"]:
+                    test_params.add(st["name"].lower())
+                    sub_cfg = next((ct for ct in config_list if ct.get("test_name", "").lower() == st["name"].lower()), None)
+                    ref_range = (sub_cfg.get("reference_range") if sub_cfg else None) or st.get("reference_range") or ""
+                    if "," in ref_range:
+                        refs = [s.strip() for s in ref_range.split(",")]
+                        for r in refs:
+                            test_params.add(r.split(":")[0].lower())
+            elif cfg and cfg.get("test_id", "").lower().startswith("group"):
+                match = re.search(r"\(([^)]+)\)", cfg.get("test_name", ""))
+                legacy_names = [s.strip() for s in match.group(1).split(",")] if match else []
+                for ln in legacy_names:
+                    test_params.add(ln.lower())
+                    sub_cfg = next((ct for ct in config_list if ct.get("test_name", "").lower() == ln.lower()), None)
+                    ref_range = sub_cfg.get("reference_range") if sub_cfg else ""
+                    if ref_range and "," in ref_range:
+                        refs = [s.strip() for s in ref_range.split(",")]
+                        for r in refs:
+                            test_params.add(r.split(":")[0].lower())
+            elif cfg and "," in (cfg.get("reference_range") or ""):
+                refs = [s.strip() for s in cfg.get("reference_range", "").split(",")]
+                for r in refs:
+                    test_params.add(r.split(":")[0].lower())
+            else:
+                test_params.add(test_name.lower())
+
+            # Extract matching parameters from draft
+            test_results = {}
+            for param, val in draft.items():
+                if param.lower() in test_params:
+                    test_results[param] = val
+
+            if test_results:
+                report_data = {
+                    "test_name": test_name,
+                    "results": test_results,
+                    "remarks": "",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+                visits.update_one(
+                    {"visit_id": visit["visit_id"]},
+                    {"$push": {"lab_reports": report_data}}
+                )
+
         # Clear draft
         visits.update_one(
             {"visit_id": visit["visit_id"]},
@@ -395,4 +439,125 @@ def delete_lab_report(visit_id, s3_key, test_name):
         {"$pull": {"lab_reports": {"s3_key": s3_key}}}
     )
     return res.modified_count > 0
+
+
+def migrate_legacy_lab_reports():
+    """
+    Scans all visits with lab_reports in the database and cleans up any combined results
+    so that every prescribed lab test has its own separate entry under the correct test_name.
+    """
+    import re
+    config_list = load_lab_tests_from_config()
+    all_visits = list(visits.find({"lab_reports.results": {"$exists": True}}))
+
+    for visit in all_visits:
+        lab_reports = visit.get("lab_reports", [])
+        lab_tests = visit.get("lab_tests", [])
+        if not lab_reports or not lab_tests:
+            continue
+
+        updated = False
+        new_reports = []
+
+        # Map which parameters belong to which test name
+        test_to_params = {}
+        for lt in lab_tests:
+            t_name = lt["lab_test"]
+            cfg = next((ct for ct in config_list if ct.get("test_name", "").lower() == t_name.lower() or ct.get("test_id", "") == t_name), None)
+            params = set()
+            if cfg and cfg.get("sub_tests"):
+                for st in cfg["sub_tests"]:
+                    params.add(st["name"].lower())
+                    sub_cfg = next((ct for ct in config_list if ct.get("test_name", "").lower() == st["name"].lower()), None)
+                    ref_range = sub_cfg.get("reference_range") if sub_cfg else ""
+                    if ref_range and "," in ref_range:
+                        refs = [s.strip() for s in ref_range.split(",")]
+                        for r in refs:
+                            params.add(r.split(":")[0].lower())
+            elif cfg and cfg.get("test_id", "").lower().startswith("group"):
+                match = re.search(r"\(([^)]+)\)", cfg.get("test_name", ""))
+                legacy_names = [s.strip() for s in match.group(1).split(",")] if match else []
+                for ln in legacy_names:
+                    params.add(ln.lower())
+                    sub_cfg = next((ct for ct in config_list if ct.get("test_name", "").lower() == ln.lower()), None)
+                    ref_range = sub_cfg.get("reference_range") if sub_cfg else ""
+                    if ref_range and "," in ref_range:
+                        refs = [s.strip() for s in ref_range.split(",")]
+                        for r in refs:
+                            params.add(r.split(":")[0].lower())
+            elif cfg and "," in (cfg.get("reference_range") or ""):
+                refs = [s.strip() for s in cfg.get("reference_range", "").split(",")]
+                for r in refs:
+                    params.add(r.split(":")[0].lower())
+            else:
+                params.add(t_name.lower())
+            test_to_params[t_name] = params
+
+        # Process each report entry in visit['lab_reports']
+        for rep in lab_reports:
+            # If it's a file upload, keep it as is
+            if "s3_key" in rep:
+                new_reports.append(rep)
+                continue
+
+            results = rep.get("results", {})
+            if not results:
+                new_reports.append(rep)
+                continue
+
+            rep_test_name = rep.get("test_name")
+            rep_params = test_to_params.get(rep_test_name, set())
+
+            # Check if there are keys in results that do not belong to rep_test_name,
+            # but belong to other tests in lab_tests that DO NOT have their own report yet
+            existing_report_tests = {r.get("test_name", "").lower() for r in lab_reports}
+            other_prescribed_tests = [lt["lab_test"] for lt in lab_tests if lt["lab_test"].lower() not in existing_report_tests]
+
+            # We will split out any parameters from `results` that belong to `other_prescribed_tests`
+            split_reports = {}
+            cleaned_results = {}
+
+            for key, val in results.items():
+                key_lower = key.lower()
+                # Check if it belongs to rep_params
+                if key_lower in rep_params:
+                    cleaned_results[key] = val
+                    continue
+
+                # If not, check if it belongs to any of the other prescribed tests
+                found_other = False
+                for other_t in other_prescribed_tests:
+                    other_params = test_to_params.get(other_t, set())
+                    if key_lower in other_params:
+                        if other_t not in split_reports:
+                            split_reports[other_t] = {}
+                        split_reports[other_t][key] = val
+                        found_other = True
+                        break
+
+                if not found_other:
+                    cleaned_results[key] = val
+
+            # If we split anything, we update new_reports
+            if split_reports:
+                updated = True
+                rep["results"] = cleaned_results
+                new_reports.append(rep)
+
+                for other_t, other_results in split_reports.items():
+                    new_reports.append({
+                        "test_name": other_t,
+                        "results": other_results,
+                        "remarks": rep.get("remarks", ""),
+                        "timestamp": rep.get("timestamp") or datetime.now(timezone.utc).isoformat()
+                    })
+            else:
+                new_reports.append(rep)
+
+        if updated:
+            visits.update_one(
+                {"visit_id": visit["visit_id"]},
+                {"$set": {"lab_reports": new_reports}}
+            )
+
 

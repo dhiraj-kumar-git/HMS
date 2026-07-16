@@ -84,3 +84,49 @@ def test_validate_and_complete_lab_report(mocker):
     success, msg = lab_db.validate_and_complete_lab_report("123", "v123")
     assert success is True
     assert "completed" in msg
+
+
+def test_migrate_legacy_lab_reports(mocker):
+    mock_visits = mocker.patch.object(lab_db, 'visits')
+    mocker.patch("app.database.lab.load_lab_tests_from_config", return_value=[
+        {"test_name": "CBC", "test_id": "CBC"},
+        {"test_name": "VITAMIN D3 25 OH TOTAL", "test_id": "VitD"}
+    ])
+
+    # Mock visit with combined results
+    mock_visits.find.return_value = [
+        {
+            "visit_id": "v123",
+            "lab_tests": [
+                {"lab_test": "CBC"},
+                {"lab_test": "VITAMIN D3 25 OH TOTAL"}
+            ],
+            "lab_reports": [
+                {
+                    "test_name": "CBC",
+                    "results": {
+                        "BLOOD Hb": {"value": "15"},
+                        "VITAMIN D3 25 OH TOTAL": {"value": "65"}
+                    }
+                }
+            ]
+        }
+    ]
+
+    lab_db.migrate_legacy_lab_reports()
+
+    # Verify that visits.update_one was called to update lab_reports
+    assert mock_visits.update_one.called
+    args, kwargs = mock_visits.update_one.call_args
+    assert args[0]["visit_id"] == "v123"
+    updated_reports = args[1]["$set"]["lab_reports"]
+
+    # It should have split the reports into 2: CBC and VITAMIN D3 25 OH TOTAL
+    assert len(updated_reports) == 2
+    assert updated_reports[0]["test_name"] == "CBC"
+    assert "BLOOD Hb" in updated_reports[0]["results"]
+    assert "VITAMIN D3 25 OH TOTAL" not in updated_reports[0]["results"]
+
+    assert updated_reports[1]["test_name"] == "VITAMIN D3 25 OH TOTAL"
+    assert "VITAMIN D3 25 OH TOTAL" in updated_reports[1]["results"]
+

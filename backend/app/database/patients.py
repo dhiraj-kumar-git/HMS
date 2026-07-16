@@ -166,6 +166,22 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
     if "_id" in patient:
         patient["_id"] = str(patient["_id"])
     
+    # Calculate age dynamically from date_of_birth
+    if "date_of_birth" in patient:
+        dob = patient["date_of_birth"]
+        if isinstance(dob, (datetime, date)):
+            dob_date = dob.date() if isinstance(dob, datetime) else dob
+            now = datetime.now(timezone.utc).date()
+            patient["age"] = now.year - dob_date.year - ((now.month, now.day) < (dob_date.month, dob_date.day))
+        elif isinstance(dob, str):
+            try:
+                from dateutil.parser import parse
+                dob_parsed = parse(dob)
+                now = datetime.now(timezone.utc)
+                patient["age"] = now.year - dob_parsed.year - ((now.month, now.day) < (dob_parsed.month, dob_parsed.day))
+            except:
+                pass
+
     # Convert datetime objects to ISO strings for JSON safety
     for key in ["registration_time", "date_of_birth"]:
         if key in patient and isinstance(patient[key], (datetime, date)):
