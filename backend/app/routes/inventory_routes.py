@@ -11,15 +11,11 @@ import uuid
 from datetime import datetime
 import pandas as pd
 import json
-import boto3
-from botocore.config import Config
+from app.s3_client import s3, BUCKET
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-
-s3 = boto3.client('s3', endpoint_url='http://localstack:4566', aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1', config=Config(s3={'addressing_style': 'path'}, signature_version='s3v4'))
-BUCKET = 'hms-lab-reports'
 
 inventory_bp = Blueprint('inventory', __name__)
 

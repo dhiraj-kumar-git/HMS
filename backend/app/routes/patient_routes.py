@@ -12,15 +12,11 @@ import uuid
 from datetime import datetime
 import pandas as pd
 import json
-import boto3
-from botocore.config import Config
+from app.s3_client import s3, BUCKET, get_public_s3_url, generate_presigned_url
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-
-s3 = boto3.client('s3', endpoint_url='http://localstack:4566', aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1', config=Config(s3={'addressing_style': 'path'}, signature_version='s3v4'))
-BUCKET = 'hms-lab-reports'
 
 patient_bp = Blueprint('patient', __name__)
 
@@ -504,18 +500,16 @@ def generate_upload_url():
     key = f"reports/{user}/{uuid.uuid4()}_{filename}"
 
     try:
-        url = s3.generate_presigned_url(
+        # generate_presigned_url uses the public endpoint so the signed host
+        # header matches exactly what the browser sends — avoiding 403.
+        public_url = generate_presigned_url(
             "put_object",
-            Params={
-                "Bucket": BUCKET,
-                "Key": key,
-                "ContentType": content_type
-            },
-            ExpiresIn=600
+            {"Bucket": BUCKET, "Key": key},
+            expires_in=600
         )
 
         return jsonify({
-            "upload_url": url,
+            "upload_url": public_url,
             "key": key
         })
 
@@ -555,7 +549,7 @@ def save_s3_metadata():
         return jsonify({"error": str(e)}), 500
 
 @patient_bp.route('/s3/view-url', methods=['POST'])
-@jwt_required()
+@jwt_required(optional=True)
 def generate_view_url():
     data = request.json
     key = data.get("s3_key")
@@ -564,16 +558,15 @@ def generate_view_url():
         return jsonify({"error": "Missing key"}), 400
 
     try:
-        url = s3.generate_presigned_url(
+        # generate_presigned_url uses the public endpoint so the signed host
+        # header matches exactly what the browser sends — avoiding 403.
+        public_url = generate_presigned_url(
             "get_object",
-            Params={
-                "Bucket": BUCKET,
-                "Key": key
-            },
-            ExpiresIn=300
+            {"Bucket": BUCKET, "Key": key},
+            expires_in=300
         )
 
-        return jsonify({"url": url})
+        return jsonify({"url": public_url})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500

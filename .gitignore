@@ -48,3 +48,6 @@ GUIDE.md
 NEW_CHANGES.md
 TECHNICAL_DOC.md
 TESTING.md
+
+# Local MinIO Storage Volume Data
+minio-data/

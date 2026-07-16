@@ -11,8 +11,13 @@ import {
   Alert,
   AlertIcon,
   AlertTitle,
-  AlertDescription
+  AlertDescription,
+  Button,
+  Icon
 } from '@chakra-ui/react';
+import { FiDownload, FiFileText } from 'react-icons/fi';
+import axios from 'axios';
+import BASE_URL from '../utils/Config';
 
 const Field = ({ label, value, isDiagnosis }) => (
   <Box mb={2}>
@@ -22,6 +27,63 @@ const Field = ({ label, value, isDiagnosis }) => (
 );
 
 const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) => {
+  const handleDownload = async (s3Key) => {
+    if (!s3Key) {
+      alert("No S3 key available for this report. It may have been uploaded before S3 was configured.");
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, { headers });
+      if (res.data && res.data.url) {
+        window.open(res.data.url, '_blank');
+      } else {
+        alert("Failed to get download link: server returned no URL.");
+      }
+    } catch (err) {
+      console.error("Download link error:", err);
+      const status = err?.response?.status;
+      const serverMsg = err?.response?.data?.error || err?.response?.data?.msg || err.message;
+      alert(`Error generating download link (HTTP ${status || 'network error'}): ${serverMsg || 'Unknown error'}`);
+    }
+  };
+
+  const renderLabReportsSection = () => {
+    const labReports = legacyApp?.lab_reports || [];
+    if (labReports.length === 0) return null;
+
+    return (
+      <Box mt={3} p={3} bg="teal.50" borderRadius="md" border="1px solid" borderColor="teal.100" w="100%">
+        <Text fontWeight="bold" fontSize="xs" color="teal.800" mb={2} display="flex" alignItems="center">
+          <Icon as={FiFileText} mr={1.5} /> Uploaded Lab Reports (Files)
+        </Text>
+        <VStack align="stretch" spacing={2} w="100%">
+          {labReports.map((report, idx) => (
+            <HStack key={idx} justify="space-between" bg="white" p={2} borderRadius="md" border="1px solid" borderColor="gray.100" w="100%">
+              <VStack align="start" spacing={0}>
+                <Text fontSize="xs" fontWeight="semibold" color="gray.700">
+                  {report.test_name || "Lab Report"}
+                </Text>
+                <Text fontSize="10px" color="gray.500">
+                  File: {report.file_name} • Uploaded {new Date(report.uploaded_at || report.timestamp).toLocaleDateString()}
+                </Text>
+              </VStack>
+              <Button
+                size="xs"
+                colorScheme="teal"
+                leftIcon={<FiDownload />}
+                onClick={() => handleDownload(report.s3_key)}
+              >
+                Download
+              </Button>
+            </HStack>
+          ))}
+        </VStack>
+      </Box>
+    );
+  };
+
   // Graceful fallback for legacy appointments without emrData
   if (!emrData || Object.keys(emrData).length === 0) {
     return (
@@ -69,6 +131,7 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
             ) : <Text fontSize="xs" color="gray.400">None recorded.</Text>}
           </Box>
         </SimpleGrid>
+        {renderLabReportsSection()}
       </VStack>
     );
   }
@@ -190,6 +253,7 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
           </GridItem>
         </SimpleGrid>
       </Box>
+      {renderLabReportsSection()}
     </VStack>
   );
 };

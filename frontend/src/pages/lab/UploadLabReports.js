@@ -99,11 +99,11 @@ function UploadLabReports() {
       const { upload_url, key } = data;
 
       // 2. Upload to S3
+      // NOTE: Do NOT include Content-Type header here — the presigned URL was
+      // generated without signing Content-Type, so including it causes a
+      // V4 signature mismatch and a 403 Forbidden from MinIO.
       const uploadRes = await fetch(upload_url, {
         method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
         body: file,
       });
 

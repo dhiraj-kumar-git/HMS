@@ -289,7 +289,8 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
             "prescription_details_draft": v.get("prescription_details", []),
             "lab_tests_draft": v.get("lab_tests", []),
             "remarks_draft": v.get("remarks", []),
-            "emr_data": v.get("emr_data", {})
+            "emr_data": v.get("emr_data", {}),
+            "lab_reports": v.get("lab_reports", [])
         })
 
     # The root properties should ONLY reflect the most recent/active visit

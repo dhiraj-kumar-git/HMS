@@ -1,8 +1,11 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import EMRHistoryDisplay from './EMRHistoryDisplay';
 import { ChakraProvider } from '@chakra-ui/react';
+import axios from 'axios';
+
+jest.mock('axios');
 
 const renderWithChakra = (ui) => {
   return render(<ChakraProvider>{ui}</ChakraProvider>);
@@ -97,5 +100,97 @@ describe('EMRHistoryDisplay', () => {
     renderWithChakra(<EMRHistoryDisplay emrData={emrData} legacyApp={legacyApp} />);
     expect(screen.getByText("Bill Cancelled")).toBeInTheDocument();
     expect(screen.getByText("The entire bill for this visit has been cancelled.")).toBeInTheDocument();
+  });
+
+  it('renders uploaded lab reports and handles download', async () => {
+    const legacyApp = {
+      lab_reports: [
+        {
+          test_name: "Lipid Profile",
+          file_name: "lipid_report.pdf",
+          s3_key: "reports/patient123/lipid.pdf",
+          uploaded_at: "2026-07-15T12:00:00Z"
+        }
+      ]
+    };
+    axios.post.mockResolvedValue({ data: { url: "http://mock-s3-presigned-url" } });
+    window.open = jest.fn();
+
+    renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
+
+    expect(screen.getByText("Uploaded Lab Reports (Files)")).toBeInTheDocument();
+    expect(screen.getByText("Lipid Profile")).toBeInTheDocument();
+    expect(screen.getByText(/lipid_report.pdf/)).toBeInTheDocument();
+
+    const downloadBtn = screen.getByRole('button', { name: /Download/i });
+    expect(downloadBtn).toBeInTheDocument();
+    
+    const fireEvent = require('@testing-library/react').fireEvent;
+    await fireEvent.click(downloadBtn);
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/s3/view-url'),
+        { s3_key: "reports/patient123/lipid.pdf" },
+        expect.any(Object)
+      );
+      expect(window.open).toHaveBeenCalledWith("http://mock-s3-presigned-url", "_blank");
+    });
+  });
+
+  it('shows descriptive alert with HTTP status when download API call fails', async () => {
+    const legacyApp = {
+      lab_reports: [
+        {
+          test_name: "Blood Test",
+          file_name: "blood.pdf",
+          s3_key: "reports/patient/blood.pdf",
+          uploaded_at: "2026-07-15T12:00:00Z"
+        }
+      ]
+    };
+    const mockError = { response: { status: 422, data: { msg: "Missing Authorization Header" } } };
+    axios.post.mockRejectedValue(mockError);
+    window.alert = jest.fn();
+
+    renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
+
+    const fireEvent = require('@testing-library/react').fireEvent;
+    const downloadBtn = screen.getByRole('button', { name: /Download/i });
+    await fireEvent.click(downloadBtn);
+
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith(
+        expect.stringContaining('422')
+      );
+    });
+  });
+
+  it('shows specific alert when s3_key is missing on a report', async () => {
+    const legacyApp = {
+      lab_reports: [
+        {
+          test_name: "ECG",
+          file_name: "ecg.pdf",
+          s3_key: null, // missing key
+          uploaded_at: "2026-07-15T12:00:00Z"
+        }
+      ]
+    };
+    window.alert = jest.fn();
+
+    renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
+
+    const fireEvent = require('@testing-library/react').fireEvent;
+    const downloadBtn = screen.getByRole('button', { name: /Download/i });
+    await fireEvent.click(downloadBtn);
+
+    await waitFor(() => {
+      expect(window.alert).toHaveBeenCalledWith(
+        expect.stringContaining('No S3 key available')
+      );
+      // Should NOT have made any API call
+      expect(axios.post).not.toHaveBeenCalled();
+    });
   });
 });

@@ -61,6 +61,10 @@ describe('DoctorSchedulePage Component', () => {
 
     expect(screen.getByText('Visiting Doctor Schedule')).toBeInTheDocument();
 
+    // Switch to calendar view since the component defaults to list view
+    const calendarViewBtn = screen.getByRole('button', { name: /Calendar View/i });
+    fireEvent.click(calendarViewBtn);
+
     await waitFor(() => {
       // Calendar view shows Dr. John on Monday and Tuesday
       const johnTexts = screen.getAllByText('Dr. John (Cardio)');
@@ -75,6 +79,11 @@ describe('DoctorSchedulePage Component', () => {
     axios.get.mockResolvedValueOnce({ data: [] });
     renderComponent();
 
+    // Switch to calendar view to see per-day "No Doctors" text
+    // (component defaults to list view which shows "No doctors found" instead)
+    const calendarViewBtn = screen.getByRole('button', { name: /Calendar View/i });
+    fireEvent.click(calendarViewBtn);
+
     await waitFor(() => {
       const emptyTexts = screen.getAllByText('No Doctors');
       expect(emptyTexts.length).toBe(7); // 7 days of the week
@@ -85,19 +94,25 @@ describe('DoctorSchedulePage Component', () => {
     axios.get.mockResolvedValueOnce({ data: mockDoctors });
     renderComponent();
 
+    // Component starts in list view — switch to calendar first
+    const calendarViewBtn = screen.getByRole('button', { name: /Calendar View/i });
+    fireEvent.click(calendarViewBtn);
+
     await waitFor(() => {
-      expect(screen.getAllByText('Dr. John (Cardio)')[0]).toBeInTheDocument();
+      // Calendar view shows Dr. John on Monday AND Tuesday (two instances)
+      expect(screen.getAllByText('Dr. John (Cardio)').length).toBe(2);
     });
 
+    // Now toggle to list view
     const listViewBtn = screen.getByRole('button', { name: /List View/i });
     fireEvent.click(listViewBtn);
 
     await waitFor(() => {
-      // In list view, it's grouped by doctor
+      // In list view, it's grouped by doctor — one entry per doctor
       expect(screen.getByText('Dr. John (Cardio)')).toBeInTheDocument();
       expect(screen.getByText('Monday: 10:00 AM - 02:00 PM')).toBeInTheDocument();
       expect(screen.getByText('Tuesday: 10:00 AM - 02:00 PM')).toBeInTheDocument();
-      
+
       expect(screen.getByText('Dr. Smith (Neuro)')).toBeInTheDocument();
       expect(screen.getByText('Monday: 03:00 PM - 06:00 PM')).toBeInTheDocument();
     });
@@ -106,6 +121,10 @@ describe('DoctorSchedulePage Component', () => {
   it('filters doctors by search term in calendar view', async () => {
     axios.get.mockResolvedValueOnce({ data: mockDoctors });
     renderComponent();
+
+    // Switch to calendar view since the component defaults to list view
+    const calendarViewBtn = screen.getByRole('button', { name: /Calendar View/i });
+    fireEvent.click(calendarViewBtn);
 
     await waitFor(() => {
       expect(screen.getAllByText('Dr. John (Cardio)')[0]).toBeInTheDocument();

@@ -483,10 +483,9 @@ export default function LabTestDashboard() {
     setUploadingTests(prev => ({ ...prev, [testName]: true }));
     try {
       const token = localStorage.getItem("token");
-      const s3BaseUrl = BASE_URL.endsWith("/api") ? BASE_URL.slice(0, -4) : BASE_URL;
 
       // 1. Get presigned URL
-      const presignedRes = await fetch(`${s3BaseUrl}/s3/upload-url`, {
+      const presignedRes = await fetch(`${BASE_URL}/s3/upload-url`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -506,15 +505,12 @@ export default function LabTestDashboard() {
       // 2. Put file to S3
       const uploadRes = await fetch(upload_url, {
         method: "PUT",
-        headers: {
-          "Content-Type": file.type
-        },
         body: file
       });
       if (!uploadRes.ok) throw new Error("S3 upload failed");
 
       // 3. Save metadata
-      const saveRes = await fetch(`${s3BaseUrl}/s3/save-metadata`, {
+      const saveRes = await fetch(`${BASE_URL}/s3/save-metadata`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
