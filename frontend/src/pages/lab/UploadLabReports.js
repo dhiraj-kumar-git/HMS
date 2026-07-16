@@ -14,6 +14,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import BASE_URL from '../../utils/Config';
 
 function UploadLabReports() {
   const [instituteId, setInstituteId] = useState("");
@@ -31,7 +32,7 @@ function UploadLabReports() {
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
-        const res = await fetch("http://localhost:5000/api/public/doctors");
+        const res = await fetch(`${BASE_URL}/api/public/doctors`);
 
         if (!res.ok) throw new Error("Failed to fetch doctors");
 
@@ -80,7 +81,7 @@ function UploadLabReports() {
 
     try {
       // 1. Get presigned URL
-      const res = await fetch("http://localhost:5000/s3/upload-url", {
+      const res = await fetch(`${BASE_URL}/s3/upload-url`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -98,18 +99,24 @@ function UploadLabReports() {
 
       const { upload_url, key } = data;
 
+      let targetUrl = upload_url;
+      if (upload_url.includes("/s3/proxy-upload")) {
+        const path = upload_url.substring(upload_url.indexOf("/s3/proxy-upload"));
+        targetUrl = `${BASE_URL}${path}`;
+      }
+
       // 2. Upload to S3
-      // NOTE: Do NOT include Content-Type header here — the presigned URL was
-      // generated without signing Content-Type, so including it causes a
-      // V4 signature mismatch and a 403 Forbidden from MinIO.
-      const uploadRes = await fetch(upload_url, {
+      const uploadRes = await fetch(targetUrl, {
         method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
         body: file,
       });
 
       if (!uploadRes.ok) throw new Error("S3 upload failed");
 
-      await fetch("http://localhost:5000/s3/save-metadata", {
+      await fetch(`${BASE_URL}/s3/save-metadata`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

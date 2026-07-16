@@ -206,10 +206,11 @@ def save_lab_results_draft(institute_id, visit_id, results_draft):
         
     if not visit: return False
     
-    return visits.update_one(
+    res = visits.update_one(
         {"visit_id": visit["visit_id"]},
         {"$set": {"lab_results_draft": results_draft}}
-    ).modified_count > 0
+    )
+    return res.matched_count > 0
 
 
 def load_lab_tests_from_config():
@@ -315,7 +316,8 @@ def validate_and_complete_lab_report(institute_id, visit_id):
                     refs = [s.strip() for s in ref_range.split(",")]
                     for r in refs:
                         label = r.split(":")[0]
-                        if not draft.get(label, {}).get("value", "").strip():
+                        draft_key = f"{st['name']} - {label}"
+                        if not draft.get(draft_key, {}).get("value", "").strip() and not draft.get(label, {}).get("value", "").strip():
                             return False, f"Missing value for sub-test parameter: {label}"
                 else:
                     if not draft.get(st["name"], {}).get("value", "").strip():
@@ -331,7 +333,8 @@ def validate_and_complete_lab_report(institute_id, visit_id):
                     refs = [s.strip() for s in ref_range.split(",")]
                     for r in refs:
                         label = r.split(":")[0]
-                        if not draft.get(label, {}).get("value", "").strip():
+                        draft_key = f"{ln} - {label}"
+                        if not draft.get(draft_key, {}).get("value", "").strip() and not draft.get(label, {}).get("value", "").strip():
                             return False, f"Missing value for sub-test parameter: {label}"
                 else:
                     if not draft.get(ln, {}).get("value", "").strip():
@@ -375,7 +378,9 @@ def validate_and_complete_lab_report(institute_id, visit_id):
                     if "," in ref_range:
                         refs = [s.strip() for s in ref_range.split(",")]
                         for r in refs:
-                            test_params.add(r.split(":")[0].lower())
+                            label = r.split(":")[0]
+                            test_params.add(label.lower())
+                            test_params.add(f"{st['name'].lower()} - {label.lower()}")
             elif cfg and cfg.get("test_id", "").lower().startswith("group"):
                 match = re.search(r"\(([^)]+)\)", cfg.get("test_name", ""))
                 legacy_names = [s.strip() for s in match.group(1).split(",")] if match else []
@@ -386,7 +391,9 @@ def validate_and_complete_lab_report(institute_id, visit_id):
                     if ref_range and "," in ref_range:
                         refs = [s.strip() for s in ref_range.split(",")]
                         for r in refs:
-                            test_params.add(r.split(":")[0].lower())
+                            label = r.split(":")[0]
+                            test_params.add(label.lower())
+                            test_params.add(f"{ln.lower()} - {label.lower()}")
             elif cfg and "," in (cfg.get("reference_range") or ""):
                 refs = [s.strip() for s in cfg.get("reference_range", "").split(",")]
                 for r in refs:

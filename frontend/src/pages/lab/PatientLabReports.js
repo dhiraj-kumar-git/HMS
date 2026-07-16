@@ -112,6 +112,28 @@ export default function PatientLabReports() {
     return Array.from(params);
   };
 
+  const matchesParam = (param, testParams) => {
+    if (!testParams || testParams.length === 0) return true;
+    const paramLower = param.toLowerCase();
+    if (testParams.includes(paramLower)) return true;
+    if (param.includes(" - ")) {
+      const parts = param.split(" - ");
+      const prefix = parts[0].toLowerCase();
+      const suffix = parts.slice(1).join(" - ").toLowerCase();
+      return testParams.includes(prefix) && testParams.includes(suffix);
+    }
+    return false;
+  };
+
+  const cleanTestName = (name) => {
+    if (!name) return "";
+    const idx = name.indexOf("(");
+    if (idx !== -1) {
+      return name.substring(0, idx).trim();
+    }
+    return name.trim();
+  };
+
   const visitRows = useMemo(() => {
     const rows = reports.flatMap((patient) =>
       (patient.appointments || [])
@@ -169,10 +191,21 @@ export default function PatientLabReports() {
     setViewingFileKey(s3Key);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      window.open(res.data.url, "_blank");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, { headers });
+      if (res.data && res.data.url) {
+        let targetUrl = res.data.url;
+        if (targetUrl.includes("/s3/proxy-download")) {
+          const path = targetUrl.substring(targetUrl.indexOf("/s3/proxy-download"));
+          targetUrl = `${BASE_URL}${path}`;
+        }
+        const fileRes = await axios.get(targetUrl, {
+          headers,
+          responseType: "blob"
+        });
+        const fileUrl = URL.createObjectURL(fileRes.data);
+        window.open(fileUrl, "_blank");
+      }
     } catch {
       toast({ title: "Could not open file", status: "error", duration: 3000 });
     } finally {
@@ -239,7 +272,7 @@ export default function PatientLabReports() {
         const testParams = getTestParameters(report.test_name);
         const entries = Object.entries(report.results || {});
         const filteredEntries = testParams.length > 0
-          ? entries.filter(([param]) => testParams.includes(param.toLowerCase()))
+          ? entries.filter(([param]) => matchesParam(param, testParams))
           : entries;
 
         filteredEntries.forEach(([param, val]) => {
@@ -263,11 +296,49 @@ export default function PatientLabReports() {
       });
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const formattedDate = new Date(row.latestTimestamp).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-      let bodyHtml = `<p>Dear ${toTitleCase(row.patientName)},</p><p>Please find attached your lab test results from your visit on <strong>${formattedDate}</strong>.</p><p>The attached PDF contains the following test results:</p><ul>${manualReports.map((r) => `<li>${r.test_name || "Lab Test"}</li>`).join("")}</ul>`;
-      if (fileReports.length > 0) {
-        bodyHtml += `<p><strong>Note:</strong> The following tests (${fileReports.map((r) => r.test_name).join(", ")}) have report files that cannot be shared electronically for security reasons. Please collect these reports in person from the Medical Centre.</p>`;
+      
+      let manualReportsListHtml = "";
+      if (manualReports.length > 0) {
+        manualReportsListHtml = `
+        <div style="margin: 15px 0; background-color: #f7fafc; padding: 15px; border-radius: 6px; border-left: 4px solid #3182ce;">
+          <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #2b6cb0; font-family: sans-serif;">Included in Attached PDF</h3>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #4a5568; line-height: 1.5; font-family: sans-serif;">
+            ${manualReports.map((r) => `<li><strong>${cleanTestName(r.test_name)}</strong></li>`).join("")}
+          </ul>
+        </div>`;
       }
-      bodyHtml += `<p>Regards,<br><strong>BITS Pilani Medical Centre</strong></p>`;
+
+      let fileReportsListHtml = "";
+      if (fileReports.length > 0) {
+        fileReportsListHtml = `
+        <div style="margin: 15px 0; background-color: #fffaf0; padding: 15px; border-radius: 6px; border-left: 4px solid #dd6b20;">
+          <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #dd6b20; font-family: sans-serif;">Physical Reports Pending Collection</h3>
+          <p style="margin: 0 0 8px 0; font-size: 12px; color: #4a5568; line-height: 1.4; font-family: sans-serif;">The following reports contain files/scans that cannot be shared electronically for security and privacy reasons. Please collect them in person from the Medical Centre:</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #4a5568; line-height: 1.5; font-family: sans-serif;">
+            ${fileReports.map((r) => `<li><strong>${cleanTestName(r.test_name)}</strong></li>`).join("")}
+          </ul>
+        </div>`;
+      }
+
+      const bodyHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; color: #2d3748;">
+        <div style="background-color: #3182ce; padding: 15px; border-radius: 6px 6px 0 0; text-align: center; color: white;">
+          <h2 style="margin: 0; font-size: 18px; font-family: sans-serif;">BITS Pilani Medical Centre</h2>
+          <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.9; font-family: sans-serif;">Lab Test Report Delivery</p>
+        </div>
+        <div style="padding: 20px; line-height: 1.6;">
+          <p style="font-size: 14px; margin-top: 0; font-family: sans-serif;">Dear <strong>${toTitleCase(row.patientName)}</strong>,</p>
+          <p style="font-size: 14px; font-family: sans-serif;">Please find attached your lab test results from your visit on <strong>${formattedDate}</strong>.</p>
+          
+          ${manualReportsListHtml}
+          ${fileReportsListHtml}
+          
+          <p style="font-size: 14px; margin-top: 25px; font-family: sans-serif;">Regards,<br><strong>BITS Pilani Medical Centre</strong></p>
+          <p style="font-size: 11px; color: #a0aec0; margin-top: 30px; border-top: 1px solid #edf2f7; padding-top: 15px; font-family: sans-serif; text-align: center;">
+            This is an automated email. Please do not reply directly to this message.
+          </p>
+        </div>
+      </div>`;
       const token = localStorage.getItem("token");
       await axios.post(`${BASE_URL}/lab/send_email`, {
         recipient_email: row.email,
@@ -419,11 +490,11 @@ export default function PatientLabReports() {
                           </Flex>
                         ) : (
                           (() => {
-                            const testParams = getTestParameters(report.test_name);
-                            const entries = Object.entries(report.results || {});
-                            const filteredEntries = testParams.length > 0
-                              ? entries.filter(([param]) => testParams.includes(param.toLowerCase()))
-                              : entries;
+                             const testParams = getTestParameters(report.test_name);
+                             const entries = Object.entries(report.results || {});
+                             const filteredEntries = testParams.length > 0
+                               ? entries.filter(([param]) => matchesParam(param, testParams))
+                               : entries;
 
                             return (
                               <Table variant="simple" size="xs" mt={1}>

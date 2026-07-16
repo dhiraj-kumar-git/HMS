@@ -124,7 +124,7 @@ const formatDateTimeDMY = (dateObj) => {
   if (!dateObj) return '';
   const d = new Date(dateObj);
   if (isNaN(d.getTime())) return '';
-  
+
   const formatter = new Intl.DateTimeFormat('en-IN', {
     timeZone: 'Asia/Kolkata',
     year: 'numeric',
@@ -135,11 +135,11 @@ const formatDateTimeDMY = (dateObj) => {
     second: '2-digit',
     hour12: false
   });
-  
+
   const parts = formatter.formatToParts(d);
   const partMap = {};
   parts.forEach(p => partMap[p.type] = p.value);
-  
+
   return `${partMap.day}-${partMap.month}-${partMap.year} ${partMap.hour}:${partMap.minute}:${partMap.second}`;
 };
 
@@ -260,7 +260,7 @@ export default function PrescriptionSlip({ prescriptionData, isPreview = false }
               </Flex>
               <Flex mb={0.5}>
                 <Text width="90px" fontWeight="bold">E-Mail :</Text>
-                <Text>mcdc@pilani.bits-pilani.ac.in</Text>
+                <Text>medc@pilani.bits-pilani.ac.in</Text>
               </Flex>
               <Flex mb={0.5}>
                 <Text width="90px" fontWeight="bold">WebSite :</Text>
@@ -401,7 +401,7 @@ export default function PrescriptionSlip({ prescriptionData, isPreview = false }
                   </Text>
                 )}
               </Box>
-              
+
               <Box textAlign="left" borderTop="1px solid black" pt={3} flex="1">
                 <Text fontSize="12px" fontWeight="bold" mb={2}>Investigations</Text>
                 {labsList.length > 0 && (

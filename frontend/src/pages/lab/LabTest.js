@@ -217,174 +217,182 @@ export default function LabTestDashboard() {
       setSelectedPatient(patient);
       const drafts = patient.lab_results_draft || {};
       // 1. Identify all prescribed group tests and gather all covered component/sub-field names
-        const prescribedGroupConfigs = [];
-        patient.lab_tests.forEach((lt) => {
-          const subCfg = configTests.find(
-            (ct) =>
-              ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
-              ct.test_id === lt.lab_test
-          );
-          if (subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"))) {
-            prescribedGroupConfigs.push(subCfg);
-          }
-        });
+      const prescribedGroupConfigs = [];
+      patient.lab_tests.forEach((lt) => {
+        const subCfg = configTests.find(
+          (ct) =>
+            ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
+            ct.test_id === lt.lab_test
+        );
+        if (subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"))) {
+          prescribedGroupConfigs.push(subCfg);
+        }
+      });
 
-        const coveredNames = new Set();
-        prescribedGroupConfigs.forEach((gCfg) => {
-          if (gCfg.sub_tests) {
-            gCfg.sub_tests.forEach((st) => {
-              coveredNames.add(st.name.toLowerCase());
-              // Also add nested fields if st is multi-parameter
-              const subCfg = configTests.find(
-                (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
-              );
-              const refRange = subCfg?.reference_range || st.reference_range || "";
-              if (refRange.includes(",")) {
-                const refs = refRange.split(",").map((s) => s.trim());
-                refs.forEach((ref) => {
-                  const label = ref.split(":")[0];
-                  coveredNames.add(label.toLowerCase());
-                });
-              }
-            });
-          } else {
-            // Legacy prefix parsing fallback
-            const legacyNames = parseSubTestNames(gCfg.test_name);
-            legacyNames.forEach((ln) => {
-              coveredNames.add(ln.toLowerCase());
-              const sub = configTests.find(
-                (ct) => ct.test_name.toLowerCase() === ln.toLowerCase()
-              );
-              if (sub && sub.reference_range?.includes(",")) {
-                const refs = sub.reference_range.split(",").map((s) => s.trim());
-                refs.forEach((ref) => {
-                  const label = ref.split(":")[0];
-                  coveredNames.add(label.toLowerCase());
-                });
-              }
-            });
-          }
-        });
+      const coveredNames = new Set();
+      prescribedGroupConfigs.forEach((gCfg) => {
+        if (gCfg.sub_tests) {
+          gCfg.sub_tests.forEach((st) => {
+            coveredNames.add(st.name.toLowerCase());
+            // Also add nested fields if st is multi-parameter
+            const subCfg = configTests.find(
+              (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
+            );
+            const refRange = subCfg?.reference_range || st.reference_range || "";
+            if (refRange.includes(",")) {
+              const refs = refRange.split(",").map((s) => s.trim());
+              refs.forEach((ref) => {
+                const label = ref.split(":")[0];
+                coveredNames.add(label.toLowerCase());
+              });
+            }
+          });
+        } else {
+          // Legacy prefix parsing fallback
+          const legacyNames = parseSubTestNames(gCfg.test_name);
+          legacyNames.forEach((ln) => {
+            coveredNames.add(ln.toLowerCase());
+            const sub = configTests.find(
+              (ct) => ct.test_name.toLowerCase() === ln.toLowerCase()
+            );
+            if (sub && sub.reference_range?.includes(",")) {
+              const refs = sub.reference_range.split(",").map((s) => s.trim());
+              refs.forEach((ref) => {
+                const label = ref.split(":")[0];
+                coveredNames.add(label.toLowerCase());
+              });
+            }
+          });
+        }
+      });
 
-        // 2. Filter out any prescribed tests that are covered under group tests
-        const deduplicatedLabTests = patient.lab_tests.filter((lt) => {
-          // Keep group tests themselves
-          const subCfg = configTests.find(
-            (ct) =>
-              ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
-              ct.test_id === lt.lab_test
-          );
-          const isGroup = subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"));
-          if (isGroup) return true;
+      // 2. Filter out any prescribed tests that are covered under group tests
+      const deduplicatedLabTests = patient.lab_tests.filter((lt) => {
+        // Keep group tests themselves
+        const subCfg = configTests.find(
+          (ct) =>
+            ct.test_name.toLowerCase() === lt.lab_test.toLowerCase() ||
+            ct.test_id === lt.lab_test
+        );
+        const isGroup = subCfg && (subCfg.sub_tests || subCfg.test_id.toLowerCase().startsWith("group"));
+        if (isGroup) return true;
 
-          // Remove individual tests if covered
-          return !coveredNames.has(lt.lab_test.toLowerCase());
-        });
+        // Remove individual tests if covered
+        return !coveredNames.has(lt.lab_test.toLowerCase());
+      });
 
-        const processed = deduplicatedLabTests.map((t) => {
-          const cfg = configTests.find(
-            (ct) =>
-              ct.test_name.toLowerCase() === t.lab_test.toLowerCase() ||
-              ct.test_id === t.lab_test
-          );
+      const processed = deduplicatedLabTests.map((t) => {
+        const cfg = configTests.find(
+          (ct) =>
+            ct.test_name.toLowerCase() === t.lab_test.toLowerCase() ||
+            ct.test_id === t.lab_test
+        );
 
-          if (cfg && cfg.sub_tests) {
-            const names = [];
-            const details = [];
-            cfg.sub_tests.forEach((st) => {
-              const subCfg = configTests.find(
-                (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
-              );
-              const refRange = subCfg?.reference_range || st.reference_range || "";
-              const unitVal = subCfg?.units || st.units || "";
-              if (refRange.includes(",")) {
-                // Add header row first
-                names.push(st.name);
+        if (cfg && cfg.sub_tests) {
+          const names = [];
+          const details = [];
+          cfg.sub_tests.forEach((st) => {
+            const subCfg = configTests.find(
+              (ct) => ct.test_name.toLowerCase() === st.name.toLowerCase()
+            );
+            const refRange = subCfg?.reference_range || st.reference_range || "";
+            const unitVal = subCfg?.units || st.units || "";
+            if (refRange.includes(",")) {
+              // Add header row first
+              names.push(st.name);
+              details.push({
+                isHeader: true,
+                reference_range: "",
+                units: "",
+              });
+
+              // Add nested fields
+              const refs = refRange.split(",").map((s) => s.trim());
+              const unitsArr = unitVal.split(",").map((s) => s.trim());
+              refs.forEach((ref, idx) => {
+                const label = ref.split(":")[0];
+                names.push(label);
                 details.push({
-                  isHeader: true,
-                  reference_range: "",
-                  units: "",
+                  isSubField: true,
+                  reference_range: ref,
+                  units: unitsArr[idx] || "N/A",
+                  parentName: st.name,
                 });
+              });
+            } else {
+              names.push(st.name);
+              details.push({
+                reference_range: refRange || "N/A",
+                units: unitVal || "N/A",
+              });
+            }
+          });
+          return {
+            ...t,
+            type: "group",
+            subTestNames: names,
+            subResults: names.map((n, idx) => {
+              const det = details[idx] || {};
+              const draftKey = det.isSubField ? `${det.parentName} - ${n}` : n;
+              return drafts[draftKey]?.value || drafts[n]?.value || "";
+            }),
+            groupReference: cfg.reference_range || "See individual components",
+            groupUnits: cfg.units || "Various",
+            subTestDetails: details,
+          };
+        } else if (cfg && cfg.test_id.toLowerCase().startsWith("group")) {
+          const legacyNames = parseSubTestNames(cfg.test_name);
+          const names = [];
+          const details = [];
+          legacyNames.forEach((n) => {
+            const sub = configTests.find(
+              (ct) => ct.test_name.toLowerCase() === n.toLowerCase()
+            );
+            if (sub && sub.reference_range?.includes(",")) {
+              // Add header row first
+              names.push(n);
+              details.push({
+                isHeader: true,
+                reference_range: "",
+                units: "",
+              });
 
-                // Add nested fields
-                const refs = refRange.split(",").map((s) => s.trim());
-                const unitsArr = unitVal.split(",").map((s) => s.trim());
-                refs.forEach((ref, idx) => {
-                  const label = ref.split(":")[0];
-                  names.push(label);
-                  details.push({
-                    isSubField: true,
-                    reference_range: ref,
-                    units: unitsArr[idx] || "N/A",
-                    parentName: st.name,
-                  });
-                });
-              } else {
-                names.push(st.name);
+              // Add nested fields
+              const refs = sub.reference_range.split(",").map((s) => s.trim());
+              const unitsArr = (sub.units || "").split(",").map((s) => s.trim());
+              refs.forEach((ref, idx) => {
+                const label = ref.split(":")[0];
+                names.push(label);
                 details.push({
-                  reference_range: refRange || "N/A",
-                  units: unitVal || "N/A",
+                  isSubField: true,
+                  reference_range: ref,
+                  units: unitsArr[idx] || "N/A",
+                  parentName: n,
                 });
-              }
-            });
-            return {
-              ...t,
-              type: "group",
-              subTestNames: names,
-              subResults: names.map((n) => drafts[n]?.value || ""),
-              groupReference: cfg.reference_range || "See individual components",
-              groupUnits: cfg.units || "Various",
-              subTestDetails: details,
-            };
-          } else if (cfg && cfg.test_id.toLowerCase().startsWith("group")) {
-            const legacyNames = parseSubTestNames(cfg.test_name);
-            const names = [];
-            const details = [];
-            legacyNames.forEach((n) => {
-              const sub = configTests.find(
-                (ct) => ct.test_name.toLowerCase() === n.toLowerCase()
-              );
-              if (sub && sub.reference_range?.includes(",")) {
-                // Add header row first
-                names.push(n);
-                details.push({
-                  isHeader: true,
-                  reference_range: "",
-                  units: "",
-                });
-
-                // Add nested fields
-                const refs = sub.reference_range.split(",").map((s) => s.trim());
-                const unitsArr = (sub.units || "").split(",").map((s) => s.trim());
-                refs.forEach((ref, idx) => {
-                  const label = ref.split(":")[0];
-                  names.push(label);
-                  details.push({
-                    isSubField: true,
-                    reference_range: ref,
-                    units: unitsArr[idx] || "N/A",
-                    parentName: n,
-                  });
-                });
-              } else {
-                names.push(n);
-                details.push({
-                  reference_range: sub ? sub.reference_range : "N/A",
-                  units: sub ? sub.units : "N/A",
-                });
-              }
-            });
-            return {
-              ...t,
-              type: "group",
-              subTestNames: names,
-              subResults: names.map((n) => drafts[n]?.value || ""),
-              groupReference: cfg.reference_range,
-              groupUnits: cfg.units,
-              subTestDetails: details,
-            };
-          } else if (cfg && cfg.reference_range?.includes(",")) {
-            const refs = cfg.reference_range.split(",").map((s) => s.trim());
+              });
+            } else {
+              names.push(n);
+              details.push({
+                reference_range: sub ? sub.reference_range : "N/A",
+                units: sub ? sub.units : "N/A",
+              });
+            }
+          });
+          return {
+            ...t,
+            type: "group",
+            subTestNames: names,
+            subResults: names.map((n, idx) => {
+              const det = details[idx] || {};
+              const draftKey = det.isSubField ? `${det.parentName} - ${n}` : n;
+              return drafts[draftKey]?.value || drafts[n]?.value || "";
+            }),
+            groupReference: cfg.reference_range,
+            groupUnits: cfg.units,
+            subTestDetails: details,
+          };
+        } else if (cfg && cfg.reference_range?.includes(",")) {
+          const refs = cfg.reference_range.split(",").map((s) => s.trim());
           const unitsArr = cfg.units.split(",").map((s) => s.trim());
           return {
             ...t,
@@ -419,7 +427,7 @@ export default function LabTestDashboard() {
 
   const getNonRedundantTests = (patient) => {
     if (!patient || !patient.lab_tests) return [];
-    
+
     // Get all group tests prescribed
     const prescribedGroupConfigs = [];
     patient.lab_tests.forEach((lt) => {
@@ -508,7 +516,9 @@ export default function LabTestDashboard() {
             const refs = refRange.split(",").map(s => s.trim());
             for (const r of refs) {
               const label = r.split(":")[0];
-              if (!draft[label] || !draft[label].value || !draft[label].value.trim()) {
+              const draftKey = `${st.name} - ${label}`;
+              const val = (draft[draftKey]?.value || draft[label]?.value || "").trim();
+              if (!val) {
                 return false;
               }
             }
@@ -527,7 +537,9 @@ export default function LabTestDashboard() {
             const refs = refRange.split(",").map(s => s.trim());
             for (const r of refs) {
               const label = r.split(":")[0];
-              if (!draft[label] || !draft[label].value || !draft[label].value.trim()) {
+              const draftKey = `${ln} - ${label}`;
+              const val = (draft[draftKey]?.value || draft[label]?.value || "").trim();
+              if (!val) {
                 return false;
               }
             }
@@ -637,9 +649,18 @@ export default function LabTestDashboard() {
       }
       const { upload_url, key } = await presignedRes.json();
 
+      let targetUrl = upload_url;
+      if (upload_url.includes("/s3/proxy-upload")) {
+        const path = upload_url.substring(upload_url.indexOf("/s3/proxy-upload"));
+        targetUrl = `${BASE_URL}${path}`;
+      }
+
       // 2. Put file to S3
-      const uploadRes = await fetch(upload_url, {
+      const uploadRes = await fetch(targetUrl, {
         method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
         body: file
       });
       if (!uploadRes.ok) throw new Error("S3 upload failed");
@@ -666,7 +687,7 @@ export default function LabTestDashboard() {
         duration: 3000,
         isClosable: true
       });
-      
+
       // Clear file selection for this test
       setUploadFiles(prev => {
         const copy = { ...prev };
@@ -703,10 +724,21 @@ export default function LabTestDashboard() {
   const handleViewFile = async (s3Key) => {
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      window.open(res.data.url, "_blank");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, { headers });
+      if (res.data && res.data.url) {
+        let targetUrl = res.data.url;
+        if (targetUrl.includes("/s3/proxy-download")) {
+          const path = targetUrl.substring(targetUrl.indexOf("/s3/proxy-download"));
+          targetUrl = `${BASE_URL}${path}`;
+        }
+        const fileRes = await axios.get(targetUrl, {
+          headers,
+          responseType: "blob"
+        });
+        const fileUrl = URL.createObjectURL(fileRes.data);
+        window.open(fileUrl, "_blank");
+      }
     } catch (err) {
       toast({
         title: "Error viewing file",
@@ -794,7 +826,9 @@ export default function LabTestDashboard() {
           const refs = refRange.split(",").map(s => s.trim());
           for (const r of refs) {
             const label = r.split(":")[0];
-            if (!draft[label] || !draft[label].value || !draft[label].value.trim()) return false;
+            const draftKey = `${st.name} - ${label}`;
+            const val = (draft[draftKey]?.value || draft[label]?.value || "").trim();
+            if (!val) return false;
           }
         } else {
           if (!draft[st.name] || !draft[st.name].value || !draft[st.name].value.trim()) return false;
@@ -810,7 +844,9 @@ export default function LabTestDashboard() {
           const refs = refRange.split(",").map(s => s.trim());
           for (const r of refs) {
             const label = r.split(":")[0];
-            if (!draft[label] || !draft[label].value || !draft[label].value.trim()) return false;
+            const draftKey = `${ln} - ${label}`;
+            const val = (draft[draftKey]?.value || draft[label]?.value || "").trim();
+            if (!val) return false;
           }
         } else {
           if (!draft[ln] || !draft[ln].value || !draft[ln].value.trim()) return false;
@@ -890,9 +926,11 @@ export default function LabTestDashboard() {
     let totalFields = 0;
     let filledFields = 0;
 
-    const checkField = (fieldName) => {
+    const checkField = (fieldName, prefix = null) => {
       totalFields++;
-      if (draft[fieldName]?.value && draft[fieldName].value.trim()) {
+      const draftKey = prefix ? `${prefix} - ${fieldName}` : fieldName;
+      const val = (draft[draftKey]?.value || draft[fieldName]?.value || "").trim();
+      if (val) {
         filledFields++;
       }
     };
@@ -904,7 +942,7 @@ export default function LabTestDashboard() {
         if (refRange.includes(",")) {
           const refs = refRange.split(",").map(s => s.trim());
           for (const r of refs) {
-            checkField(r.split(":")[0]);
+            checkField(r.split(":")[0], st.name);
           }
         } else {
           checkField(st.name);
@@ -918,7 +956,7 @@ export default function LabTestDashboard() {
         if (refRange.includes(",")) {
           const refs = refRange.split(",").map(s => s.trim());
           for (const r of refs) {
-            checkField(r.split(":")[0]);
+            checkField(r.split(":")[0], ln);
           }
         } else {
           checkField(ln);
@@ -1052,45 +1090,62 @@ export default function LabTestDashboard() {
     }
 
     try {
+      const draftPayload = tests.reduce((acc, t) => {
+        if (t.type === "individual") {
+          acc[t.lab_test] = {
+            value: t.result || "",
+            reference_range: t.reference_range || "N/A",
+            units: t.units || "N/A"
+          };
+        } else if (t.type === "group") {
+          t.subTestNames.forEach((n, idx) => {
+            const det = t.subTestDetails[idx] || {};
+            if (!det.isHeader) {
+              const draftKey = det.isSubField ? `${det.parentName} - ${n}` : n;
+              acc[draftKey] = {
+                value: t.subResults[idx] || "",
+                reference_range: det.reference_range || "N/A",
+                units: det.units || "N/A"
+              };
+            }
+          });
+        } else if (t.type === "multi") {
+          t.reference_ranges.forEach((r, idx) => {
+            const label = r.split(":")[0];
+            acc[label] = {
+              value: t.multiResults[idx] || "",
+              reference_range: r,
+              units: t.unitsArray[idx] || "N/A"
+            };
+          });
+        }
+        return acc;
+      }, {});
+
       const token = localStorage.getItem("token");
       await axios.post(
         `${BASE_URL}/lab/save_draft`,
         {
           institute_id: selectedPatient.institute_id,
           visit_id: selectedPatient.visit_id,
-          results_draft: tests.reduce((acc, t) => {
-            if (t.type === "individual") {
-              acc[t.lab_test] = {
-                value: t.result || "",
-                reference_range: t.reference_range || "N/A",
-                units: t.units || "N/A"
-              };
-            } else if (t.type === "group") {
-              t.subTestNames.forEach((n, idx) => {
-                const det = t.subTestDetails[idx] || {};
-                if (!det.isHeader) {
-                  acc[n] = {
-                    value: t.subResults[idx] || "",
-                    reference_range: det.reference_range || "N/A",
-                    units: det.units || "N/A"
-                  };
-                }
-              });
-            } else if (t.type === "multi") {
-              t.reference_ranges.forEach((r, idx) => {
-                const label = r.split(":")[0];
-                acc[label] = {
-                  value: t.multiResults[idx] || "",
-                  reference_range: r,
-                  units: t.unitsArray[idx] || "N/A"
-                };
-              });
-            }
-            return acc;
-          }, {})
+          results_draft: draftPayload
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+
+      // Instantly update local state to avoid any stale data race conditions
+      setPatients(prev => {
+        const updateList = (list) =>
+          list.map(p =>
+            p.visit_id === selectedPatient.visit_id
+              ? { ...p, lab_results_draft: draftPayload }
+              : p
+          );
+        return {
+          confirmed: updateList(prev.confirmed || []),
+          upcoming: updateList(prev.upcoming || []),
+        };
+      });
 
       toast({
         title: "Draft saved successfully",
@@ -1107,6 +1162,14 @@ export default function LabTestDashboard() {
         description: e.message,
         status: "error",
       });
+    }
+  };
+
+  const handleModalClose = () => {
+    if (selectedPatient && tests && tests.length > 0) {
+      handleSaveDraft();
+    } else {
+      onClose();
     }
   };
 
@@ -1417,7 +1480,7 @@ export default function LabTestDashboard() {
                                   View Lab Order
                                 </Button>
                                 <Button
-                                  colorScheme="green"
+                                  colorScheme="yellow"
                                   size="sm"
                                   onClick={() => handleOpenUploadModal(p)}
                                 >
@@ -1597,7 +1660,7 @@ export default function LabTestDashboard() {
       </Box>
 
       {/* PATIENT MODAL */}
-      <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
+      <Modal isOpen={isOpen} onClose={handleModalClose} size="4xl" isCentered>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader bg="blue.600" color="white">
@@ -1611,7 +1674,7 @@ export default function LabTestDashboard() {
               <Flex align="center" justify="center" h="200px">
                 <Spinner size="xl" color="blue.500" />
               </Flex>
-             ) : (
+            ) : (
               <Box bg="white" borderRadius="lg" boxShadow="md" p={4}>
                 <Accordion allowMultiple defaultIndex={process.env.NODE_ENV === "test" ? tests.map((_, i) => i) : []}>
                   {tests.map((test, idx) => {
@@ -2007,7 +2070,7 @@ export default function LabTestDashboard() {
               <Stack spacing={3}>
                 <Box bg="white" p={3} borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
                   <Text fontSize="xs" fontWeight="bold">{toTitleCase(selectedPatient.name)}</Text>
-                  <Text fontSize="xs" color="gray.500">ID: {selectedPatient.institute_id} | {selectedPatient.age} yrs | {selectedPatient.gender} | Dr. {selectedPatient.doctor_name || "N/A"}</Text>
+                  <Text fontSize="xs" color="gray.500">ID: {selectedPatient.institute_id} | {selectedPatient.age} yrs | {selectedPatient.gender} | {selectedPatient.doctor_name || "N/A"}</Text>
                 </Box>
 
                 <Text fontSize="xs" fontWeight="semibold" color="gray.600" textTransform="uppercase" letterSpacing="wide">

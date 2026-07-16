@@ -45,7 +45,6 @@ services:
     container_name: hms-minio
     restart: unless-stopped
     ports:
-      - "9000:9000"
       - "9001:9001"
     volumes:
       - ./minio-data:/data

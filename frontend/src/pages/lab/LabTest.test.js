@@ -497,7 +497,13 @@ describe('LabTest Component', () => {
 
     // Close the View Lab Order Modal
     const closeBtn = screen.getByRole('button', { name: /Close/i });
-    fireEvent.click(closeBtn);
+    await act(async () => {
+      fireEvent.click(closeBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText(/John Doe \(ID: P123\)/i)).not.toBeInTheDocument();
+    });
 
     // 2. Open Upload Lab Report Modal
     const uploadBtn = screen.getByRole('button', { name: /Upload Lab Report/i });
@@ -540,6 +546,43 @@ describe('LabTest Component', () => {
             test_name: 'WBC'
           })
         })
+      );
+    });
+  });
+
+  it('saves manual values as draft when closing the patient modal via Close button', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/dropdown/labtests')) return Promise.resolve({ data: mockLabTestsConfig });
+      if (url.includes('/lab/patients')) return Promise.resolve({ data: { confirmed: mockPatients, upcoming: [] } });
+      return Promise.resolve({ data: { confirmed: [], upcoming: [] } });
+    });
+    axios.post.mockResolvedValue({ data: { message: 'Draft saved' } });
+
+    await act(async () => {
+      renderComponent();
+    });
+
+    // Open View Lab Order Modal
+    const viewBtn = screen.getByRole('button', { name: /View Lab Order/i });
+    await act(async () => {
+      fireEvent.click(viewBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/John Doe \(ID: P123\)/i)).toBeInTheDocument();
+    });
+
+    // Close the Modal (triggers handleModalClose -> handleSaveDraft)
+    const closeBtn = screen.getByRole('button', { name: /Close/i });
+    await act(async () => {
+      fireEvent.click(closeBtn);
+    });
+
+    await waitFor(() => {
+      expect(axios.post).toHaveBeenCalledWith(
+        expect.stringContaining('/lab/save_draft'),
+        expect.any(Object),
+        expect.any(Object)
       );
     });
   });

@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify, send_from_directory, current_app
+from flask import Blueprint, request, jsonify, send_from_directory, current_app, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 import database
 import io
+import mimetypes
 from database import get_doctors_name, generate_relation_id
 import os
 import smtplib
@@ -489,7 +490,7 @@ def debug_s3():
 @jwt_required()
 def generate_upload_url():
     data = request.json
-    instituteId=data.get("instituteId")
+    instituteId = data.get("instituteId")
     filename = data.get("filename")
     content_type = data.get("content_type")
 
@@ -500,22 +501,32 @@ def generate_upload_url():
     key = f"reports/{user}/{uuid.uuid4()}_{filename}"
 
     try:
-        # generate_presigned_url uses the public endpoint so the signed host
-        # header matches exactly what the browser sends — avoiding 403.
-        public_url = generate_presigned_url(
-            "put_object",
-            {"Bucket": BUCKET, "Key": key},
-            expires_in=600
-        )
+        proxy_url = f"{request.host_url.rstrip('/')}/s3/proxy-upload?key={key}"
 
         return jsonify({
-            "upload_url": public_url,
+            "upload_url": proxy_url,
             "key": key
         })
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
+@patient_bp.route('/s3/proxy-upload', methods=['PUT'])
+@jwt_required()
+def proxy_upload():
+    key = request.args.get('key')
+    if not key:
+        return jsonify({"error": "Missing key"}), 400
+
+    try:
+        s3.put_object(
+            Bucket=BUCKET,
+            Key=key,
+            Body=request.get_data()
+        )
+        return jsonify({"message": "File uploaded successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @patient_bp.route('/s3/save-metadata', methods=['POST'])
 @jwt_required()
 def save_s3_metadata():
@@ -558,16 +569,31 @@ def generate_view_url():
         return jsonify({"error": "Missing key"}), 400
 
     try:
-        # generate_presigned_url uses the public endpoint so the signed host
-        # header matches exactly what the browser sends — avoiding 403.
-        public_url = generate_presigned_url(
-            "get_object",
-            {"Bucket": BUCKET, "Key": key},
-            expires_in=300
+        proxy_url = f"{request.host_url.rstrip('/')}/s3/proxy-download?key={key}"
+        return jsonify({"url": proxy_url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@patient_bp.route('/s3/proxy-download', methods=['GET'])
+@jwt_required(optional=True)
+def proxy_download():
+    key = request.args.get('key')
+    if not key:
+        return jsonify({"error": "Missing key"}), 400
+
+    try:
+        response_obj = s3.get_object(Bucket=BUCKET, Key=key)
+        file_data = response_obj['Body'].read()
+        mime_type, _ = mimetypes.guess_type(key)
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+        filename = key.split('/')[-1]
+        return send_file(
+            io.BytesIO(file_data),
+            mimetype=mime_type,
+            as_attachment=False,
+            download_name=filename
         )
-
-        return jsonify({"url": public_url})
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

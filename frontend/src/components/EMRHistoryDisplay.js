@@ -37,7 +37,17 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const res = await axios.post(`${BASE_URL}/s3/view-url`, { s3_key: s3Key }, { headers });
       if (res.data && res.data.url) {
-        window.open(res.data.url, '_blank');
+        let targetUrl = res.data.url;
+        if (targetUrl.includes("/s3/proxy-download")) {
+          const path = targetUrl.substring(targetUrl.indexOf("/s3/proxy-download"));
+          targetUrl = `${BASE_URL}${path}`;
+        }
+        const fileRes = await axios.get(targetUrl, {
+          headers,
+          responseType: 'blob'
+        });
+        const fileUrl = URL.createObjectURL(fileRes.data);
+        window.open(fileUrl, '_blank');
       } else {
         alert("Failed to get download link: server returned no URL.");
       }
