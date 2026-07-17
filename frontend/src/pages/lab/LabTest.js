@@ -41,6 +41,8 @@ import {
   FormErrorMessage,
   Stack,
   Badge,
+  Grid,
+  GridItem,
 } from "@chakra-ui/react";
 import {
   FiBell,
@@ -58,6 +60,8 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import LabReportSlip from "../../components/LabReportSlip";
+import { generateLabReportPdf } from "../../utils/labReportPdf";
 
 const cleanTestName = (name) => {
   if (!name) return "";
@@ -161,6 +165,7 @@ export default function LabTestDashboard() {
     onClose: onCompleteClose,
   } = useDisclosure();
   const [isCompleting, setIsCompleting] = useState(false);
+  const [emailingId, setEmailingId] = useState(null);
   const {
     isOpen: isDeleteConfirmOpen,
     onOpen: onDeleteConfirmOpen,
@@ -632,6 +637,125 @@ export default function LabTestDashboard() {
       });
     } finally {
       setIsCompleting(false);
+    }
+  };
+
+  const handleEmailSelectedPatient = async () => {
+    if (!selectedPatient) return;
+    if (!selectedPatient.email) {
+      toast({ title: "No email registered for this patient", status: "warning", duration: 3000 });
+      return;
+    }
+
+    const manualReports = tests
+      .filter(t => {
+        const reportFile = selectedPatient.lab_reports?.find(
+          r => r.test_name && r.test_name.toLowerCase() === t.lab_test.toLowerCase()
+        );
+        return !reportFile;
+      })
+      .map(t => {
+        const results = {};
+        if (t.type === "individual") {
+          results[t.lab_test] = {
+            value: t.result || "",
+            reference_range: t.reference_range || "N/A",
+            units: t.units || "N/A"
+          };
+        } else if (t.type === "group") {
+          t.subTestNames.forEach((name, idx) => {
+            const det = t.subTestDetails[idx] || {};
+            if (!det.isHeader) {
+              results[name] = {
+                value: t.subResults[idx] || "",
+                reference_range: det.reference_range || "N/A",
+                units: det.units || "N/A"
+              };
+            }
+          });
+        } else if (t.type === "multi") {
+          t.reference_ranges.forEach((ref, idx) => {
+            const name = ref.split(":")[0]?.trim() || `Param ${idx + 1}`;
+            results[name] = {
+              value: t.multiResults[idx] || "",
+              reference_range: ref || "N/A",
+              units: t.unitsArray[idx] || "N/A"
+            };
+          });
+        }
+        return {
+          test_name: t.lab_test,
+          results: results
+        };
+      })
+      .filter(r => Object.keys(r.results).length > 0);
+
+    if (manualReports.length === 0) {
+      toast({ title: "No manually entered reports to email", status: "info", duration: 3000 });
+      return;
+    }
+
+    const row = {
+      patientName: selectedPatient.name || "N/A",
+      instituteId: selectedPatient.institute_id || "N/A",
+      visitId: selectedPatient.visit_id || "N/A",
+      age: selectedPatient.age || 0,
+      gender: selectedPatient.gender || "N/A",
+      address: selectedPatient.address || "Pilani",
+      doctorName: selectedPatient.doctor_name || "N/A",
+      email: selectedPatient.email,
+      latestTimestamp: selectedPatient.visitingTime || selectedPatient.time || new Date().toISOString(),
+    };
+
+    setEmailingId(row.visitId);
+    try {
+      const doc = generateLabReportPdf(row, manualReports);
+      const pdfBase64 = doc.output("datauristring").split(",")[1];
+      const formattedDate = new Date(row.latestTimestamp).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+
+      const manualReportsListHtml = `
+      <div style="margin: 15px 0; background-color: #f7fafc; padding: 15px; border-radius: 6px; border-left: 4px solid #3182ce;">
+        <h3 style="margin: 0 0 8px 0; font-size: 13px; color: #2b6cb0; font-family: sans-serif;">Included in Attached PDF</h3>
+        <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #4a5568; line-height: 1.5; font-family: sans-serif;">
+          ${manualReports.map((r) => `<li><strong>${cleanTestName(r.test_name)}</strong></li>`).join("")}
+        </ul>
+      </div>`;
+
+      const bodyHtml = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; color: #2d3748;">
+        <div style="background-color: #3182ce; padding: 15px; border-radius: 6px 6px 0 0; text-align: center; color: white;">
+          <h2 style="margin: 0; font-size: 18px; font-family: sans-serif;">BITS Pilani Medical Centre</h2>
+          <p style="margin: 5px 0 0 0; font-size: 13px; opacity: 0.9; font-family: sans-serif;">Lab Test Report Delivery</p>
+        </div>
+        <div style="padding: 20px; line-height: 1.6;">
+          <p style="font-size: 14px; margin-top: 0; font-family: sans-serif;">Dear <strong>${toTitleCase(row.patientName)}</strong>,</p>
+          <p style="font-size: 14px; font-family: sans-serif;">Please find attached your lab test results from your visit on <strong>${formattedDate}</strong>.</p>
+          
+          ${manualReportsListHtml}
+          
+          <p style="font-size: 14px; margin-top: 25px; font-family: sans-serif;">Regards,<br><strong>BITS Pilani Medical Centre</strong></p>
+          <p style="font-size: 11px; color: #a0aec0; margin-top: 30px; border-top: 1px solid #edf2f7; padding-top: 15px; font-family: sans-serif; text-align: center;">
+            This is an automated email. Please do not reply directly to this message.
+          </p>
+        </div>
+      </div>`;
+
+      const token = localStorage.getItem("token");
+      await axios.post(`${BASE_URL}/lab/send_email`, {
+        recipient_email: row.email,
+        subject: `Lab Reports - ${toTitleCase(row.patientName)} - ${formattedDate}`,
+        body: bodyHtml,
+        pdf_base64: pdfBase64,
+        filename: `${row.patientName.replace(/\s+/g, "_")}_LabReport_${formattedDate}.pdf`,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast({ title: "Email sent successfully!", status: "success", duration: 3000 });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to send email", status: "error", duration: 3000 });
+    } finally {
+      setEmailingId(null);
     }
   };
 
@@ -1477,7 +1601,7 @@ export default function LabTestDashboard() {
                             <Td py={3}>
                               <Text fontWeight="bold" color="blue.900" fontSize="sm">{toTitleCase(p.name)}</Text>
                               <Text fontSize="2xs" color="gray.500" mt={0.5}>
-                                {p.age} yrs &middot; {p.gender}
+                                {p.age} yrs • {p.gender}
                               </Text>
                             </Td>
                             <Td py={3} fontSize="xs" color="gray.700" fontWeight="medium">
@@ -1487,7 +1611,7 @@ export default function LabTestDashboard() {
                               {formatDateTimeSplit(p.consultation_completed_time || p.visitingTime)}
                             </Td>
                             <Td py={3}>
-                               <VStack spacing={1.5} align="center" justify="center" w="100%">
+                              <VStack spacing={1.5} align="center" justify="center" w="100%">
                                 <Button
                                   colorScheme="blue"
                                   variant="outline"
@@ -1512,6 +1636,8 @@ export default function LabTestDashboard() {
                                     size="xs"
                                     borderRadius="lg"
                                     onClick={() => handleCompleteLabTestClick(p)}
+                                    title="Complete Lab Test Report"
+                                    aria-label="Complete Lab Test Report"
                                   >
                                     Complete Report
                                   </Button>
@@ -1614,7 +1740,7 @@ export default function LabTestDashboard() {
                                   <Td py={3}>
                                     <Text fontWeight="bold" color="blue.900" fontSize="sm">{toTitleCase(p.name)}</Text>
                                     <Text fontSize="2xs" color="gray.500" mt={0.5}>
-                                      {p.age} yrs &middot; {p.gender}
+                                      {p.age} yrs • {p.gender}
                                     </Text>
                                   </Td>
                                   <Td py={3} fontSize="xs" color="gray.700" fontWeight="medium">
@@ -2068,149 +2194,244 @@ export default function LabTestDashboard() {
       </Modal>
 
       {/* COMPLETE LAB REPORT CONFIRMATION MODAL */}
-      <Modal isOpen={isCompleteOpen} onClose={onCompleteClose} size="3xl" isCentered>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader bg="green.600" color="white">
+      <Modal isOpen={isCompleteOpen} onClose={onCompleteClose} size="6xl" isCentered scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(6px)" />
+        <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
+          <ModalHeader bg="green.600" color="white" py={5} px={6}>
             Confirm Lab Test Report Completion
           </ModalHeader>
-          <ModalCloseButton color="white" />
-          <ModalBody bg="gray.50" p={5}>
+          <ModalCloseButton color="white" top="20px" right="20px" />
+          <ModalBody bg="gray.50" p={6}>
             {selectedPatient && (
-              <Stack spacing={3}>
-                <Box bg="white" p={3} borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="sm">
-                  <Text fontSize="xs" fontWeight="bold">{toTitleCase(selectedPatient.name)}</Text>
-                  <Text fontSize="xs" color="gray.500">ID: {selectedPatient.institute_id} | {selectedPatient.age} yrs | {selectedPatient.gender} | {selectedPatient.doctor_name || "N/A"}</Text>
-                </Box>
+              <Grid templateColumns={{ base: "1fr", lg: "1.1fr 1.3fr" }} gap={6} alignItems="start">
+                {/* Left Column: Patient Summary and Tests Breakdown */}
+                <GridItem colSpan={1}>
+                  <Stack spacing={5}>
+                    <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                      <Heading size="xs" color="green.800" mb={3} textTransform="uppercase" letterSpacing="wider" fontWeight="bold">Patient Info</Heading>
+                      <Text fontSize="sm" fontWeight="bold">{toTitleCase(selectedPatient.name)}</Text>
+                      <Text fontSize="xs" color="gray.500" mt={1}>ID: {selectedPatient.institute_id} &middot; {selectedPatient.age} yrs &middot; {selectedPatient.gender} &middot; {selectedPatient.doctor_name || "N/A"}</Text>
+                    </Box>
 
-                <Text fontSize="xs" fontWeight="semibold" color="gray.600" textTransform="uppercase" letterSpacing="wide">
-                  Summary of Uploaded Files / Entered Values
-                </Text>
+                    <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                      <Text fontSize="xs" fontWeight="bold" color="gray.500" mb={3.5} textTransform="uppercase" letterSpacing="wider">
+                        Summary of Uploaded Files / Entered Values
+                      </Text>
 
-                <Stack spacing={2} maxH="440px" overflowY="auto" pr={1}>
-                  {tests.map((test, index) => {
-                    const reportFile = selectedPatient.lab_reports?.find(
-                      r => r.test_name && r.test_name.toLowerCase() === test.lab_test.toLowerCase()
-                    );
+                      <Stack spacing={3} overflowY="auto" pr={1}>
+                        {tests.map((test, index) => {
+                          const reportFile = selectedPatient.lab_reports?.find(
+                            r => r.test_name && r.test_name.toLowerCase() === test.lab_test.toLowerCase()
+                          );
 
-                    return (
-                      <Box
-                        key={index}
-                        bg="white"
-                        p={3}
-                        borderRadius="md"
-                        border="1px solid"
-                        borderColor="gray.200"
-                        borderLeft={reportFile ? "3px solid #38A169" : "3px solid #3182CE"}
-                        boxShadow="xs"
-                      >
-                        <Flex justify="space-between" align="center" mb={reportFile ? 1.5 : 2}>
-                          <Text fontWeight="bold" fontSize="xs" color="gray.800" noOfLines={2} maxW="70%">
-                            {test.lab_test}
-                          </Text>
-                          <Flex
-                            align="center"
-                            gap={1.5}
-                            px={2.5}
-                            py={0.5}
-                            borderRadius="full"
-                            border="1px solid"
-                            borderColor={reportFile ? "green.300" : "blue.300"}
-                            bg={reportFile ? "green.50" : "blue.50"}
-                          >
+                          return (
                             <Box
-                              w={1.5}
-                              h={1.5}
-                              borderRadius="full"
-                              bg={reportFile ? "#38A169" : "#3182CE"}
-                              flexShrink={0}
-                            />
-                            <Text fontSize="2xs" fontWeight="semibold" color={reportFile ? "green.700" : "blue.700"} whiteSpace="nowrap">
-                              {reportFile ? "File Uploaded" : "Results Entered"}
-                            </Text>
-                          </Flex>
-                        </Flex>
-
-                        {reportFile ? (
-                          <Flex align="center" justify="space-between" bg="gray.50" px={2} py={1} borderRadius="sm">
-                            <Text fontSize="2xs" color="gray.600" isTruncated maxW="70%">
-                              📎 <strong>{reportFile.file_name}</strong>
-                            </Text>
-                            <Button
-                              size="xs"
-                              colorScheme="blue"
-                              variant="ghost"
-                              fontSize="2xs"
-                              px={2}
-                              h={5}
-                              onClick={() => handleViewFile(reportFile.s3_key)}
+                              key={index}
+                              bg="white"
+                              p={3}
+                              borderRadius="xl"
+                              border="1px solid"
+                              borderColor="gray.200"
+                              borderLeft={reportFile ? "4px solid #38A169" : "4px solid #3182CE"}
+                              boxShadow="xs"
                             >
-                              View File ↗
-                            </Button>
-                          </Flex>
-                        ) : (
-                          <Table variant="simple" size="xs" mt={1}>
-                            <Thead>
-                              <Tr>
-                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Field</Th>
-                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Value</Th>
-                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Reference</Th>
-                                <Th fontSize="2xs" color="gray.500" py={1} px={1}>Units</Th>
-                              </Tr>
-                            </Thead>
-                            <Tbody>
-                              {test.type === "individual" && (
-                                <Tr>
-                                  <Td fontSize="2xs" py={0.5} px={1} fontWeight="medium">{test.lab_test}</Td>
-                                  <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.result || "—"}</Td>
-                                  <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{test.reference_range}</Td>
-                                  <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{test.units}</Td>
-                                </Tr>
-                              )}
-                              {test.type === "group" &&
-                                test.subTestNames.map((n, i) => {
-                                  const det = test.subTestDetails[i] || {};
-                                  if (det.isHeader) return null;
-                                  return (
-                                    <Tr key={i}>
-                                      <Td fontSize="2xs" py={0.5} px={1} pl={det.isSubField ? 4 : 1} color="gray.700">{n}</Td>
-                                      <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.subResults[i] || "—"}</Td>
-                                      <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{det.reference_range || "N/A"}</Td>
-                                      <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{det.units || "N/A"}</Td>
+                              <Flex justify="space-between" align="center" mb={reportFile ? 1.5 : 2}>
+                                <Text fontWeight="bold" fontSize="xs" color="gray.850" noOfLines={2} maxW="70%">
+                                  {test.lab_test}
+                                </Text>
+                                <Flex
+                                  align="center"
+                                  gap={1.5}
+                                  px={2.5}
+                                  py={0.5}
+                                  borderRadius="full"
+                                  border="1px solid"
+                                  borderColor={reportFile ? "green.200" : "blue.200"}
+                                  bg={reportFile ? "green.50" : "blue.50"}
+                                >
+                                  <Box
+                                    w={1.5}
+                                    h={1.5}
+                                    borderRadius="full"
+                                    bg={reportFile ? "#38A169" : "#3182CE"}
+                                    flexShrink={0}
+                                  />
+                                  <Text fontSize="2xs" fontWeight="bold" color={reportFile ? "green.700" : "blue.700"} whiteSpace="nowrap">
+                                    {reportFile ? "File Uploaded" : "Results Entered"}
+                                  </Text>
+                                </Flex>
+                              </Flex>
+
+                              {reportFile ? (
+                                <Flex align="center" justify="space-between" bg="gray.50" px={2} py={1} borderRadius="sm">
+                                  <Text fontSize="2xs" color="gray.600" isTruncated maxW="70%">
+                                    📎 <strong>{reportFile.file_name}</strong>
+                                  </Text>
+                                  <Button
+                                    size="xs"
+                                    colorScheme="blue"
+                                    variant="ghost"
+                                    fontSize="2xs"
+                                    px={2}
+                                    h={5}
+                                    onClick={() => handleViewFile(reportFile.s3_key)}
+                                  >
+                                    View File ↗
+                                  </Button>
+                                </Flex>
+                              ) : (
+                                <Table variant="simple" size="xs" mt={1}>
+                                  <Thead>
+                                    <Tr>
+                                      <Th fontSize="2xs" color="gray.500" py={1} px={1}>Field</Th>
+                                      <Th fontSize="2xs" color="gray.500" py={1} px={1}>Value</Th>
+                                      <Th fontSize="2xs" color="gray.500" py={1} px={1}>Reference</Th>
+                                      <Th fontSize="2xs" color="gray.500" py={1} px={1}>Units</Th>
                                     </Tr>
-                                  );
-                                })}
-                              {test.type === "multi" &&
-                                test.reference_ranges.map((r, i) => (
-                                  <Tr key={i}>
-                                    <Td fontSize="2xs" py={0.5} px={1} color="gray.700">{r.split(":")[0]}</Td>
-                                    <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.multiResults[i] || "—"}</Td>
-                                    <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{r}</Td>
-                                    <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{test.unitsArray[i] || "N/A"}</Td>
-                                  </Tr>
-                                ))}
-                            </Tbody>
-                          </Table>
-                        )}
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              </Stack>
+                                  </Thead>
+                                  <Tbody>
+                                    {test.type === "individual" && (
+                                      <Tr>
+                                        <Td fontSize="2xs" py={0.5} px={1} fontWeight="medium">{test.lab_test}</Td>
+                                        <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.result || "—"}</Td>
+                                        <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{test.reference_range}</Td>
+                                        <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{test.units}</Td>
+                                      </Tr>
+                                    )}
+                                    {test.type === "group" &&
+                                      test.subTestNames.map((n, i) => {
+                                        const det = test.subTestDetails[i] || {};
+                                        if (det.isHeader) return null;
+                                        return (
+                                          <Tr key={i}>
+                                            <Td fontSize="2xs" py={0.5} px={1} pl={det.isSubField ? 4 : 1} color="gray.700">{n}</Td>
+                                            <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.subResults[i] || "—"}</Td>
+                                            <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{det.reference_range || "N/A"}</Td>
+                                            <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{det.units || "N/A"}</Td>
+                                          </Tr>
+                                        );
+                                      })}
+                                    {test.type === "multi" &&
+                                      test.reference_ranges.map((r, i) => (
+                                        <Tr key={i}>
+                                          <Td fontSize="2xs" py={0.5} px={1} color="gray.700">{r.split(":")[0]}</Td>
+                                          <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{test.multiResults[i] || "—"}</Td>
+                                          <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{r}</Td>
+                                          <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{test.unitsArray[i] || "N/A"}</Td>
+                                        </Tr>
+                                      ))}
+                                  </Tbody>
+                                </Table>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                    </Box>
+                  </Stack>
+                </GridItem>
+
+                {/* Right Column: Live Official Report Preview */}
+                <GridItem colSpan={1}>
+                  <VStack spacing={4} align="stretch">
+                    {process.env.NODE_ENV !== 'test' ? (
+                      (() => {
+                        const manualReports = tests
+                          .filter(t => {
+                            const reportFile = selectedPatient.lab_reports?.find(
+                              r => r.test_name && r.test_name.toLowerCase() === t.lab_test.toLowerCase()
+                            );
+                            return !reportFile;
+                          })
+                          .map(t => {
+                            const results = {};
+                            if (t.type === "individual") {
+                              results[t.lab_test] = {
+                                value: t.result || "",
+                                reference_range: t.reference_range || "N/A",
+                                units: t.units || "N/A"
+                              };
+                            } else if (t.type === "group") {
+                              t.subTestNames.forEach((name, idx) => {
+                                const det = t.subTestDetails[idx] || {};
+                                if (!det.isHeader) {
+                                  results[name] = {
+                                    value: t.subResults[idx] || "",
+                                    reference_range: det.reference_range || "N/A",
+                                    units: det.units || "N/A"
+                                  };
+                                }
+                              });
+                            } else if (t.type === "multi") {
+                              t.reference_ranges.forEach((ref, idx) => {
+                                const name = ref.split(":")[0]?.trim() || `Param ${idx + 1}`;
+                                results[name] = {
+                                  value: t.multiResults[idx] || "",
+                                  reference_range: ref || "N/A",
+                                  units: t.unitsArray[idx] || "N/A"
+                                };
+                              });
+                            }
+                            return {
+                              test_name: t.lab_test,
+                              results: results
+                            };
+                          })
+                          .filter(r => Object.keys(r.results).length > 0);
+
+                        return manualReports.length > 0 ? (
+                          <Box bg="white" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.300" boxShadow="lg" overflow="auto">
+                            <LabReportSlip
+                              patientInfo={{
+                                visitId: selectedPatient.visit_id || selectedPatient.visitId || "N/A",
+                                instituteId: selectedPatient.institute_id || selectedPatient.instituteId || "N/A",
+                                patientName: selectedPatient.name || selectedPatient.patientName || "N/A",
+                                age: selectedPatient.age || 0,
+                                gender: selectedPatient.gender || "N/A",
+                                address: selectedPatient.address || "Pilani",
+                                doctorName: selectedPatient.doctor_name || selectedPatient.doctorName || "N/A",
+                                regDate: selectedPatient.visitingTime || selectedPatient.time || new Date().toISOString(),
+                              }}
+                              manualReports={manualReports}
+                            />
+                          </Box>
+                        ) : (
+                          <Box bg="orange.50" p={4} borderRadius="xl" border="1px solid" borderColor="orange.200">
+                            <Text fontSize="xs" color="orange.800" fontWeight="medium">
+                              This test only contains uploaded files. Scans cannot be previewed in the layout slip.
+                            </Text>
+                          </Box>
+                        );
+                      })()
+                    ) : null}
+                  </VStack>
+                </GridItem>
+              </Grid>
             )}
           </ModalBody>
-          <ModalFooter bg="gray.50">
-            <HStack spacing={3}>
-              <Button onClick={onCompleteClose}>Cancel</Button>
-              <Button
-                colorScheme="green"
-                onClick={executeCompleteReport}
-                isLoading={isCompleting}
-                loadingText="Completing..."
-              >
-                Confirm & Complete Report
-              </Button>
-            </HStack>
+          <ModalFooter bg="gray.50" gap={3} py={4} px={6} borderTop="1px solid" borderColor="gray.200">
+            <Button onClick={onCompleteClose} size="sm" variant="outline" borderRadius="xl">Cancel</Button>
+            <Button
+              colorScheme="blue"
+              size="sm"
+              borderRadius="xl"
+              leftIcon={<FiMail />}
+              isLoading={emailingId !== null}
+              onClick={handleEmailSelectedPatient}
+              title="Email manually-entered results as PDF"
+            >
+              Email Results PDF
+            </Button>
+            <Button
+              colorScheme="green"
+              size="sm"
+              borderRadius="xl"
+              onClick={executeCompleteReport}
+              isLoading={isCompleting}
+              loadingText="Completing..."
+            >
+              Confirm & Complete Report
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

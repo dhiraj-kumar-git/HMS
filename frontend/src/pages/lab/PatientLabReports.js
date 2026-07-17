@@ -11,6 +11,8 @@ import axios from "axios";
 import BASE_URL from "../../utils/Config";
 import "jspdf-autotable";
 import { formatDateTimeIST, toTitleCase } from "../../utils/utils";
+import LabReportSlip from "../../components/LabReportSlip";
+import { generateLabReportPdf } from "../../utils/labReportPdf";
 
 const PAGE_SIZE = 10;
 
@@ -31,6 +33,9 @@ export default function PatientLabReports() {
   const [page, setPage] = useState(1);
 
   const { isOpen: isDetailOpen, onOpen: onDetailOpen, onClose: onDetailClose } = useDisclosure();
+  const handleCloseDetail = () => {
+    onDetailClose();
+  };
 
   const fetchReports = async () => {
     setRefreshing(true);
@@ -232,6 +237,22 @@ export default function PatientLabReports() {
     }
   };
 
+  const handleViewManualPdf = (row) => {
+    if (!row) return;
+    const manualReports = row.labReports.filter((r) => r.results && Object.keys(r.results).length > 0);
+    if (manualReports.length === 0) {
+      toast({ title: "No manual results available to view", status: "warning", duration: 3000 });
+      return;
+    }
+    try {
+      const doc = generateLabReportPdf(row, manualReports);
+      window.open(doc.output("bloburl"), "_blank");
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      toast({ title: "Failed to generate PDF.", status: "error", duration: 3000 });
+    }
+  };
+
   const handleEmail = async (row) => {
     if (!row) return;
     const manualReports = row.labReports.filter((r) => r.results && Object.keys(r.results).length > 0);
@@ -252,67 +273,7 @@ export default function PatientLabReports() {
     }
     setEmailingId(row.visitId);
     try {
-      const { jsPDF } = await import("jspdf");
-      const doc = new jsPDF();
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text("BITS Pilani Medical Centre", 105, 20, { align: "center" });
-      doc.setFontSize(12);
-      doc.text("Lab Test Report", 105, 28, { align: "center" });
-      doc.line(14, 32, 196, 32);
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Name         : ${toTitleCase(row.patientName)}`, 14, 40);
-      doc.text(`Institute ID : ${row.instituteId}`, 14, 47);
-      doc.text(`Age / Gender : ${row.age} yrs / ${row.gender}`, 14, 54);
-      doc.text(`Doctor       : ${row.doctorName || "N/A"}`, 14, 61);
-      doc.text(`Date         : ${formatDateTimeIST(row.latestTimestamp)}`, 14, 68);
-      doc.line(14, 73, 196, 73);
-      let y = 82;
-      manualReports.forEach((report, rIdx) => {
-        if (rIdx > 0) { doc.line(14, y, 196, y); y += 8; }
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(11);
-        doc.text(report.test_name || "Lab Test", 14, y);
-        y += 5;
-        doc.line(14, y, 196, y);
-        y += 5;
-        doc.setFontSize(9);
-        doc.setFont("helvetica", "bold");
-        doc.text("Parameter", 14, y);
-        doc.text("Result", 85, y);
-        doc.text("Reference Range", 120, y);
-        doc.text("Units", 176, y);
-        y += 3;
-        doc.line(14, y, 196, y);
-        y += 5;
-        doc.setFont("helvetica", "normal");
-
-        const testParams = getTestParameters(report.test_name);
-        const entries = Object.entries(report.results || {});
-        const filteredEntries = testParams.length > 0
-          ? entries.filter(([param]) => matchesParam(param, testParams))
-          : entries;
-
-        filteredEntries.forEach(([param, val]) => {
-          const value = typeof val === "object" ? String(val.value ?? "") : String(val);
-          const ref = typeof val === "object" ? String(val.reference_range ?? "N/A") : "N/A";
-          const units = typeof val === "object" ? String(val.units ?? "N/A") : "N/A";
-          doc.text(param, 14, y);
-          doc.text(value, 85, y);
-          doc.text(ref, 120, y);
-          doc.text(units, 176, y);
-          y += 7;
-          if (y > 270) { doc.addPage(); y = 20; }
-        });
-        if (report.remarks) {
-          doc.setFont("helvetica", "italic");
-          doc.text(`Remarks: ${report.remarks}`, 14, y);
-          y += 8;
-          doc.setFont("helvetica", "normal");
-        }
-        y += 4;
-      });
+      const doc = generateLabReportPdf(row, manualReports);
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const formattedDate = new Date(row.latestTimestamp).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -410,7 +371,7 @@ export default function PatientLabReports() {
               <FiSearch color="gray.400" />
             </InputLeftElement>
             <Input
-              placeholder="Search patient, ID, test, or doctor..."
+              placeholder="Search name, ID, test, or doctor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               bg="gray.50"
@@ -526,7 +487,7 @@ export default function PatientLabReports() {
       </Box>
 
       {/* DETAIL VIEW MODAL */}
-      <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="4xl" isCentered scrollBehavior="inside">
+      <Modal isOpen={isDetailOpen} onClose={handleCloseDetail} size="6xl" isCentered scrollBehavior="inside">
         <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(6px)" />
         <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
           <ModalHeader bg="blue.600" color="white" py={5} px={6}>
@@ -543,10 +504,11 @@ export default function PatientLabReports() {
 
           <ModalBody bg="gray.50" p={6}>
             {selectedRow && (
-              <Grid templateColumns={{ base: "1fr", md: "280px 1fr" }} gap={6} alignItems="start">
-                {/* Left Column: Demographics & Visit Meta */}
-                <GridItem>
-                  <Stack spacing={4}>
+              <Grid templateColumns={{ base: "1fr", lg: "1.1fr 1.3fr" }} gap={6} alignItems="start">
+                {/* Left Column: Demographics, Visit Meta, and Detailed Results */}
+                <GridItem colSpan={1}>
+                  <Stack spacing={5}>
+                    {/* Visit Summary Card */}
                     <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
                       <Heading size="xs" color="blue.800" mb={3.5} textTransform="uppercase" letterSpacing="wider" fontWeight="bold">Visit Summary</Heading>
                       <Stack spacing={3}>
@@ -567,135 +529,155 @@ export default function PatientLabReports() {
                         </Box>
                       </Stack>
                     </Box>
+
+                    {/* Detailed Results Card Stack */}
+                    <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                      <Flex justify="space-between" align="center" mb={4}>
+                        <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wider">
+                          Detailed Test Results
+                        </Text>
+                        <Text fontSize="2xs" color="gray.400">
+                          Visit ID: {selectedRow.visitId}
+                        </Text>
+                      </Flex>
+
+                      <Stack spacing={4}>
+                        {selectedRow.labReports.map((report, idx) => {
+                          const isFile = !!report.s3_key;
+                          return (
+                            <Box
+                              key={idx}
+                              bg="white"
+                              p={4}
+                              borderRadius="xl"
+                              border="1px solid"
+                              borderColor="gray.200"
+                              borderLeft={isFile ? "4px solid #48BB78" : "4px solid #3182CE"}
+                              boxShadow="xs"
+                            >
+                              <Flex justify="space-between" align="center" mb={3}>
+                                <Text fontWeight="bold" fontSize="sm" color="blue.900">
+                                  {cleanTestName(report.test_name)}
+                                </Text>
+                                <Flex
+                                  align="center"
+                                  gap={1.5}
+                                  px={2.5}
+                                  py={0.5}
+                                  borderRadius="full"
+                                  border="1px solid"
+                                  borderColor={isFile ? "green.200" : "blue.200"}
+                                  bg={isFile ? "green.50" : "blue.50"}
+                                >
+                                  <Box w={1.5} h={1.5} borderRadius="full" bg={isFile ? "#48BB78" : "#3182CE"} flexShrink={0} />
+                                  <Text fontSize="2xs" fontWeight="bold" color={isFile ? "green.700" : "blue.700"} whiteSpace="nowrap">
+                                    {isFile ? "File Uploaded" : "Results Entered"}
+                                  </Text>
+                                </Flex>
+                              </Flex>
+
+                              {isFile ? (
+                                <Flex align="center" justify="space-between" bg="gray.50" px={3} py={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                  <Text fontSize="xs" color="gray.600" isTruncated maxW="70%">
+                                    📎 <strong>{report.file_name}</strong>
+                                  </Text>
+                                  <Button
+                                    size="xs"
+                                    colorScheme="blue"
+                                    variant="solid"
+                                    borderRadius="md"
+                                    leftIcon={<FiExternalLink size={12} />}
+                                    isLoading={viewingFileKey === report.s3_key}
+                                    onClick={() => handleViewFile(report.s3_key)}
+                                  >
+                                    View File
+                                  </Button>
+                                </Flex>
+                              ) : (
+                                (() => {
+                                  const testParams = getTestParameters(report.test_name);
+                                  const entries = Object.entries(report.results || {});
+                                  const filteredEntries = testParams.length > 0
+                                    ? entries.filter(([param]) => matchesParam(param, testParams))
+                                    : entries;
+
+                                  return (
+                                    <Box borderRadius="xl" border="1px solid" borderColor="gray.200" overflow="hidden" mt={1}>
+                                      <Table variant="simple" size="sm">
+                                        <Thead bg="gray.50">
+                                          <Tr>
+                                            <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Parameter</Th>
+                                            <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Value</Th>
+                                            <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Reference Range</Th>
+                                            <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Units</Th>
+                                          </Tr>
+                                        </Thead>
+                                        <Tbody>
+                                          {filteredEntries.map(([param, val]) => {
+                                            const value = typeof val === "object" ? (val.value ?? "—") : (val || "—");
+                                            const ref = typeof val === "object" ? (val.reference_range ?? "N/A") : "N/A";
+                                            const units = typeof val === "object" ? (val.units ?? "N/A") : "N/A";
+                                            return (
+                                              <Tr key={param} _hover={{ bg: "gray.50" }}>
+                                                <Td fontSize="xs" py={2} px={3} color="gray.850" fontWeight="medium">{param}</Td>
+                                                <Td fontSize="xs" py={2} px={3} fontWeight="bold" color="blue.600">{String(value)}</Td>
+                                                <Td fontSize="xs" py={2} px={3} color="gray.600">{String(ref)}</Td>
+                                                <Td fontSize="xs" py={2} px={3} color="gray.500">{String(units)}</Td>
+                                              </Tr>
+                                            );
+                                          })}
+                                        </Tbody>
+                                      </Table>
+                                    </Box>
+                                  );
+                                })()
+                              )}
+                              {report.remarks && (
+                                <Box mt={2.5} p={2.5} bg="gray.50" borderRadius="md" borderLeft="2px solid" borderColor="gray.300">
+                                  <Text fontSize="xs" color="gray.600" fontStyle="italic"><strong>Remarks:</strong> {report.remarks}</Text>
+                                </Box>
+                              )}
+                              {report.timestamp && (
+                                <Text mt={2} fontSize="2xs" color="gray.400" textAlign="right">
+                                  Saved: {formatDateTimeIST(report.timestamp)}
+                                </Text>
+                              )}
+                            </Box>
+                          );
+                        })}
+                      </Stack>
+                    </Box>
                   </Stack>
                 </GridItem>
 
-                {/* Right Column: Dynamic Reports List */}
-                <GridItem>
-                  <Stack spacing={4}>
-                    <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wider">
-                      Detailed Test Results
-                    </Text>
-                    <Stack spacing={4}>
-                      {selectedRow.labReports.map((report, idx) => {
-                        const isFile = !!report.s3_key;
-                        return (
-                          <Box
-                            key={idx}
-                            bg="white"
-                            p={4}
-                            borderRadius="xl"
-                            border="1px solid"
-                            borderColor="gray.200"
-                            borderLeft={isFile ? "4px solid #48BB78" : "4px solid #3182CE"}
-                            boxShadow="xs"
-                          >
-                            <Flex justify="space-between" align="center" mb={3}>
-                              <Text fontWeight="bold" fontSize="sm" color="blue.900">
-                                {cleanTestName(report.test_name)}
-                              </Text>
-                              <Flex
-                                align="center"
-                                gap={1.5}
-                                px={2.5}
-                                py={0.5}
-                                borderRadius="full"
-                                border="1px solid"
-                                borderColor={isFile ? "green.200" : "blue.200"}
-                                bg={isFile ? "green.50" : "blue.50"}
-                              >
-                                <Box w={1.5} h={1.5} borderRadius="full" bg={isFile ? "#48BB78" : "#3182CE"} flexShrink={0} />
-                                <Text fontSize="2xs" fontWeight="bold" color={isFile ? "green.700" : "blue.700"} whiteSpace="nowrap">
-                                  {isFile ? "File Uploaded" : "Results Entered"}
-                                </Text>
-                              </Flex>
-                            </Flex>
+                {/* Right Column: Live Official Report Preview */}
+                <GridItem colSpan={1}>
+                  <VStack spacing={4} align="stretch">
+                    {selectedRow.enteredCount > 0 && process.env.NODE_ENV !== 'test' ? (
+                      <Box bg="white" p={2} borderRadius="2xl" border="1px solid" borderColor="gray.300" boxShadow="lg" overflow="auto">
+                        <LabReportSlip
+                          patientInfo={selectedRow}
+                          manualReports={selectedRow.labReports.filter(r => !r.s3_key && r.results && Object.keys(r.results).length > 0)}
+                        />
+                      </Box>
+                    ) : null}
 
-                            {isFile ? (
-                              <Flex align="center" justify="space-between" bg="gray.50" px={3} py={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
-                                <Text fontSize="xs" color="gray.600" isTruncated maxW="70%">
-                                  📎 <strong>{report.file_name}</strong>
-                                </Text>
-                                <Button
-                                  size="xs"
-                                  colorScheme="blue"
-                                  variant="solid"
-                                  borderRadius="md"
-                                  leftIcon={<FiExternalLink size={12} />}
-                                  isLoading={viewingFileKey === report.s3_key}
-                                  onClick={() => handleViewFile(report.s3_key)}
-                                >
-                                  View Scan
-                                </Button>
-                              </Flex>
-                            ) : (
-                              (() => {
-                                const testParams = getTestParameters(report.test_name);
-                                const entries = Object.entries(report.results || {});
-                                const filteredEntries = testParams.length > 0
-                                  ? entries.filter(([param]) => matchesParam(param, testParams))
-                                  : entries;
-
-                                return (
-                                  <Box borderRadius="xl" border="1px solid" borderColor="gray.200" overflow="hidden" mt={1}>
-                                    <Table variant="simple" size="sm">
-                                      <Thead bg="gray.50">
-                                        <Tr>
-                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Parameter</Th>
-                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Value</Th>
-                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Reference Range</Th>
-                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Units</Th>
-                                        </Tr>
-                                      </Thead>
-                                      <Tbody>
-                                        {filteredEntries.map(([param, val]) => {
-                                          const value = typeof val === "object" ? (val.value ?? "—") : (val || "—");
-                                          const ref = typeof val === "object" ? (val.reference_range ?? "N/A") : "N/A";
-                                          const units = typeof val === "object" ? (val.units ?? "N/A") : "N/A";
-                                          return (
-                                            <Tr key={param} _hover={{ bg: "gray.50" }}>
-                                              <Td fontSize="xs" py={2} px={3} color="gray.850" fontWeight="medium">{param}</Td>
-                                              <Td fontSize="xs" py={2} px={3} fontWeight="bold" color="blue.600">{String(value)}</Td>
-                                              <Td fontSize="xs" py={2} px={3} color="gray.600">{String(ref)}</Td>
-                                              <Td fontSize="xs" py={2} px={3} color="gray.500">{String(units)}</Td>
-                                            </Tr>
-                                          );
-                                        })}
-                                      </Tbody>
-                                    </Table>
-                                  </Box>
-                                );
-                              })()
-                            )}
-                            {report.remarks && (
-                              <Box mt={2.5} p={2.5} bg="gray.50" borderRadius="md" borderLeft="2px solid" borderColor="gray.300">
-                                <Text fontSize="xs" color="gray.600" fontStyle="italic"><strong>Remarks:</strong> {report.remarks}</Text>
-                              </Box>
-                            )}
-                            {report.timestamp && (
-                              <Text mt={2} fontSize="2xs" color="gray.400" textAlign="right">
-                                Saved: {formatDateTimeIST(report.timestamp)}
-                              </Text>
-                            )}
-                          </Box>
-                        );
-                      })}
-                    </Stack>
-                    {selectedRow.fileCount > 0 && selectedRow.enteredCount === 0 && (
-                      <Box bg="orange.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="orange.200">
+                    {selectedRow.enteredCount === 0 && selectedRow.fileCount > 0 && (
+                      <Box bg="orange.50" p={4} borderRadius="xl" border="1px solid" borderColor="orange.200">
                         <Text fontSize="xs" color="orange.800" fontWeight="medium">
                           🔒 This visit only contains uploaded scan files. For patient security, scans cannot be shared via email. Please provide the patient with a printed/physical copy.
                         </Text>
                       </Box>
                     )}
-                  </Stack>
+                  </VStack>
                 </GridItem>
               </Grid>
             )}
           </ModalBody>
           <ModalFooter bg="gray.50" gap={3} py={4} px={6} borderTop="1px solid" borderColor="gray.200">
-            <Button onClick={onDetailClose} size="sm" variant="outline" borderRadius="xl">Close</Button>
-            <Button colorScheme="blue" size="sm" borderRadius="xl" leftIcon={<FiMail />} isDisabled={!selectedRow || selectedRow.enteredCount === 0} isLoading={emailingId === selectedRow?.visitId} onClick={() => { onDetailClose(); handleEmail(selectedRow); }} title={selectedRow?.enteredCount === 0 ? "No manually-entered results to email" : "Send manually-entered results as PDF"}>Email Results PDF</Button>
+            <Button onClick={handleCloseDetail} size="sm" variant="outline" borderRadius="xl">Close</Button>
+            <Button colorScheme="teal" size="sm" borderRadius="xl" leftIcon={<FiEye />} isDisabled={!selectedRow || selectedRow.enteredCount === 0} onClick={() => handleViewManualPdf(selectedRow)} title={selectedRow?.enteredCount === 0 ? "No manually-entered results to view" : "View/Print report as PDF"}>View/Print PDF</Button>
+            <Button colorScheme="blue" size="sm" borderRadius="xl" leftIcon={<FiMail />} isDisabled={!selectedRow || selectedRow.enteredCount === 0} isLoading={emailingId === selectedRow?.visitId} onClick={() => { handleCloseDetail(); handleEmail(selectedRow); }} title={selectedRow?.enteredCount === 0 ? "No manually-entered results to email" : "Send manually-entered results as PDF"}>Email Results PDF</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

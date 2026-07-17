@@ -14,12 +14,6 @@ import {
   AlertDescription,
   Button,
   Icon,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Input,
   FormControl,
   FormLabel,
@@ -37,6 +31,8 @@ import {
 import { FiFileText, FiMail, FiEye, FiSend, FiCheckCircle } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../utils/Config';
+import { generateLabReportPdf } from '../utils/labReportPdf';
+import LabReportSlip from './LabReportSlip';
 
 const Field = ({ label, value, isDiagnosis }) => (
   <Box mb={2}>
@@ -174,7 +170,7 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
       
       let payload = {};
       if (Array.isArray(emailingReport)) {
-        const doc = await generateManualPdfDocument(emailingReport);
+        const doc = generateManualPdfDocument(emailingReport);
         const base64Data = doc.output("datauristring").split(",")[1];
         payload = {
           recipient_email: emailTarget,
@@ -198,7 +194,7 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
           payload.pdf_base64 = base64Data;
           payload.filename = emailingReport.file_name || `${emailingReport.test_name}.pdf`;
         } else {
-          const doc = await generateManualPdfDocument([emailingReport]);
+          const doc = generateManualPdfDocument([emailingReport]);
           const base64Data = doc.output("datauristring").split(",")[1];
           payload.pdf_base64 = base64Data;
           payload.filename = `LabResults_${cleanTestName(emailingReport.test_name).replace(/\s+/g, '_')}.pdf`;
@@ -216,108 +212,24 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
     }
   };
 
-  const generateManualPdfDocument = async (reports) => {
-    const { jsPDF } = await import("jspdf");
-    const doc = new jsPDF();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("BITS Pilani Medical Centre", 105, 20, { align: "center" });
-    doc.setFontSize(12);
-    doc.text("Lab Test Report", 105, 28, { align: "center" });
-    doc.line(14, 32, 196, 32);
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    
-    const patientName = legacyApp?.patientName || legacyApp?.name || "Patient";
-    const instId = legacyApp?.instituteId || legacyApp?.institute_id || "N/A";
-    const age = legacyApp?.age || "N/A";
-    const gender = legacyApp?.gender || "N/A";
-    const doctor = legacyApp?.doctorName || legacyApp?.doctor_name || "N/A";
-    const dateStr = formatDateTimeIST(reports[0]?.timestamp || legacyApp?.time || new Date().toISOString());
-
-    doc.text(`Name         : ${toTitleCase(patientName)}`, 14, 40);
-    doc.text(`Institute ID : ${instId}`, 14, 47);
-    doc.text(`Age / Gender : ${age} yrs / ${gender}`, 14, 54);
-    doc.text(`Doctor       : ${doctor}`, 14, 61);
-    doc.text(`Date         : ${dateStr}`, 14, 68);
-    doc.line(14, 73, 196, 73);
-
-    let y = 82;
-    reports.forEach((report, index) => {
-      if (y > 240) {
-        doc.addPage();
-        y = 20;
-      } else if (index > 0) {
-        y += 10;
-      }
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.text(report.test_name || "Lab Test", 14, y);
-      y += 5;
-      doc.line(14, y, 196, y);
-      y += 5;
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text("Parameter", 14, y);
-      doc.text("Result", 85, y);
-      doc.text("Reference Range", 120, y);
-      doc.text("Units", 176, y);
-      y += 3;
-      doc.line(14, y, 196, y);
-      y += 5;
-      doc.setFont("helvetica", "normal");
-
-      const entries = Object.entries(report.results || {});
-      entries.forEach(([param, val]) => {
-        if (y > 270) {
-          doc.addPage();
-          y = 20;
-          doc.setFontSize(9);
-          doc.setFont("helvetica", "bold");
-          doc.text("Parameter", 14, y);
-          doc.text("Result", 85, y);
-          doc.text("Reference Range", 120, y);
-          doc.text("Units", 176, y);
-          y += 3;
-          doc.line(14, y, 196, y);
-          y += 5;
-          doc.setFont("helvetica", "normal");
-        }
-        
-        const value = typeof val === "object" ? String(val.value ?? "") : String(val);
-        const ref = typeof val === "object" ? String(val.reference_range ?? "N/A") : "N/A";
-        const units = typeof val === "object" ? String(val.units ?? "N/A") : "N/A";
-        doc.text(param, 14, y);
-        doc.text(value, 85, y);
-        doc.text(ref, 120, y);
-        doc.text(units, 176, y);
-        y += 7;
-      });
-
-      if (report.remarks) {
-        if (y > 275) {
-          doc.addPage();
-          y = 20;
-        }
-        y += 2;
-        doc.setFont("helvetica", "bold");
-        doc.text("Remarks:", 14, y);
-        doc.setFont("helvetica", "normal");
-        doc.text(report.remarks, 32, y);
-        y += 5;
-      }
-      y += 3;
-      doc.line(14, y, 196, y);
-    });
-
-    return doc;
+  const generateManualPdfDocument = (reports) => {
+    const patientInfo = {
+      patientName: legacyApp?.patientName || legacyApp?.name || "Patient",
+      instituteId: legacyApp?.instituteId || legacyApp?.institute_id || "N/A",
+      age: legacyApp?.age || "N/A",
+      gender: legacyApp?.gender || "N/A",
+      doctorName: legacyApp?.doctorName || legacyApp?.doctor_name || "N/A",
+      address: legacyApp?.address || "Pilani",
+      regDate: legacyApp?.time || legacyApp?.registration_time,
+      visitId: legacyApp?.visitId || legacyApp?.visit_id
+    };
+    return generateLabReportPdf(patientInfo, reports);
   };
 
   const handleViewManualPdf = async (reports) => {
     setIsManualPdfLoading(true);
     try {
-      const doc = await generateManualPdfDocument(reports);
+      const doc = generateManualPdfDocument(reports);
       window.open(doc.output("bloburl"), "_blank");
     } catch (err) {
       console.error("PDF preview error:", err);
@@ -437,54 +349,21 @@ const EMRHistoryDisplay = ({ emrData, legacyApp, hideCancelledAlert = false }) =
                 </Button>
               </HStack>
             </Flex>
-            <VStack align="stretch" spacing={4} w="100%">
-              {manualReports.map((report, idx) => (
-                <Box key={idx} bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.100" w="100%">
-                  <Flex justify="space-between" align="center" mb={2}>
-                    <Text fontSize="xs" fontWeight="bold" color="blue.900">
-                      {cleanTestName(report.test_name)}
-                    </Text>
-                  </Flex>
-
-                  <Box borderRadius="lg" border="1px solid" borderColor="gray.200" overflow="hidden">
-                    <Table variant="simple" size="sm">
-                      <Thead bg="gray.50">
-                        <Tr>
-                          <Th fontSize="3xs" color="gray.500" py={1.5} px={2} textTransform="uppercase" fontWeight="bold">Parameter</Th>
-                          <Th fontSize="3xs" color="gray.500" py={1.5} px={2} textTransform="uppercase" fontWeight="bold">Result</Th>
-                          <Th fontSize="3xs" color="gray.500" py={1.5} px={2} textTransform="uppercase" fontWeight="bold">Reference Range</Th>
-                          <Th fontSize="3xs" color="gray.500" py={1.5} px={2} textTransform="uppercase" fontWeight="bold">Units</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {Object.entries(report.results || {}).map(([param, val]) => {
-                          const value = typeof val === "object" ? (val.value ?? "—") : (val || "—");
-                          const ref = typeof val === "object" ? (val.reference_range ?? "N/A") : "N/A";
-                          const units = typeof val === "object" ? (val.units ?? "N/A") : "N/A";
-                          const isAbnormal = isOutOfRange(String(value), String(ref));
-                          return (
-                            <Tr key={param}>
-                              <Td fontSize="2xs" py={1.5} px={2} color="gray.700" fontWeight="medium">{param}</Td>
-                              <Td fontSize="2xs" py={1.5} px={2} fontWeight="bold" color={isAbnormal ? "red.600" : "blue.600"}>
-                                {String(value)} {isAbnormal && "⚠️"}
-                              </Td>
-                              <Td fontSize="2xs" py={1.5} px={2} color="gray.500">{String(ref)}</Td>
-                              <Td fontSize="2xs" py={1.5} px={2} color="gray.500">{String(units)}</Td>
-                            </Tr>
-                          );
-                        })}
-                      </Tbody>
-                    </Table>
-                  </Box>
-
-                  {report.remarks && (
-                    <Box mt={2} p={2} bg="gray.50" borderRadius="md" borderLeft="2px solid" borderColor="gray.300">
-                      <Text fontSize="2xs" color="gray.600" fontStyle="italic"><strong>Remarks:</strong> {report.remarks}</Text>
-                    </Box>
-                  )}
-                </Box>
-              ))}
-            </VStack>
+            <Box mt={3} bg="white" p={1} borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="sm" overflow="auto">
+              <LabReportSlip
+                patientInfo={{
+                  patientName: legacyApp?.patientName || legacyApp?.name || "Patient",
+                  instituteId: legacyApp?.instituteId || legacyApp?.institute_id || "N/A",
+                  age: legacyApp?.age || "N/A",
+                  gender: legacyApp?.gender || "N/A",
+                  doctorName: legacyApp?.doctorName || legacyApp?.doctor_name || "N/A",
+                  address: legacyApp?.address || "Pilani",
+                  regDate: legacyApp?.time || legacyApp?.registration_time,
+                  visitId: legacyApp?.visitId || legacyApp?.visit_id
+                }}
+                manualReports={manualReports}
+              />
+            </Box>
           </Box>
         )}
 
