@@ -110,6 +110,7 @@ export default function PatientHistory() {
         mb={6}
       >
         <Heading size="md">{toTitleCase(patient.name)}</Heading>
+        <Text fontSize="sm" color="gray.500">{patient.age} yrs • {patient.gender}</Text>
         <Text mt={2}>ID: {patient.institute_id}</Text>
       </Box>
 

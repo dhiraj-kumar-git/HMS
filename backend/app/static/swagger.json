@@ -731,6 +731,30 @@
         ]
       }
     },
+    "/doctor/search_past_patients": {
+      "get": {
+        "tags": [
+          "Patient"
+        ],
+        "summary": "Patient - /doctor/search_past_patients",
+        "responses": {
+          "200": {
+            "description": "Successful Operation"
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ]
+      }
+    },
     "/doctor/patients": {
       "get": {
         "tags": [

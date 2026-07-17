@@ -33,6 +33,9 @@ def register_patient(patient_data):
     if not institute_id:
         raise ValueError("Institute ID is required for registration")
     
+    institute_id = institute_id.upper()
+    patient_data["institute_id"] = institute_id
+    
     # Optional: check if already exists to prevent duplicate primary IDs
     if patients.find_one({"institute_id": institute_id}):
         return None # Indicate duplicate
@@ -63,6 +66,8 @@ def register_patient(patient_data):
 
 
 def update_dependant(institute_id, updated_data):
+    if institute_id:
+        institute_id = institute_id.upper()
     # Ensure date_of_birth is a datetime object if it was passed as string
     dob = updated_data.get("date_of_birth")
     if dob and isinstance(dob, str):
@@ -83,6 +88,8 @@ def update_dependant(institute_id, updated_data):
 
 
 def delete_dependant(institute_id):
+    if institute_id:
+        institute_id = institute_id.upper()
     result = patients.delete_one(
         {"institute_id": institute_id, "patient_type": "Dependant"}
     )
@@ -90,6 +97,8 @@ def delete_dependant(institute_id):
 
 
 def archive_patient(institute_id):
+    if institute_id:
+        institute_id = institute_id.upper()
     result = patients.update_one(
         {"institute_id": institute_id},
         {"$set": {"account_status": "archived"}}
@@ -98,6 +107,8 @@ def archive_patient(institute_id):
 
 
 def book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status="booked", booked_by="patient"):
+    if institute_id:
+        institute_id = institute_id.upper()
     # Create the Visit
     v = Visit(
         visit_id=str(uuid.uuid4()),
@@ -378,6 +389,8 @@ def _map_aggregated_patient(patient, active_doctor_username=None):
 
 
 def store_patient_otp(institute_id, otp):
+    if institute_id:
+        institute_id = institute_id.upper()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     result = patients.update_one(
         {"institute_id": institute_id},
@@ -500,6 +513,8 @@ def update_appointment_status(visit_id, status):
 
 
 def verify_patient_otp(institute_id, otp):
+    if institute_id:
+        institute_id = institute_id.upper()
     patient = patients.find_one({"institute_id": institute_id})
     if not patient or "otp" not in patient:
         return False, "OTP not generated or patient not found."
@@ -519,6 +534,8 @@ def verify_patient_otp(institute_id, otp):
 
 # Retrieve patient details by Institute ID
 def get_patient_by_id(institute_id):
+    if institute_id:
+        institute_id = institute_id.upper()
     pipeline = [
         {"$match": {"institute_id": institute_id}},
         {
@@ -607,7 +624,10 @@ def _get_active_visit_id(institute_id, doctor_username=None):
     if visit:
         return visit["visit_id"]
     return None
-def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0, limit=0):
+def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0, limit=0, days=7):
+    from datetime import datetime, timedelta, timezone
+    date_limit = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    
     pipeline = [
         {
             "$lookup": {
@@ -625,7 +645,8 @@ def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0,
                             {"doctor_username": doctor_username},
                             {"doctor_name": doctor_display_name}
                         ],
-                        "status": {"$in": ["completed", "cancelled"]}
+                        "status": {"$in": ["completed", "cancelled"]},
+                        "time": {"$gte": date_limit}
                     }
                 }
             }
@@ -635,6 +656,66 @@ def get_patient_history_for_doctor(doctor_username, doctor_display_name, skip=0,
         pipeline.append({"$skip": skip})
     if limit > 0:
         pipeline.append({"$limit": limit})
+        
+    pipeline.append(COMPUTE_AGE_STAGE)
+    
+    pts = list(patients.aggregate(pipeline))
+    result = []
+    for p in pts:
+        assembled = _map_aggregated_patient(p)
+        if assembled:
+            assembled.pop("_id", None)
+            result.append(assembled)
+    return result
+
+
+def search_past_patients_for_doctor(doctor_username, doctor_display_name, institute_id=None, last_visit_date=None, name=None):
+    pipeline = [
+        {
+            "$lookup": {
+                "from": "visits",
+                "localField": "institute_id",
+                "foreignField": "institute_id",
+                "as": "patient_visits"
+            }
+        }
+    ]
+    
+    match_conditions = {
+        "patient_visits": {
+            "$elemMatch": {
+                "$or": [
+                    {"doctor_username": doctor_username},
+                    {"doctor_name": doctor_display_name}
+                ],
+                "status": {"$in": ["completed", "cancelled"]}
+            }
+        }
+    }
+    
+    if institute_id:
+        match_conditions["institute_id"] = institute_id.upper()
+    
+    if name:
+        match_conditions["name"] = {"$regex": name, "$options": "i"}
+        
+    pipeline.append({"$match": match_conditions})
+    
+    if last_visit_date:
+        pipeline.append({
+            "$match": {
+                "patient_visits": {
+                    "$elemMatch": {
+                        "$or": [
+                            {"doctor_username": doctor_username},
+                            {"doctor_name": doctor_display_name}
+                        ],
+                        "status": {"$in": ["completed", "cancelled"]},
+                        "time": {"$regex": f"^{last_visit_date}"}
+                    }
+                }
+            }
+        })
         
     pipeline.append(COMPUTE_AGE_STAGE)
     

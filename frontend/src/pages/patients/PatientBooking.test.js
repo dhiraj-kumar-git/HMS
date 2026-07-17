@@ -670,4 +670,46 @@ describe('PatientBooking Component', () => {
     expect(screen.getByText('Birla Institute of Technology & Science')).toBeInTheDocument();
 
   });
+
+  it('asks for confirmation when clicking Back to Portal after verification', async () => {
+    const mockPatient = {
+      institute_id: '12345',
+      name: 'John Doe',
+      appointments: []
+    };
+    axios.post.mockResolvedValueOnce({ data: mockPatient });
+    renderComponent();
+
+    // Verify patient
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    // Wait for verified state
+    await screen.findByText('Verified Patient');
+
+    // Click Back to Portal button
+    const backBtn = screen.getByRole('button', { name: 'Back to Portal' });
+    fireEvent.click(backBtn);
+
+    // Confirmation Modal should appear
+    await screen.findByText('Exit Patient Portal');
+    expect(screen.getByText(/Are you sure you want to go back/i)).toBeInTheDocument();
+
+    // Click Stay Here to cancel
+    fireEvent.click(screen.getByRole('button', { name: 'Stay Here' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Exit Patient Portal')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Verified Patient')).toBeInTheDocument();
+
+    // Click back again
+    fireEvent.click(backBtn);
+    await screen.findByText('Exit Patient Portal');
+
+    // Click Yes, Go Back to confirm
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, Go Back' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Verified Patient')).not.toBeInTheDocument();
+    });
+  });
 });

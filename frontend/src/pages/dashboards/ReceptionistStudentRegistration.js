@@ -82,7 +82,17 @@ const ReceptionistStudentRegistration = () => {
   };
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    let { name, value } = e.target;
+    if (name === 'institute_id') {
+      value = value.toUpperCase().slice(0, 13);
+    }
+    if (name === 'name') {
+      value = value.replace(/[^a-zA-Z\s']/g, '').slice(0, 40);
+    }
+    if (name === 'email') {
+      value = value.slice(0, 60);
+    }
+
     if (name === 'patient_type' && value === 'Temporary') {
       setFormData({ ...formData, [name]: value, address: 'Other', institute_id: '' });
     } else {
@@ -92,6 +102,17 @@ const ReceptionistStudentRegistration = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.email && !formData.email.includes('@')) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address containing '@'.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+        position: 'top'
+      });
+      return;
+    }
     setLoading(true);
 
     // Process final address

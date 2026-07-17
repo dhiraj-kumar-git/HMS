@@ -49,6 +49,8 @@ def register_patient():
     doctor_assigned = data.get("doctor_assigned")
     patient_type = data.get("patient_type")
     institute_id = data.get("institute_id")
+    if institute_id:
+        institute_id = institute_id.upper()
 
     if patient_type == "Temporary" and not institute_id:
         import uuid
@@ -179,9 +181,11 @@ def get_all_patients_for_doctor():
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 0))
+        days = int(request.args.get('days', 7))
     except ValueError:
         page = 1
         limit = 0
+        days = 7
         
     skip = (page - 1) * limit if limit > 0 else 0
     
@@ -189,8 +193,37 @@ def get_all_patients_for_doctor():
     doctor_user = database.users.find_one({"username": username})
     doctor_display_name = doctor_user.get("display_name", username) if doctor_user else username
 
-    all_patients = database.get_patient_history_for_doctor(username, doctor_display_name, skip, limit)
+    all_patients = database.get_patient_history_for_doctor(username, doctor_display_name, skip, limit, days)
     return jsonify(all_patients), 200
+
+
+@patient_bp.route('/doctor/search_past_patients', methods=['GET'])
+@jwt_required()
+def search_past_patients():
+    claims = get_jwt()
+    if claims.get("role") != "doctor":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    username = get_jwt_identity()
+    
+    institute_id = request.args.get('institute_id', '').strip() or None
+    last_visit_date = request.args.get('last_visit_date', '').strip() or None
+    name = request.args.get('name', '').strip() or None
+
+    if not institute_id and not last_visit_date and not name:
+        return jsonify({"error": "Please provide at least one search criterion"}), 400
+
+    doctor_user = database.users.find_one({"username": username})
+    doctor_display_name = doctor_user.get("display_name", username) if doctor_user else username
+
+    results = database.search_past_patients_for_doctor(
+        doctor_username=username,
+        doctor_display_name=doctor_display_name,
+        institute_id=institute_id,
+        last_visit_date=last_visit_date,
+        name=name
+    )
+    return jsonify(results), 200
 
 # Endpoint to get patients assigned to the doctor
 @patient_bp.route('/doctor/patients', methods=['GET'])

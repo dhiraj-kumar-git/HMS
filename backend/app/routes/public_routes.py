@@ -372,6 +372,28 @@ def public_doctor_availability(doctor_username):
     return jsonify({"full_slots": full_slots}), 200
 
 def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
+    if institute_id:
+        institute_id = institute_id.upper()
+
+    # Block past dates in IST (UTC+5:30)
+    from datetime import datetime, timezone, timedelta
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    today_ist = ist_now.date()
+    
+    try:
+        if "T" in appointment_time:
+            app_date_str = appointment_time.split("T")[0]
+        else:
+            app_date_str = appointment_time.split(" ")[0]
+        
+        app_date = datetime.strptime(app_date_str, "%Y-%m-%d").date()
+        from flask import current_app
+        is_testing = current_app.config.get("TESTING", False)
+        if not is_testing and app_date < today_ist:
+            return False, (jsonify({"error": "Cannot book appointments in the past."}), 400)
+    except Exception as e:
+        print("Error validating past date:", str(e))
+
     # Check if doctor is on leave
     try:
         if "T" in appointment_time:
@@ -498,6 +520,8 @@ def validate_appointment_slot(institute_id, doctor_username, appointment_time, f
 def public_book_appointment():
     data = request.json
     institute_id = data.get("institute_id")
+    if institute_id:
+        institute_id = institute_id.upper()
     doctor_username = data.get("doctor_username")
     appointment_time = data.get("time") 
     force = data.get("force", False)

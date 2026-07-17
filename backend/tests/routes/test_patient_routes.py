@@ -184,6 +184,21 @@ def test_get_all_patients_for_doctor(client, mock_db, mocker, app):
     res = client.get("/doctor/all_patients", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
 
+def test_search_past_patients_for_doctor(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.users.find_one", return_value={"display_name": "Dr. One"})
+    mocker.patch("database.search_past_patients_for_doctor", return_value=[{"institute_id": "123"}])
+    
+    # 1. Missing criteria returns 400
+    res = client.get("/doctor/search_past_patients", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 400
+    
+    # 2. Providing name should query successfully
+    res = client.get("/doctor/search_past_patients?name=John", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json == [{"institute_id": "123"}]
+
 def test_get_doctor_patients(client, mock_db, mocker, app):
     with app.app_context():
         token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})

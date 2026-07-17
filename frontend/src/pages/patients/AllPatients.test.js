@@ -255,4 +255,52 @@ describe('AllPatients Component', () => {
     await screen.findByText('Bob Ross');
     expect(screen.getByText('01/03/2023')).toBeInTheDocument();
   });
+
+  it('allows searching past patients under the search tab', async () => {
+    axios.get.mockResolvedValueOnce({ data: [] }); // initial mount
+    renderComponent();
+
+    // Wait for loading to finish
+    await screen.findByText('Recent Visits (Past 7 Days)');
+
+    // Click Search Past Patients tab
+    const searchTab = screen.getByRole('tab', { name: 'Search Past Patients' });
+    fireEvent.click(searchTab);
+
+    // Mock search API response
+    const mockSearchResult = [
+      {
+        institute_id: 'INST999',
+        name: 'Searched Patient',
+        age: 50,
+        gender: 'Male',
+        appointments: [
+          { status: 'completed', doctor_username: 'test_doc', time: '2023-01-01T10:00:00Z' }
+        ]
+      }
+    ];
+    axios.get.mockResolvedValueOnce({ data: mockSearchResult });
+
+    // Fill in Name in search form
+    const nameInput = screen.getByPlaceholderText('e.g. John Doe');
+    fireEvent.change(nameInput, { target: { value: 'Searched' } });
+
+    // Click Search button
+    const searchBtn = screen.getByRole('button', { name: 'Search Past Patients' });
+    fireEvent.click(searchBtn);
+
+    // Verify axios called search API
+    await waitFor(() => {
+      expect(axios.get).toHaveBeenLastCalledWith(
+        expect.stringContaining('/doctor/search_past_patients'),
+        expect.objectContaining({
+          params: expect.objectContaining({ name: 'Searched' })
+        })
+      );
+    });
+
+    // Verify searched patient is rendered
+    await screen.findByText('Searched Patient');
+    expect(screen.getByText('INST999')).toBeInTheDocument();
+  });
 });

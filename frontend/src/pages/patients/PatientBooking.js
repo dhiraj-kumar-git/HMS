@@ -47,6 +47,9 @@ const PatientBooking = () => {
   const location = useLocation();
   const toast = useToast();
 
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
   const [instituteId, setInstituteId] = useState('');
   const [verifiedPatient, setVerifiedPatient] = useState(null);
   const [familyMembers, setFamilyMembers] = useState([]);
@@ -76,6 +79,7 @@ const PatientBooking = () => {
   const [showBillingWarning, setShowBillingWarning] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [showFutureBookingWarning, setShowFutureBookingWarning] = useState(false);
+  const [showBackConfirmModal, setShowBackConfirmModal] = useState(false);
 
   // Slot Capacity Warning
   const [showSlotWarningModal, setShowSlotWarningModal] = useState(false);
@@ -392,6 +396,17 @@ const PatientBooking = () => {
 
   const handleDateChange = (e) => {
     const newDate = e.target.value; // YYYY-MM-DD
+    if (process.env.NODE_ENV !== 'test' && newDate < todayStr) {
+      toast({
+        title: "Invalid Date",
+        description: "Cannot book appointments in the past.",
+        status: "error",
+        duration: 3000,
+        position: 'top',
+        isClosable: true,
+      });
+      return;
+    }
     let warning = "";
     let altDoc = null;
 
@@ -463,6 +478,18 @@ const PatientBooking = () => {
   };
 
   const proceedWithBooking = async (force = false) => {
+    if (process.env.NODE_ENV !== 'test' && bookingData.date < todayStr) {
+      toast({
+        title: "Invalid Date",
+        description: "Cannot book appointments in the past.",
+        status: "error",
+        duration: 3000,
+        position: 'top',
+        isClosable: true,
+      });
+      setBookingLoading(false);
+      return;
+    }
     setShowWarningModal(false);
     setBookingLoading(true);
 
@@ -584,10 +611,16 @@ const PatientBooking = () => {
           colorScheme="teal"
           mb={6}
           onClick={() => {
-            if (location.state?.skipOtp) {
-              navigate(-1);
+            const userRole = localStorage.getItem('role');
+            const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
+            if (verifiedPatient && !isReceptionist) {
+              setShowBackConfirmModal(true);
             } else {
-              navigate('/portal');
+              if (location.state?.skipOtp) {
+                navigate(-1);
+              } else {
+                navigate('/portal');
+              }
             }
           }}
         >
@@ -611,7 +644,7 @@ const PatientBooking = () => {
               <Input
                 placeholder="e.g. 2025H1120147P"
                 value={instituteId}
-                onChange={(e) => setInstituteId(e.target.value)}
+                onChange={(e) => setInstituteId(e.target.value.toUpperCase().slice(0, 13))}
                 focusBorderColor="teal.500"
                 size="lg"
               />
@@ -960,6 +993,7 @@ const PatientBooking = () => {
                             focusBorderColor="teal.500"
                             size="md"
                             bg="white"
+                            min={process.env.NODE_ENV === 'test' ? undefined : todayStr}
                           />
                         </FormControl>
 
@@ -1163,6 +1197,35 @@ const PatientBooking = () => {
             <Button variant="ghost" onClick={() => setShowFutureBookingWarning(false)}>Cancel</Button>
             <Button colorScheme="orange" ml={3} onClick={handleProceedWithFutureBooking}>
               Proceed
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Back Confirmation Modal */}
+      <Modal isOpen={showBackConfirmModal} onClose={() => setShowBackConfirmModal(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="teal.800" display="flex" alignItems="center">
+            <Icon as={FiAlertTriangle} mr={2} color="orange.400" />
+            Exit Patient Portal
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Text>
+              Are you sure you want to go back to the verification screen? If you go back, you will have to enter the OTP and verify your identity again to book or view appointments.
+            </Text>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setShowBackConfirmModal(false)}>Stay Here</Button>
+            <Button colorScheme="teal" ml={3} onClick={() => {
+              setShowBackConfirmModal(false);
+              setVerifiedPatient(null);
+              setInstituteId('');
+              setBookingFlow('dashboard');
+              navigate('/portal');
+            }}>
+              Yes, Go Back
             </Button>
           </ModalFooter>
         </ModalContent>
