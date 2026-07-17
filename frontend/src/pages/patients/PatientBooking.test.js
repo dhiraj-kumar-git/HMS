@@ -669,14 +669,5 @@ describe('PatientBooking Component', () => {
     fireEvent.click(slipAccordionButton);
     expect(screen.getByText('Birla Institute of Technology & Science')).toBeInTheDocument();
 
-    // Verify Print Slip button is rendered and clicking it opens the modal
-    const printBtn = screen.getByRole('button', { name: 'Print Slip' });
-    expect(printBtn).toBeInTheDocument();
-    fireEvent.click(printBtn);
-
-    // Modal opens
-    await waitFor(() => {
-      expect(screen.getByText('Print Prescription')).toBeInTheDocument();
-    });
   });
 });

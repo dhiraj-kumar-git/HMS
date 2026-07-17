@@ -4,9 +4,9 @@ import {
   Table, Thead, Tbody, Tr, Th, Td, Modal, ModalOverlay, ModalContent,
   ModalHeader, ModalCloseButton, ModalBody, ModalFooter, useDisclosure,
   useColorModeValue, Input, InputGroup, InputLeftElement,
-  HStack, Stack,
+  HStack, VStack, Stack, Grid, GridItem, Badge,
 } from "@chakra-ui/react";
-import { FiSearch, FiCalendar, FiRefreshCw, FiEye, FiMail, FiExternalLink } from "react-icons/fi";
+import { FiSearch, FiRefreshCw, FiEye, FiMail, FiExternalLink } from "react-icons/fi";
 import axios from "axios";
 import BASE_URL from "../../utils/Config";
 import "jspdf-autotable";
@@ -16,7 +16,6 @@ const PAGE_SIZE = 10;
 
 export default function PatientLabReports() {
   const toast = useToast();
-  const tableHeaderBg = useColorModeValue("gray.100", "gray.700");
   const cardBg = useColorModeValue("white", "gray.800");
 
   const [reports, setReports] = useState([]);
@@ -134,6 +133,20 @@ export default function PatientLabReports() {
     return name.trim();
   };
 
+  const formatDateTimeSplit = (timestamp) => {
+    const formatted = formatDateTimeIST(timestamp);
+    if (formatted.includes(", ")) {
+      const parts = formatted.split(", ");
+      return (
+        <Box>
+          <Text fontSize="xs" fontWeight="semibold" color="gray.700">{parts[0]}</Text>
+          <Text fontSize="2xs" color="gray.500" mt={0.5}>{parts[1]}</Text>
+        </Box>
+      );
+    }
+    return <Text fontSize="xs" fontWeight="semibold" color="gray.700">{formatted}</Text>;
+  };
+
   const visitRows = useMemo(() => {
     const rows = reports.flatMap((patient) =>
       (patient.appointments || [])
@@ -165,23 +178,29 @@ export default function PatientLabReports() {
   }, [reports]);
 
   const filteredRows = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
     return visitRows.filter((row) => {
       const matchesSearch =
-        !q ||
-        row.patientName?.toLowerCase().includes(q) ||
-        row.instituteId?.toLowerCase().includes(q) ||
-        row.testNames.some((t) => t.toLowerCase().includes(q)) ||
-        row.doctorName?.toLowerCase().includes(q);
-      const rowDate = new Date(row.latestTimestamp);
-      const matchesStart = !startDate || rowDate >= new Date(startDate);
-      const matchesEnd = !endDate || rowDate <= new Date(endDate + "T23:59:59");
-      return matchesSearch && matchesStart && matchesEnd;
+        row.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.instituteId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (row.doctorName || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        row.testNames.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+
+      let matchesDate = true;
+      if (startDate) {
+        matchesDate = matchesDate && new Date(row.latestTimestamp) >= new Date(startDate + "T00:00:00");
+      }
+      if (endDate) {
+        matchesDate = matchesDate && new Date(row.latestTimestamp) <= new Date(endDate + "T23:59:59");
+      }
+      return matchesSearch && matchesDate;
     });
   }, [visitRows, searchQuery, startDate, endDate]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
-  const pagedRows = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE) || 1;
+  const pagedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, page]);
 
   useEffect(() => { setPage(1); }, [searchQuery, startDate, endDate]);
 
@@ -296,7 +315,7 @@ export default function PatientLabReports() {
       });
       const pdfBase64 = doc.output("datauristring").split(",")[1];
       const formattedDate = new Date(row.latestTimestamp).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
-      
+
       let manualReportsListHtml = "";
       if (manualReports.length > 0) {
         manualReportsListHtml = `
@@ -346,10 +365,13 @@ export default function PatientLabReports() {
         body: bodyHtml,
         pdf_base64: pdfBase64,
         filename: `${row.patientName.replace(/\s+/g, "_")}_LabReport_${formattedDate}.pdf`,
-      }, { headers: { Authorization: `Bearer ${token}` } });
-      toast({ title: "Email sent successfully!", description: `Lab report PDF sent to ${row.email}`, status: "success", duration: 3000 });
-    } catch (err) {
-      toast({ title: "Failed to send email", description: err.response?.data?.error || err.message, status: "error", duration: 3000 });
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast({ title: "Email sent successfully", status: "success", duration: 3000 });
+    } catch (e) {
+      console.error(e);
+      toast({ title: "Failed to send email", status: "error", duration: 3000 });
     } finally {
       setEmailingId(null);
     }
@@ -357,191 +379,323 @@ export default function PatientLabReports() {
 
   if (loading) {
     return (
-      <Flex h="100vh" align="center" justify="center" bg="gray.50">
-        <Spinner size="xl" color="blue.500" />
+      <Flex justify="center" align="center" h="100vh">
+        <Spinner size="xl" color="blue.500" thickness="4px" />
       </Flex>
     );
   }
 
   return (
-    <Box px={{ base: 4, md: 8 }} py={6} bg="gray.50" minH="100vh">
-      <Flex align="center" mb={6} justify="space-between" flexWrap="wrap" gap={3}>
+    <Box p={6} maxW="1600px" mx="auto" w="100%">
+      <Flex justify="space-between" align="center" mb={6}>
         <Box>
-          <Heading as="h2" size="md" color="gray.800">Patient Lab Reports History</Heading>
-          <Text fontSize="xs" color="gray.500" mt={0.5}>Complete history of all completed lab visits, grouped by visit</Text>
+          <Heading size="lg" color="blue.900" fontWeight="bold">Patient Lab Reports History</Heading>
+          <Text fontSize="sm" color="gray.500" mt={1}>Complete history of all completed lab visits, grouped by visit</Text>
         </Box>
-        <IconButton icon={<FiRefreshCw />} aria-label="Refresh" variant="ghost" size="sm" onClick={fetchReports} isLoading={refreshing} />
+        <IconButton
+          aria-label="Refresh"
+          icon={<FiRefreshCw className={refreshing ? "spin-animation" : ""} />}
+          onClick={fetchReports}
+          isLoading={refreshing}
+          variant="outline"
+          borderRadius="full"
+          colorScheme="blue"
+        />
       </Flex>
 
-      <Box bg={cardBg} borderRadius="lg" boxShadow="md" p={{ base: 4, md: 6 }}>
-        <Flex mb={5} gap={3} flexWrap="wrap" align="center" justify="space-between">
-          <HStack spacing={3} flexWrap="wrap" width={{ base: "100%", md: "auto" }}>
-            <InputGroup maxW="230px" size="sm">
-              <InputLeftElement pointerEvents="none"><FiSearch color="gray" /></InputLeftElement>
-              <Input placeholder="Search name, ID, test..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} bg="white" borderRadius="md" />
-            </InputGroup>
-            <HStack spacing={2} align="center">
-              <InputGroup maxW="150px" size="sm">
-                <InputLeftElement pointerEvents="none"><FiCalendar color="gray" /></InputLeftElement>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} bg="white" />
-              </InputGroup>
-              <Text fontSize="sm" color="gray.500">to</Text>
-              <InputGroup maxW="150px" size="sm">
-                <InputLeftElement pointerEvents="none"><FiCalendar color="gray" /></InputLeftElement>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} bg="white" />
-              </InputGroup>
+      <Box bg={cardBg} borderRadius="2xl" boxShadow="md" border="1px solid" borderColor="gray.200" p={6}>
+        <Flex direction={{ base: "column", lg: "row" }} justify="space-between" gap={4} mb={6} align={{ base: "stretch", lg: "center" }}>
+          <InputGroup maxW={{ base: "100%", lg: "380px" }}>
+            <InputLeftElement pointerEvents="none">
+              <FiSearch color="gray.400" />
+            </InputLeftElement>
+            <Input
+              placeholder="Search patient, ID, test, or doctor..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              bg="gray.50"
+              borderRadius="xl"
+              border="1px solid"
+              borderColor="gray.200"
+              _focus={{ borderColor: "blue.400", bg: "white" }}
+            />
+          </InputGroup>
+          <Flex
+            direction={{ base: "column", sm: "row" }}
+            align={{ base: "stretch", sm: "center" }}
+            gap={3}
+            wrap="wrap"
+          >
+            <HStack spacing={2} align="center" justify="space-between">
+              <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" whiteSpace="nowrap">Filter Date:</Text>
+              <HStack spacing={2} align="center">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  w="140px"
+                  bg="gray.50"
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                  size="sm"
+                />
+                <Text fontSize="xs" color="gray.400">to</Text>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  w="140px"
+                  bg="gray.50"
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                  size="sm"
+                />
+              </HStack>
             </HStack>
-          </HStack>
+            {(startDate || endDate || searchQuery) && (
+              <Button size="xs" colorScheme="gray" variant="ghost" onClick={() => { setStartDate(""); setEndDate(""); setSearchQuery(""); }} alignSelf={{ base: "flex-end", sm: "center" }}>
+                Clear Filters
+              </Button>
+            )}
+          </Flex>
         </Flex>
 
-        <Box overflowX="auto">
-          <Table variant="simple" size="sm" fontSize="sm">
-            <Thead bg={tableHeaderBg}>
-            <Tr>
-              <Th whiteSpace="nowrap">Date & Time</Th>
-              <Th>Patient</Th>
-              <Th>Doctor</Th>
-              <Th>Tests Covered</Th>
-              <Th textAlign="center">Actions</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {pagedRows.length === 0 ? (
+        <Box borderRadius="xl" border="1px solid" borderColor="gray.200" overflowX="auto" boxShadow="xs" bg="white" mb={4}>
+          <Table variant="simple" size="md" minW="900px">
+            <Thead bg="gray.50">
               <Tr>
-                <Td colSpan={5} textAlign="center" py={10}>
-                  <Text color="gray.400" fontSize="sm">No lab report history found.</Text>
-                </Td>
+                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="12%">Date & Time</Th>
+                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="18%">Patient</Th>
+                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="15%">Institute ID</Th>
+                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="15%">Doctor</Th>
+                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="27%">Tests Covered</Th>
+                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="13%" textAlign="center">Actions</Th>
               </Tr>
-            ) : (
-              pagedRows.map((row, i) => (
-                <Tr key={`${row.visitId}-${i}`} _hover={{ bg: "gray.50" }}>
-                  <Td whiteSpace="nowrap" fontSize="xs" color="gray.700">{formatDateTimeIST(row.latestTimestamp)}</Td>
-                  <Td>
-                    <Text fontWeight="semibold" color="blue.900" fontSize="sm">{toTitleCase(row.patientName)}</Text>
-                    <Text fontSize="xs" color="gray.500">{row.instituteId} &middot; {row.age} yrs &middot; {row.gender}</Text>
-                  </Td>
-                  <Td fontSize="xs" color="gray.700">{row.doctorName || "—"}</Td>
-                  <Td fontSize="xs" color="gray.700">
-                    <Stack spacing={1} align="start">
-                      {row.testNames.map((testName, idx) => (
-                        <Text key={idx} fontWeight="medium">• {testName}</Text>
-                      ))}
-                    </Stack>
-                  </Td>
-                  <Td>
-                    <HStack spacing={2} justify="center">
-                      <Button size="xs" leftIcon={<FiEye />} colorScheme="gray" variant="outline" borderRadius="full" onClick={() => openDetail(row)}>View Details</Button>
-                      <Button size="xs" leftIcon={<FiMail />} colorScheme="blue" borderRadius="full" onClick={() => handleEmail(row)} isLoading={emailingId === row.visitId} isDisabled={row.enteredCount === 0} title={row.enteredCount === 0 ? "Only file-upload reports - cannot email for patient data security" : `Email manually-entered results as PDF to ${row.email}`}>Email</Button>
-                    </HStack>
+            </Thead>
+            <Tbody>
+              {pagedRows.length === 0 ? (
+                <Tr>
+                  <Td colSpan={6} textAlign="center" py={12}>
+                    <Text color="gray.400" fontSize="sm" fontWeight="medium">No lab report history found matching criteria.</Text>
                   </Td>
                 </Tr>
-              ))
-            )}
-          </Tbody>
-        </Table>
+              ) : (
+                pagedRows.map((row, i) => (
+                  <Tr key={`${row.visitId}-${i}`} _hover={{ bg: "blue.50/20" }} transition="background-color 0.15s">
+                    <Td py={3}>{formatDateTimeSplit(row.latestTimestamp)}</Td>
+                    <Td py={3}>
+                      <Text fontWeight="bold" color="blue.900" fontSize="sm">{toTitleCase(row.patientName)}</Text>
+                      <Text fontSize="2xs" color="gray.500" mt={0.5}>{row.age} yrs &middot; {row.gender}</Text>
+                    </Td>
+                    <Td py={3} fontSize="xs" fontWeight="semibold" color="gray.700">
+                      {row.instituteId}
+                    </Td>
+                    <Td py={3} fontSize="xs" color="gray.700" fontWeight="medium"> {row.doctorName || "—"}</Td>
+                    <Td py={3}>
+                      <Flex wrap="wrap" gap={1.5} py={1}>
+                        {row.testNames.map((testName, idx) => (
+                          <Badge key={idx} colorScheme="blue" variant="subtle" fontSize="2xs" px={2} py={0.5} borderRadius="md">
+                            {cleanTestName(testName)}
+                          </Badge>
+                        ))}
+                      </Flex>
+                    </Td>
+                    <Td py={3}>
+                      <VStack spacing={1.5} align="center" justify="center" w="100%">
+                        <Button size="xs" leftIcon={<FiEye />} colorScheme="blue" variant="outline" borderRadius="lg" w="max-content" onClick={() => openDetail(row)}>View Details</Button>
+                        <Button size="xs" leftIcon={<FiMail />} colorScheme="blue" borderRadius="lg" w="max-content" onClick={() => handleEmail(row)} isLoading={emailingId === row.visitId} isDisabled={row.enteredCount === 0} title={row.enteredCount === 0 ? "Only file-upload reports - cannot email for patient data security" : `Email manually-entered results as PDF to ${row.email}`}>Email</Button>
+                      </VStack>
+                    </Td>
+                  </Tr>
+                ))
+              )}
+            </Tbody>
+          </Table>
         </Box>
+
         <Flex justify="space-between" mt={4} align="center">
-          <Text fontSize="sm" color="gray.500">Showing {pagedRows.length} of {filteredRows.length} visit{filteredRows.length !== 1 ? "s" : ""}</Text>
+          <Text fontSize="xs" fontWeight="bold" color="gray.500">Showing {pagedRows.length} of {filteredRows.length} visit{filteredRows.length !== 1 ? "s" : ""}</Text>
           <HStack>
-            <IconButton aria-label="Previous page" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>} size="sm" variant="outline" isDisabled={page === 1} onClick={() => setPage((p) => p - 1)} />
-            <Text fontSize="sm" color="gray.700" minW="90px" textAlign="center">Page {page} of {totalPages}</Text>
-            <IconButton aria-label="Next page" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>} size="sm" variant="outline" isDisabled={page === totalPages} onClick={() => setPage((p) => p + 1)} />
+            <IconButton aria-label="Previous page" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6" /></svg>} size="sm" variant="outline" borderRadius="md" isDisabled={page === 1} onClick={() => setPage((p) => p - 1)} />
+            <Text fontSize="xs" fontWeight="bold" color="gray.700" minW="90px" textAlign="center">Page {page} of {totalPages}</Text>
+            <IconButton aria-label="Next page" icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6" /></svg>} size="sm" variant="outline" borderRadius="md" isDisabled={page === totalPages} onClick={() => setPage((p) => p + 1)} />
           </HStack>
         </Flex>
       </Box>
 
-      <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="3xl" isCentered scrollBehavior="inside">
-        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(4px)" />
-        <ModalContent borderRadius="2xl" overflow="hidden">
-          <ModalHeader bg="blue.600" color="white" py={4}>
-            <Text fontSize="md" fontWeight="bold">{toTitleCase(selectedRow?.patientName)}</Text>
-            <Text fontSize="xs" fontWeight="normal" opacity={0.85} mt={0.5}>
-              ID: {selectedRow?.instituteId} &middot; {selectedRow?.age} yrs &middot; {selectedRow?.gender}{selectedRow?.patientType ? ` \u00b7 ${selectedRow.patientType}` : ""}
-            </Text>
-          </ModalHeader>
-          <ModalCloseButton color="white" />
-          <ModalBody bg="gray.50" p={5}>
-            {selectedRow && (
-              <Stack spacing={3}>
-                <Box bg="white" p={3} borderRadius="md" border="1px solid" borderColor="gray.200" boxShadow="xs">
-                  <Text fontSize="xs" color="gray.600">
-                    <strong>Visit ID:</strong> {selectedRow.visitId}&nbsp;|&nbsp;<strong>Doctor:</strong> {selectedRow.doctorName || "N/A"}&nbsp;|&nbsp;<strong>Date:</strong> {formatDateTimeIST(selectedRow.latestTimestamp)}
-                  </Text>
-                </Box>
-                <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" letterSpacing="wide">
-                  Lab Reports ({selectedRow.totalReports})
+      {/* DETAIL VIEW MODAL */}
+      <Modal isOpen={isDetailOpen} onClose={onDetailClose} size="4xl" isCentered scrollBehavior="inside">
+        <ModalOverlay bg="blackAlpha.600" backdropFilter="blur(6px)" />
+        <ModalContent borderRadius="2xl" overflow="hidden" boxShadow="2xl">
+          <ModalHeader bg="blue.600" color="white" py={5} px={6}>
+            <Flex justify="space-between" align="center">
+              <Box>
+                <Text fontSize="lg" fontWeight="bold">{toTitleCase(selectedRow?.patientName)}</Text>
+                <Text fontSize="xs" fontWeight="medium" opacity={0.9} mt={0.5}>
+                  Institute ID: {selectedRow?.instituteId} &middot; {selectedRow?.age} yrs &middot; {selectedRow?.gender}{selectedRow?.patientType ? ` \u00b7 ${toTitleCase(selectedRow.patientType)}` : ""}
                 </Text>
-                <Stack spacing={2}>
-                  {selectedRow.labReports.map((report, idx) => {
-                    const isFile = !!report.s3_key;
-                    return (
-                      <Box key={idx} bg="white" p={3} borderRadius="md" border="1px solid" borderColor="gray.200" borderLeft={isFile ? "3px solid #38A169" : "3px solid #3182CE"} boxShadow="xs">
-                        <Flex justify="space-between" align="center" mb={isFile ? 1.5 : 2}>
-                          <Text fontWeight="bold" fontSize="xs" color="gray.800" maxW="65%" noOfLines={2}>{report.test_name || "Lab Test"}</Text>
-                          <Flex align="center" gap={1.5} px={2.5} py={0.5} borderRadius="full" border="1px solid" borderColor={isFile ? "green.300" : "blue.300"} bg={isFile ? "green.50" : "blue.50"}>
-                            <Box w={1.5} h={1.5} borderRadius="full" bg={isFile ? "#38A169" : "#3182CE"} flexShrink={0} />
-                            <Text fontSize="2xs" fontWeight="semibold" color={isFile ? "green.700" : "blue.700"} whiteSpace="nowrap">{isFile ? "File Uploaded" : "Results Entered"}</Text>
-                          </Flex>
-                        </Flex>
-                        {isFile ? (
-                          <Flex align="center" justify="space-between" bg="gray.50" px={2} py={1} borderRadius="sm">
-                            <Text fontSize="2xs" color="gray.600" isTruncated maxW="65%">📎 <strong>{report.file_name}</strong></Text>
-                            <Button size="xs" colorScheme="blue" variant="ghost" fontSize="2xs" px={2} h={5} leftIcon={<FiExternalLink size={10} />} isLoading={viewingFileKey === report.s3_key} onClick={() => handleViewFile(report.s3_key)}>View File</Button>
-                          </Flex>
-                        ) : (
-                          (() => {
-                             const testParams = getTestParameters(report.test_name);
-                             const entries = Object.entries(report.results || {});
-                             const filteredEntries = testParams.length > 0
-                               ? entries.filter(([param]) => matchesParam(param, testParams))
-                               : entries;
+              </Box>
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton color="white" top="20px" right="20px" />
 
-                            return (
-                              <Table variant="simple" size="xs" mt={1}>
-                                <Thead>
-                                  <Tr>
-                                    <Th fontSize="2xs" color="gray.500" py={1} px={1}>Parameter</Th>
-                                    <Th fontSize="2xs" color="gray.500" py={1} px={1}>Value</Th>
-                                    <Th fontSize="2xs" color="gray.500" py={1} px={1}>Reference</Th>
-                                    <Th fontSize="2xs" color="gray.500" py={1} px={1}>Units</Th>
-                                  </Tr>
-                                </Thead>
-                                <Tbody>
-                                  {filteredEntries.map(([param, val]) => {
-                                    const value = typeof val === "object" ? (val.value ?? "—") : (val || "—");
-                                    const ref = typeof val === "object" ? (val.reference_range ?? "N/A") : "N/A";
-                                    const units = typeof val === "object" ? (val.units ?? "N/A") : "N/A";
-                                    return (
-                                      <Tr key={param}>
-                                        <Td fontSize="2xs" py={0.5} px={1} color="gray.700">{param}</Td>
-                                        <Td fontSize="2xs" py={0.5} px={1} fontWeight="bold" color="blue.700">{String(value)}</Td>
-                                        <Td fontSize="2xs" py={0.5} px={1} color="gray.600">{String(ref)}</Td>
-                                        <Td fontSize="2xs" py={0.5} px={1} color="gray.500">{String(units)}</Td>
-                                      </Tr>
-                                    );
-                                  })}
-                                </Tbody>
-                              </Table>
-                            );
-                          })()
-                        )}
-                        {report.remarks && <Text mt={1} fontSize="2xs" color="gray.500" fontStyle="italic">Remarks: {report.remarks}</Text>}
-                        {report.timestamp && <Text mt={0.5} fontSize="2xs" color="gray.400" textAlign="right">Saved: {formatDateTimeIST(report.timestamp)}</Text>}
+          <ModalBody bg="gray.50" p={6}>
+            {selectedRow && (
+              <Grid templateColumns={{ base: "1fr", md: "280px 1fr" }} gap={6} alignItems="start">
+                {/* Left Column: Demographics & Visit Meta */}
+                <GridItem>
+                  <Stack spacing={4}>
+                    <Box bg="white" p={4} borderRadius="xl" border="1px solid" borderColor="gray.200" boxShadow="xs">
+                      <Heading size="xs" color="blue.800" mb={3.5} textTransform="uppercase" letterSpacing="wider" fontWeight="bold">Visit Summary</Heading>
+                      <Stack spacing={3}>
+                        <Box>
+                          <Text fontSize="2xs" color="gray.400" fontWeight="bold" textTransform="uppercase">Attending Physician</Text>
+                          <Text fontSize="xs" fontWeight="semibold" color="gray.700"> {selectedRow.doctorName || "N/A"}</Text>
+                        </Box>
+                        <Box>
+                          <Text fontSize="2xs" color="gray.400" fontWeight="bold" textTransform="uppercase">Completed Date</Text>
+                          <Text fontSize="xs" fontWeight="semibold" color="gray.700">{formatDateTimeIST(selectedRow.latestTimestamp)}</Text>
+                        </Box>
+                        <Box>
+                          <Text fontSize="2xs" color="gray.400" fontWeight="bold" textTransform="uppercase">Report Breakdown</Text>
+                          <HStack mt={1} spacing={1.5}>
+                            <Badge colorScheme="blue" fontSize="2xs" px={2} py={0.5} borderRadius="md">{selectedRow.enteredCount} Entered</Badge>
+                            <Badge colorScheme="green" fontSize="2xs" px={2} py={0.5} borderRadius="md">{selectedRow.fileCount} File{selectedRow.fileCount !== 1 ? "s" : ""}</Badge>
+                          </HStack>
+                        </Box>
+                      </Stack>
+                    </Box>
+                  </Stack>
+                </GridItem>
+
+                {/* Right Column: Dynamic Reports List */}
+                <GridItem>
+                  <Stack spacing={4}>
+                    <Text fontSize="xs" fontWeight="bold" color="gray.500" textTransform="uppercase" letterSpacing="wider">
+                      Detailed Test Results
+                    </Text>
+                    <Stack spacing={4}>
+                      {selectedRow.labReports.map((report, idx) => {
+                        const isFile = !!report.s3_key;
+                        return (
+                          <Box
+                            key={idx}
+                            bg="white"
+                            p={4}
+                            borderRadius="xl"
+                            border="1px solid"
+                            borderColor="gray.200"
+                            borderLeft={isFile ? "4px solid #48BB78" : "4px solid #3182CE"}
+                            boxShadow="xs"
+                          >
+                            <Flex justify="space-between" align="center" mb={3}>
+                              <Text fontWeight="bold" fontSize="sm" color="blue.900">
+                                {cleanTestName(report.test_name)}
+                              </Text>
+                              <Flex
+                                align="center"
+                                gap={1.5}
+                                px={2.5}
+                                py={0.5}
+                                borderRadius="full"
+                                border="1px solid"
+                                borderColor={isFile ? "green.200" : "blue.200"}
+                                bg={isFile ? "green.50" : "blue.50"}
+                              >
+                                <Box w={1.5} h={1.5} borderRadius="full" bg={isFile ? "#48BB78" : "#3182CE"} flexShrink={0} />
+                                <Text fontSize="2xs" fontWeight="bold" color={isFile ? "green.700" : "blue.700"} whiteSpace="nowrap">
+                                  {isFile ? "File Uploaded" : "Results Entered"}
+                                </Text>
+                              </Flex>
+                            </Flex>
+
+                            {isFile ? (
+                              <Flex align="center" justify="space-between" bg="gray.50" px={3} py={2} borderRadius="xl" border="1px solid" borderColor="gray.100">
+                                <Text fontSize="xs" color="gray.600" isTruncated maxW="70%">
+                                  📎 <strong>{report.file_name}</strong>
+                                </Text>
+                                <Button
+                                  size="xs"
+                                  colorScheme="blue"
+                                  variant="solid"
+                                  borderRadius="md"
+                                  leftIcon={<FiExternalLink size={12} />}
+                                  isLoading={viewingFileKey === report.s3_key}
+                                  onClick={() => handleViewFile(report.s3_key)}
+                                >
+                                  View Scan
+                                </Button>
+                              </Flex>
+                            ) : (
+                              (() => {
+                                const testParams = getTestParameters(report.test_name);
+                                const entries = Object.entries(report.results || {});
+                                const filteredEntries = testParams.length > 0
+                                  ? entries.filter(([param]) => matchesParam(param, testParams))
+                                  : entries;
+
+                                return (
+                                  <Box borderRadius="xl" border="1px solid" borderColor="gray.200" overflow="hidden" mt={1}>
+                                    <Table variant="simple" size="sm">
+                                      <Thead bg="gray.50">
+                                        <Tr>
+                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Parameter</Th>
+                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Value</Th>
+                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Reference Range</Th>
+                                          <Th fontSize="2xs" color="gray.600" py={2} px={3} textTransform="uppercase" fontWeight="bold">Units</Th>
+                                        </Tr>
+                                      </Thead>
+                                      <Tbody>
+                                        {filteredEntries.map(([param, val]) => {
+                                          const value = typeof val === "object" ? (val.value ?? "—") : (val || "—");
+                                          const ref = typeof val === "object" ? (val.reference_range ?? "N/A") : "N/A";
+                                          const units = typeof val === "object" ? (val.units ?? "N/A") : "N/A";
+                                          return (
+                                            <Tr key={param} _hover={{ bg: "gray.50" }}>
+                                              <Td fontSize="xs" py={2} px={3} color="gray.850" fontWeight="medium">{param}</Td>
+                                              <Td fontSize="xs" py={2} px={3} fontWeight="bold" color="blue.600">{String(value)}</Td>
+                                              <Td fontSize="xs" py={2} px={3} color="gray.600">{String(ref)}</Td>
+                                              <Td fontSize="xs" py={2} px={3} color="gray.500">{String(units)}</Td>
+                                            </Tr>
+                                          );
+                                        })}
+                                      </Tbody>
+                                    </Table>
+                                  </Box>
+                                );
+                              })()
+                            )}
+                            {report.remarks && (
+                              <Box mt={2.5} p={2.5} bg="gray.50" borderRadius="md" borderLeft="2px solid" borderColor="gray.300">
+                                <Text fontSize="xs" color="gray.600" fontStyle="italic"><strong>Remarks:</strong> {report.remarks}</Text>
+                              </Box>
+                            )}
+                            {report.timestamp && (
+                              <Text mt={2} fontSize="2xs" color="gray.400" textAlign="right">
+                                Saved: {formatDateTimeIST(report.timestamp)}
+                              </Text>
+                            )}
+                          </Box>
+                        );
+                      })}
+                    </Stack>
+                    {selectedRow.fileCount > 0 && selectedRow.enteredCount === 0 && (
+                      <Box bg="orange.50" p={3.5} borderRadius="xl" border="1px solid" borderColor="orange.200">
+                        <Text fontSize="xs" color="orange.800" fontWeight="medium">
+                          🔒 This visit only contains uploaded scan files. For patient security, scans cannot be shared via email. Please provide the patient with a printed/physical copy.
+                        </Text>
                       </Box>
-                    );
-                  })}
-                </Stack>
-                {selectedRow.fileCount > 0 && selectedRow.enteredCount === 0 && (
-                  <Box bg="orange.50" p={3} borderRadius="md" border="1px solid" borderColor="orange.200">
-                    <Text fontSize="xs" color="orange.800">🔒 This visit only contains uploaded file reports. For patient data security, uploaded files cannot be shared via email. Please provide the patient with a physical copy.</Text>
-                  </Box>
-                )}
-              </Stack>
+                    )}
+                  </Stack>
+                </GridItem>
+              </Grid>
             )}
           </ModalBody>
-          <ModalFooter bg="gray.50" gap={3}>
-            <Button onClick={onDetailClose} size="sm" variant="ghost">Close</Button>
-            <Button colorScheme="blue" size="sm" leftIcon={<FiMail />} isDisabled={!selectedRow || selectedRow.enteredCount === 0} isLoading={emailingId === selectedRow?.visitId} onClick={() => { onDetailClose(); handleEmail(selectedRow); }} title={selectedRow?.enteredCount === 0 ? "No manually-entered results to email" : "Send manually-entered results as PDF"}>Email Results PDF</Button>
+          <ModalFooter bg="gray.50" gap={3} py={4} px={6} borderTop="1px solid" borderColor="gray.200">
+            <Button onClick={onDetailClose} size="sm" variant="outline" borderRadius="xl">Close</Button>
+            <Button colorScheme="blue" size="sm" borderRadius="xl" leftIcon={<FiMail />} isDisabled={!selectedRow || selectedRow.enteredCount === 0} isLoading={emailingId === selectedRow?.visitId} onClick={() => { onDetailClose(); handleEmail(selectedRow); }} title={selectedRow?.enteredCount === 0 ? "No manually-entered results to email" : "Send manually-entered results as PDF"}>Email Results PDF</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>

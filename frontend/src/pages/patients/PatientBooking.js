@@ -34,12 +34,11 @@ import {
   IconButton,
   Tooltip
 } from '@chakra-ui/react';
-import { FiCalendar, FiCheckCircle, FiRefreshCw, FiAlertTriangle, FiArrowLeft, FiPrinter } from "react-icons/fi";
+import { FiCalendar, FiCheckCircle, FiRefreshCw, FiAlertTriangle, FiArrowLeft } from "react-icons/fi";
 import BASE_URL from '../../utils/Config';
 import { toTitleCase, formatDateTimeIST, getWeekdayIST } from '../../utils/utils';
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
 import PrescriptionSlip from '../../components/PrescriptionSlip';
-import PrescriptionModal from '../../components/PrescriptionModal';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
@@ -83,8 +82,7 @@ const PatientBooking = () => {
   const [slotWarningMessage, setSlotWarningMessage] = useState('');
   const [fullSlots, setFullSlots] = useState([]);
 
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState(null);
+
 
   const fetchFullSlots = async (docUsername, dateStr) => {
     if (!docUsername || !dateStr) {
@@ -788,18 +786,6 @@ const PatientBooking = () => {
                                                 OPD Card / Prescription Slip Preview
                                               </Text>
                                               <Flex align="center" gap={2}>
-                                                <Button
-                                                  size="xs"
-                                                  colorScheme="teal"
-                                                  leftIcon={<FiPrinter />}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setPrintData({ ...verifiedPatient, ...app, emr_data: app.emr_data });
-                                                    setIsPrintModalOpen(true);
-                                                  }}
-                                                >
-                                                  Print Slip
-                                                </Button>
                                                 <AccordionIcon w={3.5} h={3.5} />
                                               </Flex>
                                             </Flex>
@@ -1296,13 +1282,7 @@ const PatientBooking = () => {
         </ModalContent>
       </Modal>
 
-      {printData && (
-        <PrescriptionModal
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
-          prescriptionData={printData}
-        />
-      )}
+
 
     </Flex>
   );

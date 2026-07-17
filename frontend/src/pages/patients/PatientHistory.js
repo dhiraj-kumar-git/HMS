@@ -5,8 +5,6 @@ import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
 import PrescriptionSlip from '../../components/PrescriptionSlip';
-import PrescriptionModal from '../../components/PrescriptionModal';
-import { FiPrinter } from 'react-icons/fi';
 
 import {
   Box,
@@ -34,8 +32,6 @@ export default function PatientHistory() {
 
   const [patient, setPatient] = useState(location.state?.patientData || null);
   const [loading, setLoading] = useState(!location.state?.patientData);
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [printData, setPrintData] = useState(null);
 
   const cardBg = useColorModeValue("white", "gray.700");
   const expandedBg = useColorModeValue("gray.50", "gray.600");
@@ -147,18 +143,6 @@ export default function PatientHistory() {
                                   OPD Card / Prescription Slip Preview
                                 </Text>
                                 <Flex align="center" gap={2}>
-                                  <Button
-                                    size="xs"
-                                    colorScheme="blue"
-                                    leftIcon={<FiPrinter />}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setPrintData({ ...patient, ...app, emr_data: app.emr_data });
-                                      setIsPrintModalOpen(true);
-                                    }}
-                                  >
-                                    Print Slip
-                                  </Button>
                                   <AccordionIcon />
                                 </Flex>
                               </Flex>
@@ -181,14 +165,6 @@ export default function PatientHistory() {
           <Text>No history available</Text>
         )}
       </Box>
-      
-      {printData && (
-        <PrescriptionModal
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
-          prescriptionData={printData}
-        />
-      )}
     </Box>
   );
 }

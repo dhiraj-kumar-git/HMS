@@ -7,11 +7,25 @@ import axios from 'axios';
 
 jest.mock('axios');
 
+const mockToast = jest.fn();
+jest.mock('@chakra-ui/react', () => {
+  const original = jest.requireActual('@chakra-ui/react');
+  return {
+    ...original,
+    useToast: () => mockToast,
+  };
+});
+
 const renderWithChakra = (ui) => {
   return render(<ChakraProvider>{ui}</ChakraProvider>);
 };
 
 describe('EMRHistoryDisplay', () => {
+  beforeEach(() => {
+    mockToast.mockClear();
+    jest.clearAllMocks();
+  });
+
   it('renders legacy view if no emrData is provided', () => {
     const legacyApp = {
       doctor_name: "Dr. Smith",
@@ -58,7 +72,7 @@ describe('EMRHistoryDisplay', () => {
     expect(screen.getByText("BP: 120/80 mmHg")).toBeInTheDocument();
     expect(screen.getByText("Viral fever")).toBeInTheDocument();
     expect(screen.getByText("Dolo")).toBeInTheDocument();
-    expect(screen.getByText("• CBC")).toBeInTheDocument();
+    expect(screen.getByText("CBC")).toBeInTheDocument();
     expect(screen.getByText("Rest")).toBeInTheDocument();
     expect(screen.getByText("2026-07-10")).toBeInTheDocument();
   });
@@ -74,7 +88,6 @@ describe('EMRHistoryDisplay', () => {
     renderWithChakra(<EMRHistoryDisplay emrData={emrData} legacyApp={{}} />);
     
     expect(screen.getByText(/Chief Complaints/i)).toBeInTheDocument();
-    // Since many fields are empty, there should be multiple "-" texts
     const dashes = screen.getAllByText("-");
     expect(dashes.length).toBeGreaterThan(5);
   });
@@ -122,11 +135,11 @@ describe('EMRHistoryDisplay', () => {
     expect(screen.getByText("Lipid Profile")).toBeInTheDocument();
     expect(screen.getByText(/lipid_report.pdf/)).toBeInTheDocument();
 
-    const downloadBtn = screen.getByRole('button', { name: /Download/i });
-    expect(downloadBtn).toBeInTheDocument();
+    const viewBtn = screen.getByRole('button', { name: /View/i });
+    expect(viewBtn).toBeInTheDocument();
     
     const fireEvent = require('@testing-library/react').fireEvent;
-    await fireEvent.click(downloadBtn);
+    await fireEvent.click(viewBtn);
 
     await waitFor(() => {
       expect(axios.post).toHaveBeenCalledWith(
@@ -138,7 +151,7 @@ describe('EMRHistoryDisplay', () => {
     });
   });
 
-  it('shows descriptive alert with HTTP status when download API call fails', async () => {
+  it('shows descriptive toast alert when download API call fails', async () => {
     const legacyApp = {
       lab_reports: [
         {
@@ -151,46 +164,59 @@ describe('EMRHistoryDisplay', () => {
     };
     const mockError = { response: { status: 422, data: { msg: "Missing Authorization Header" } } };
     axios.post.mockRejectedValue(mockError);
-    window.alert = jest.fn();
 
     renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
 
     const fireEvent = require('@testing-library/react').fireEvent;
-    const downloadBtn = screen.getByRole('button', { name: /Download/i });
-    await fireEvent.click(downloadBtn);
+    const viewBtn = screen.getByRole('button', { name: /View/i });
+    await fireEvent.click(viewBtn);
 
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining('422')
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringContaining('422'),
+          status: 'error'
+        })
       );
     });
   });
 
-  it('shows specific alert when s3_key is missing on a report', async () => {
+  it('shows specific toast alert when s3_key is missing on a report', async () => {
     const legacyApp = {
       lab_reports: [
         {
           test_name: "ECG",
           file_name: "ecg.pdf",
-          s3_key: null, // missing key
+          s3_key: null,
           uploaded_at: "2026-07-15T12:00:00Z"
         }
       ]
     };
-    window.alert = jest.fn();
 
     renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
 
     const fireEvent = require('@testing-library/react').fireEvent;
-    const downloadBtn = screen.getByRole('button', { name: /Download/i });
-    await fireEvent.click(downloadBtn);
+    const viewBtn = screen.getByRole('button', { name: /View/i });
+    await fireEvent.click(viewBtn);
 
     await waitFor(() => {
-      expect(window.alert).toHaveBeenCalledWith(
-        expect.stringContaining('No S3 key available')
+      expect(mockToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.stringContaining('No S3 key available'),
+          status: 'warning'
+        })
       );
-      // Should NOT have made any API call
       expect(axios.post).not.toHaveBeenCalled();
     });
+  });
+
+  it('renders a pending lab reports warning banner when lab tests are prescribed but reports are empty', () => {
+    const legacyApp = {
+      lab_tests: [{ lab_test: "CBC", status: "pending" }],
+      lab_reports: []
+    };
+    renderWithChakra(<EMRHistoryDisplay legacyApp={legacyApp} />);
+    expect(screen.getByText("Lab Reports Pending")).toBeInTheDocument();
+    expect(screen.getByText(/Your prescribed lab tests are currently being processed/i)).toBeInTheDocument();
   });
 });

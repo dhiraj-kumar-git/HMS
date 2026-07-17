@@ -18,6 +18,9 @@ import {
   ModalFooter,
   useDisclosure,
   HStack,
+  VStack,
+  InputGroup,
+  InputLeftElement,
   Menu,
   MenuButton,
   MenuList,
@@ -49,11 +52,35 @@ import {
   FiChevronLeft,
   FiChevronRight,
   FiCheckCircle,
+  FiSearch,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import BASE_URL from '../../utils/Config';
 import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+
+const cleanTestName = (name) => {
+  if (!name) return "";
+  const idx = name.indexOf("(");
+  if (idx !== -1) {
+    return name.substring(0, idx).trim();
+  }
+  return name.trim();
+};
+
+const formatDateTimeSplit = (timestamp) => {
+  const formatted = formatDateTimeIST(timestamp);
+  if (formatted.includes(", ")) {
+    const parts = formatted.split(", ");
+    return (
+      <Box>
+        <Text fontSize="xs" fontWeight="semibold" color="gray.700">{parts[0]}</Text>
+        <Text fontSize="2xs" color="gray.500" mt={0.5}>{parts[1]}</Text>
+      </Box>
+    );
+  }
+  return <Text fontSize="xs" fontWeight="semibold" color="gray.700">{formatted}</Text>;
+};
 
 export default function LabTestDashboard() {
   const username = localStorage.getItem("username");
@@ -1306,124 +1333,127 @@ export default function LabTestDashboard() {
         flex="1"
         overflowY="auto"
         p={{ base: 4, md: 6 }}
+        maxW="1600px"
+        mx="auto"
+        w="100%"
       >
         <Box
-          w="full"
-          maxW="1200px"
-          mx="auto"
           bg="white"
+          borderRadius="2xl"
           boxShadow="md"
-          borderRadius="lg"
-          p={{ base: 4, md: 6 }}
+          border="1px solid"
+          borderColor="gray.200"
+          p={6}
         >
           {/* Filter Toolbar */}
           <Flex
-            mb="6"
-            align="center"
-            gap="4"
-            flexWrap="wrap"
+            direction={{ base: "column", lg: "row" }}
+            justify="space-between"
+            gap={4}
+            mb={6}
+            align={{ base: "stretch", lg: "center" }}
           >
-            <HStack spacing="2">
-              <Text fontWeight="semibold" color="gray.600" fontSize="sm">
-                FILTER
-              </Text>
+            <InputGroup maxW={{ base: "100%", lg: "380px" }}>
+              <InputLeftElement pointerEvents="none">
+                <FiSearch color="gray.400" />
+              </InputLeftElement>
               <Input
-                placeholder="Search..."
-                size="sm"
-                borderRadius="md"
-                w="200px"
+                placeholder="Search patient, ID, or doctor..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                bg="gray.50"
+                borderRadius="xl"
+                border="1px solid"
+                borderColor="gray.200"
+                _focus={{ borderColor: "blue.400", bg: "white" }}
               />
-            </HStack>
-
-            <HStack spacing="2">
-              <Text fontWeight="semibold" color="gray.600" fontSize="sm">
-                Date
-              </Text>
-              <Input
-                type="date"
-                size="sm"
-                borderRadius="md"
-                w="150px"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-              <Text fontSize="xs" color="gray.400">
-                to
-              </Text>
-              <Input
-                type="date"
-                size="sm"
-                borderRadius="md"
-                w="150px"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </HStack>
-
-            <Box
-              bg="blue.100"
-              color="blue.800"
-              px="3"
-              py="1"
-              borderRadius="full"
-              fontSize="xs"
-              fontWeight="bold"
+            </InputGroup>
+            <Flex
+              direction={{ base: "column", sm: "row" }}
+              align={{ base: "stretch", sm: "center" }}
+              gap={3}
+              wrap="wrap"
             >
-              Pending Lab Orders: {filteredConfirmed.length}
-            </Box>
-
-            <Button
-              aria-label="Refresh"
-              leftIcon={<FiRefreshCw />}
-              colorScheme="blue"
-              size="sm"
-              onClick={fetchPatients}
-              isLoading={listLoading}
-              variant="outline"
-              bg="white"
-              ml="auto"
-            >
-              Refresh
-            </Button>
+              <HStack spacing={2} align="center" justify="space-between">
+                <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase" whiteSpace="nowrap">Filter Date:</Text>
+                <HStack spacing={2} align="center">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    w="140px"
+                    bg="gray.50"
+                    borderRadius="xl"
+                    border="1px solid"
+                    borderColor="gray.200"
+                    size="sm"
+                  />
+                  <Text fontSize="xs" color="gray.400">to</Text>
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    w="140px"
+                    bg="gray.50"
+                    borderRadius="xl"
+                    border="1px solid"
+                    borderColor="gray.200"
+                    size="sm"
+                  />
+                </HStack>
+              </HStack>
+              <HStack spacing={2} align="center" justify="space-between" alignSelf={{ base: "stretch", sm: "auto" }}>
+                <Badge colorScheme="blue" variant="subtle" fontSize="xs" px={3} py={1} borderRadius="full">
+                  Pending: {filteredConfirmed.length}
+                </Badge>
+                <IconButton
+                  aria-label="Refresh"
+                  icon={<FiRefreshCw className={listLoading ? "spin-animation" : ""} />}
+                  onClick={fetchPatients}
+                  isLoading={listLoading}
+                  variant="outline"
+                  borderRadius="full"
+                  colorScheme="blue"
+                />
+              </HStack>
+            </Flex>
           </Flex>
 
           {listLoading ? (
-            <Flex align="center" justify="center" py="10">
-              <Spinner size="lg" color="blue.500" />
+            <Flex align="center" justify="center" py="12">
+              <Spinner size="xl" color="blue.500" thickness="4px" />
             </Flex>
           ) : (
             <>
               {/* Confirmed Lab Test Orders Table */}
-              <Heading as="h3" size="md" color="gray.800" mb="4">
+              <Heading size="sm" color="blue.900" fontWeight="bold" mb="4">
                 Confirmed Lab Test Orders ({filteredConfirmed.length})
               </Heading>
-              <Box mb="8" overflowX="auto">
+              <Box mb="8" borderRadius="xl" border="1px solid" borderColor="gray.200" overflowX="auto" boxShadow="xs" bg="white">
                 {filteredConfirmed.length === 0 ? (
                   <Flex h="100px" align="center" justify="center">
-                    <Text color="gray.500" fontSize="sm">
+                    <Text color="gray.400" fontSize="sm" fontWeight="medium">
                       No confirmed lab orders found.
                     </Text>
                   </Flex>
                 ) : (
                   <>
-                    <Table variant="simple" size="sm" minW="800px">
+                    <Table variant="simple" size="md" minW="900px">
                       <Thead bg="gray.50">
                         <Tr>
-                          <Th w="15%">Institute ID</Th>
-                          <Th w="20%">Patient Details</Th>
-                          <Th w="15%">Doctor</Th>
-                          <Th w="20%" textAlign="center">Lab Test Order Time</Th>
-                          <Th w="30%" textAlign="center">Actions</Th>
+                          <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="15%">Institute ID</Th>
+                          <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="20%">Patient Details</Th>
+                          <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="15%">Doctor</Th>
+                          <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="20%" textAlign="center">Lab Test Order Time</Th>
+                          <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="30%" textAlign="center">Actions</Th>
                         </Tr>
                       </Thead>
                       <Tbody>
                         {paginatedConfirmed.map((p, idx) => (
-                          <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                            <Td>
+                          <Tr key={idx} _hover={{ bg: "blue.50/20" }} transition="background-color 0.15s">
+                            <Td py={3}>
                               <Flex align="center">
-                                <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                                <Text fontSize="xs" fontWeight="semibold" color="gray.700">
                                   {p.institute_id}
                                 </Text>
                                 <IconButton
@@ -1444,66 +1474,56 @@ export default function LabTestDashboard() {
                                 />
                               </Flex>
                             </Td>
-                            <Td>
-                              <Flex align="center">
-                                <Box>
-                                  <Text fontWeight="bold" fontSize="sm">
-                                    {toTitleCase(p.name)}
-                                  </Text>
-                                  <Text fontSize="xs" color="gray.500">
-                                    {p.age} yrs • {p.gender}
-                                  </Text>
-                                </Box>
-                              </Flex>
-                            </Td>
-                            <Td>
-                              <Text fontSize="sm" color="gray.700">
-                                {p.doctor_name || "N/A"}
+                            <Td py={3}>
+                              <Text fontWeight="bold" color="blue.900" fontSize="sm">{toTitleCase(p.name)}</Text>
+                              <Text fontSize="2xs" color="gray.500" mt={0.5}>
+                                {p.age} yrs &middot; {p.gender}
                               </Text>
                             </Td>
-                            <Td textAlign="center">
-                              <Text fontSize="sm" color="gray.600">
-                                {p.consultation_completed_time
-                                  ? formatDateTimeIST(p.consultation_completed_time)
-                                  : p.visitingTime
-                                    ? formatDateTimeIST(p.visitingTime)
-                                    : "TBD"}
-                              </Text>
+                            <Td py={3} fontSize="xs" color="gray.700" fontWeight="medium">
+                              {p.doctor_name || "—"}
                             </Td>
-                            <Td textAlign="center">
-                              <HStack spacing={2} justify="center">
+                            <Td py={3} textAlign="center">
+                              {formatDateTimeSplit(p.consultation_completed_time || p.visitingTime)}
+                            </Td>
+                            <Td py={3}>
+                               <VStack spacing={1.5} align="center" justify="center" w="100%">
                                 <Button
                                   colorScheme="blue"
-                                  size="sm"
+                                  variant="outline"
+                                  size="xs"
+                                  borderRadius="lg"
                                   onClick={() => openPatientModal(p)}
                                 >
                                   View Lab Order
                                 </Button>
                                 <Button
                                   colorScheme="yellow"
-                                  size="sm"
+                                  size="xs"
+                                  borderRadius="lg"
                                   onClick={() => handleOpenUploadModal(p)}
                                 >
                                   Upload Lab Report
                                 </Button>
                                 {isPatientLabComplete(p) && (
-                                  <IconButton
-                                    aria-label="Complete Lab Test Report"
-                                    icon={<FiCheckCircle />}
+                                  <Button
+                                    leftIcon={<FiCheckCircle />}
                                     colorScheme="green"
-                                    size="sm"
+                                    size="xs"
+                                    borderRadius="lg"
                                     onClick={() => handleCompleteLabTestClick(p)}
-                                    title="Complete Lab Test Report"
-                                  />
+                                  >
+                                    Complete Report
+                                  </Button>
                                 )}
-                              </HStack>
+                              </VStack>
                             </Td>
                           </Tr>
                         ))}
                       </Tbody>
                     </Table>
-                    <Flex justify="space-between" mt={4} align="center">
-                      <Text fontSize="sm" color="gray.500">
+                    <Flex justify="space-between" mt={4} align="center" px={4} pb={4}>
+                      <Text fontSize="xs" fontWeight="bold" color="gray.500">
                         Showing {paginatedConfirmed.length} of {filteredConfirmed.length} orders
                       </Text>
                       <HStack>
@@ -1514,7 +1534,7 @@ export default function LabTestDashboard() {
                           onClick={() => setConfirmedPage(confirmedPage - 1)}
                           aria-label="Previous Page"
                         />
-                        <Text fontSize="sm">Page {confirmedPage} of {Math.ceil(filteredConfirmed.length / ITEMS_PER_PAGE) || 1}</Text>
+                        <Text fontSize="xs" fontWeight="bold" color="gray.700" minW="90px" textAlign="center">Page {confirmedPage} of {Math.ceil(filteredConfirmed.length / ITEMS_PER_PAGE) || 1}</Text>
                         <IconButton
                           icon={<FiChevronRight />}
                           size="sm"
@@ -1538,7 +1558,7 @@ export default function LabTestDashboard() {
                       _focus={{ boxShadow: "none" }}
                     >
                       <Box flex="1" textAlign="left">
-                        <Heading as="h3" size="md" color="gray.800" mb="4" display="flex" alignItems="center">
+                        <Heading size="sm" color="blue.900" fontWeight="bold" display="flex" alignItems="center" mb={1}>
                           Upcoming Lab Test Orders ({filteredUpcoming.length})
                           <AccordionIcon ml={2} />
                         </Heading>
@@ -1546,31 +1566,31 @@ export default function LabTestDashboard() {
                     </AccordionButton>
                   </h2>
                   <AccordionPanel p={0}>
-                    <Box overflowX="auto">
+                    <Box mb="4" borderRadius="xl" border="1px solid" borderColor="gray.200" overflowX="auto" boxShadow="xs" bg="white" mt={2}>
                       {filteredUpcoming.length === 0 ? (
                         <Flex h="100px" align="center" justify="center">
-                          <Text color="gray.500" fontSize="sm">
+                          <Text color="gray.400" fontSize="sm" fontWeight="medium">
                             No upcoming lab orders found.
                           </Text>
                         </Flex>
                       ) : (
                         <>
-                          <Table variant="simple" size="sm" minW="800px">
+                          <Table variant="simple" size="md" minW="900px">
                             <Thead bg="gray.50">
                               <Tr>
-                                <Th w="15%">Institute ID</Th>
-                                <Th w="20%">Patient Details</Th>
-                                <Th w="15%">Doctor</Th>
-                                <Th w="20%" textAlign="center">Lab Test Order Time</Th>
-                                <Th w="30%">Lab Test Name</Th>
+                                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="15%">Institute ID</Th>
+                                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="20%">Patient Details</Th>
+                                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="15%">Doctor</Th>
+                                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="20%" textAlign="center">Lab Test Order Time</Th>
+                                <Th color="gray.600" fontSize="2xs" fontWeight="bold" textTransform="uppercase" py={4} w="30%">Lab Test Name</Th>
                               </Tr>
                             </Thead>
                             <Tbody>
                               {paginatedUpcoming.map((p, idx) => (
-                                <Tr key={idx} _hover={{ bg: "gray.50" }}>
-                                  <Td>
+                                <Tr key={idx} _hover={{ bg: "blue.50/20" }} transition="background-color 0.15s">
+                                  <Td py={3}>
                                     <Flex align="center">
-                                      <Text fontSize="sm" fontWeight="medium" color="gray.800">
+                                      <Text fontSize="xs" fontWeight="semibold" color="gray.700">
                                         {p.institute_id}
                                       </Text>
                                       <IconButton
@@ -1591,43 +1611,33 @@ export default function LabTestDashboard() {
                                       />
                                     </Flex>
                                   </Td>
-                                  <Td>
-                                    <Flex align="center">
-                                      <Box>
-                                        <Text fontWeight="bold" fontSize="sm">
-                                          {toTitleCase(p.name)}
-                                        </Text>
-                                        <Text fontSize="xs" color="gray.500">
-                                          {p.age} yrs • {p.gender}
-                                        </Text>
-                                      </Box>
+                                  <Td py={3}>
+                                    <Text fontWeight="bold" color="blue.900" fontSize="sm">{toTitleCase(p.name)}</Text>
+                                    <Text fontSize="2xs" color="gray.500" mt={0.5}>
+                                      {p.age} yrs &middot; {p.gender}
+                                    </Text>
+                                  </Td>
+                                  <Td py={3} fontSize="xs" color="gray.700" fontWeight="medium">
+                                    {p.doctor_name || "—"}
+                                  </Td>
+                                  <Td py={3} textAlign="center">
+                                    {formatDateTimeSplit(p.consultation_completed_time || p.visitingTime)}
+                                  </Td>
+                                  <Td py={3}>
+                                    <Flex wrap="wrap" gap={1.5}>
+                                      {p.lab_tests?.map((t, tIdx) => (
+                                        <Badge key={tIdx} colorScheme="blue" variant="subtle" fontSize="2xs" px={2} py={0.5} borderRadius="md">
+                                          {cleanTestName(t.lab_test)}
+                                        </Badge>
+                                      )) || <Text fontSize="xs" color="gray.500">—</Text>}
                                     </Flex>
-                                  </Td>
-                                  <Td>
-                                    <Text fontSize="sm" color="gray.700">
-                                      {p.doctor_name || "N/A"}
-                                    </Text>
-                                  </Td>
-                                  <Td textAlign="center">
-                                    <Text fontSize="sm" color="gray.600">
-                                      {p.consultation_completed_time
-                                        ? formatDateTimeIST(p.consultation_completed_time)
-                                        : p.visitingTime
-                                          ? formatDateTimeIST(p.visitingTime)
-                                          : "TBD"}
-                                    </Text>
-                                  </Td>
-                                  <Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                                    <Text fontSize="sm">
-                                      {p.lab_tests?.map((t) => t.lab_test).join(", ") || "N/A"}
-                                    </Text>
                                   </Td>
                                 </Tr>
                               ))}
                             </Tbody>
                           </Table>
-                          <Flex justify="space-between" mt={4} align="center">
-                            <Text fontSize="sm" color="gray.500">
+                          <Flex justify="space-between" mt={4} align="center" px={4} pb={4}>
+                            <Text fontSize="xs" fontWeight="bold" color="gray.500">
                               Showing {paginatedUpcoming.length} of {filteredUpcoming.length} orders
                             </Text>
                             <HStack>
@@ -1638,7 +1648,7 @@ export default function LabTestDashboard() {
                                 onClick={() => setUpcomingPage(upcomingPage - 1)}
                                 aria-label="Previous Page"
                               />
-                              <Text fontSize="sm">Page {upcomingPage} of {Math.ceil(filteredUpcoming.length / ITEMS_PER_PAGE) || 1}</Text>
+                              <Text fontSize="xs" fontWeight="bold" color="gray.700" minW="90px" textAlign="center">Page {upcomingPage} of {Math.ceil(filteredUpcoming.length / ITEMS_PER_PAGE) || 1}</Text>
                               <IconButton
                                 icon={<FiChevronRight />}
                                 size="sm"
