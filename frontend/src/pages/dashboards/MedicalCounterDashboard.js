@@ -39,7 +39,7 @@ import {
   Checkbox,
   Image,
 } from '@chakra-ui/react';
-import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
+import { FiSearch, FiBell, FiMail, FiUser, FiLogOut, FiRefreshCw, FiHelpCircle, FiPrinter, FiChevronLeft, FiChevronRight, FiBookOpen } from 'react-icons/fi';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
@@ -1338,6 +1338,12 @@ function MedicalCounterDashboard() {
             <MenuList>
               <MenuItem icon={<FiUser size={16} />} onClick={() => alert('Profile clicked')}>
                 Profile
+              </MenuItem>
+              <MenuItem
+                icon={<FiBookOpen size={16} />}
+                onClick={() => window.open('/guides/medical-store.html', '_blank', 'noopener,noreferrer')}
+              >
+                User Guide
               </MenuItem>
               <MenuItem icon={<FiLogOut size={16} />} onClick={defaultLogout}>
                 Logout

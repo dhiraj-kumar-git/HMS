@@ -55,6 +55,7 @@ import {
   FiChevronRight,
   FiCheckCircle,
   FiSearch,
+  FiBookOpen,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -1442,6 +1443,12 @@ export default function LabTestDashboard() {
                 onClick={() => alert("Profile clicked!")}
               >
                 Profile
+              </MenuItem>
+              <MenuItem
+                icon={<FiBookOpen />}
+                onClick={() => window.open("/guides/lab-staff.html", "_blank", "noopener,noreferrer")}
+              >
+                User Guide
               </MenuItem>
               <MenuItem icon={<FiLogOut />} onClick={handleLogout}>
                 Logout

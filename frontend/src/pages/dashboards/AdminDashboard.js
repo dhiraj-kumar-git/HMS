@@ -49,6 +49,7 @@ import {
   FiLogOut,
   FiUser,
   FiUploadCloud,
+  FiBookOpen,
 } from 'react-icons/fi';
 import {
   AreaChart,
@@ -215,6 +216,12 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
               <MenuList>
                 <MenuItem icon={<FiUser />} onClick={() => alert('Profile clicked!')}>
                   Profile
+                </MenuItem>
+                <MenuItem
+                  icon={<FiBookOpen />}
+                  onClick={() => window.open('/guides/admin.html', '_blank', 'noopener,noreferrer')}
+                >
+                  User Guide
                 </MenuItem>
                 <MenuItem
                   icon={<FiLogOut />}
