@@ -1,6 +1,6 @@
 import React from "react";
 import { Box, Flex, Heading, Text, IconButton, HStack, Menu, MenuButton, MenuList, MenuItem, Button, Avatar } from "@chakra-ui/react";
-import { FiBell, FiMail, FiUser, FiLogOut } from "react-icons/fi";
+import { FiBell, FiMail, FiUser, FiLogOut, FiBookOpen } from "react-icons/fi";
 import axios from "axios";
 import BASE_URL from "../../utils/Config";
 import ReceptionistQueue from "./ReceptionistQueue";
@@ -55,6 +55,12 @@ export default function ReceptionistDashboard() {
             </MenuButton>
             <MenuList>
               <MenuItem icon={<FiUser />}>Profile</MenuItem>
+              <MenuItem
+                icon={<FiBookOpen />}
+                onClick={() => window.open("/guides/receptionist.html", "_blank", "noopener,noreferrer")}
+              >
+                User Guide
+              </MenuItem>
               <MenuItem icon={<FiLogOut />} onClick={handleLogout}>Logout</MenuItem>
             </MenuList>
           </Menu>

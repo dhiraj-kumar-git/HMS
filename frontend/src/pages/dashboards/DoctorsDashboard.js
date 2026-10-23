@@ -44,6 +44,7 @@ import {
   FiRefreshCw,
   FiSearch,
   FiCheckCircle,
+  FiBookOpen,
 } from "react-icons/fi";
 import axios from "axios";
 import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
@@ -742,6 +743,12 @@ export default function DoctorsDashboard() {
                 onClick={() => alert("Profile clicked!")}
               >
                 Profile
+              </MenuItem>
+              <MenuItem
+                icon={<FiBookOpen />}
+                onClick={() => window.open("/guides/doctor.html", "_blank", "noopener,noreferrer")}
+              >
+                User Guide
               </MenuItem>
               <MenuItem icon={<FiLogOut />} onClick={handleLogout}>
                 Logout

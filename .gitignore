@@ -44,10 +44,12 @@ node_modules
 
 # Project Specific Documentation and Agent Configuration
 .agents/
+.claude/
 GUIDE.md
 NEW_CHANGES.md
 TECHNICAL_DOC.md
 TESTING.md
+docs/
 
 # Local MinIO Storage Volume Data
 minio-data/
