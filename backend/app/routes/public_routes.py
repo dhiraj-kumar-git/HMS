@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_j
 import database
 import time
 import random
+import secrets
 from app.routes.lab_routes import send_email
 
 def strip_public_patient_emr(patient):
@@ -204,7 +205,7 @@ def send_registration_otp():
     if not email:
         return jsonify({"error": "Email is required"}), 400
         
-    otp = str(random.randint(1000, 9999))
+    otp = f"{secrets.randbelow(1000000):06d}"
     if database.redis_client:
         database.redis_client.setex(f"otp_{email}", 300, otp)
     else:
@@ -233,10 +234,18 @@ def verify_registration_otp():
     if not stored_otp:
         return jsonify({"error": "OTP expired or not found. Please request a new one."}), 400
         
-    if stored_otp != user_otp:
+    attempts_key = f"otp_attempts_{email}"
+    attempts = database.redis_client.incr(attempts_key)
+    database.redis_client.expire(attempts_key, 300)
+    if isinstance(attempts, int) and attempts > 5:
+        database.redis_client.delete(f"otp_{email}")
+        return jsonify({"error": "Too many invalid attempts. Please request a new OTP."}), 429
+
+    if not secrets.compare_digest(str(stored_otp), str(user_otp)):
         return jsonify({"error": "Invalid OTP"}), 400
+
         
-    database.redis_client.delete(f"otp_{email}")
+    database.redis_client.delete(f"otp_{email}", attempts_key)
     return jsonify({"message": "OTP verified successfully"}), 200
 
 @public_bp.route('/api/public/verify', methods=['POST'])
@@ -272,7 +281,7 @@ def public_verify_patient():
     if not email:
         return jsonify({"error": "Patient does not have a registered email address for OTP."}), 400
         
-    otp = str(random.randint(1000, 9999))
+    otp = f"{secrets.randbelow(1000000):06d}"
     if not database.store_patient_otp(institute_id, otp):
         return jsonify({"error": "Failed to generate OTP"}), 500
         

@@ -80,7 +80,9 @@ describe('LabReportSlip Component', () => {
     expect(screen.getByText('Signature')).toBeInTheDocument();
     expect(screen.getByText('TEST No.')).toBeInTheDocument();
     expect(screen.getByText('UHID No.')).toBeInTheDocument();
-    expect(screen.getByText('(visit_12345)')).toBeInTheDocument();
-    expect(screen.getByText('(201805300011)')).toBeInTheDocument();
+    // Test No. and UHID No. are rendered as Code 39 barcodes (SVG), one per identifier
+    const barcodes = document.querySelectorAll('svg[viewBox]');
+    expect(barcodes.length).toBe(2);
+    barcodes.forEach((svg) => expect(svg.querySelectorAll('rect').length).toBeGreaterThan(0));
   });
 });

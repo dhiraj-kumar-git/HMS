@@ -1,9 +1,12 @@
+import re
 from app.database.core import *
 from app.database.lab import load_lab_tests_from_config, get_test_price
 
 def get_bill_history_patients(skip=0, limit=20, search_term="", start_date=None, end_date=None):
     query = {}
     if search_term:
+        # Escape user input so regex metacharacters ("(", "*", etc.) are matched literally, not parsed
+        search_term = re.escape(search_term)
         query["$or"] = [
             {"institute_id": {"$regex": search_term, "$options": "i"}},
             {"patient_name": {"$regex": search_term, "$options": "i"}},
@@ -94,6 +97,10 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
     else:
         visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
     
+    # Guard against double payment (e.g. double-click or two cashiers) creating duplicate bills
+    if visit and visit.get("invoice_no"):
+        return {"success": False, "error": "Bill already paid for this visit"}
+
     visit_doc = visit or {}
     doctor_name = visit_doc.get("doctor_name", visit_doc.get("doctor_username", ""))
     lab_tests = visit_doc.get("lab_tests", [])
@@ -312,47 +319,82 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
         bill_docs_to_insert.append(bill_doc)
         total_rounded = total_rounded
 
-    # Insert bills
-    for doc in bill_docs_to_insert:
-        bills.insert_one(doc)
-
-    has_labs = len(final_lab_tests) > 0
-    current_workflow = patient.get("workflow_status", "active")
-    
-    if current_workflow == "consultation":
-        # Doctor still hasn't clicked "Complete", stay in consultation
-        new_workflow = "consultation"
-    else:
-        # Doctor is done, or it was active. Move to next logical step.
-        new_workflow = "lab test pending" if has_labs else "completed"
-    
-    lab_status = "pending" if has_labs else patient.get("lab_status", "none")
-
-    result = patients.update_one(
-        {"institute_id": institute_id},
-        {"$set": {
-            "bill_status": "paid",
-            "workflow_status": new_workflow,
-            "lab_status": lab_status,
-            "invoice_no": invoice_no,
-            "payment_date": now,
-            "lab_tests": final_lab_tests,
-            "prescriptions": final_medicines
-        }}
-    )
-    
+    # Atomically claim the visit so two simultaneous payments cannot both proceed
+    claimed_visit_id = None
     if visit:
-        visits.update_one(
-            {"visit_id": visit["visit_id"]},
+        claim = visits.update_one(
+            {"visit_id": visit["visit_id"], "invoice_no": {"$exists": False}, "billing_lock": {"$ne": True}},
+            {"$set": {"billing_lock": True}}
+        )
+        if claim.matched_count == 0:
+            return {"success": False, "error": "Bill already paid for this visit"}
+        claimed_visit_id = visit["visit_id"]
+
+    try:
+        # Insert bills. Invoice numbers derive from a count, so concurrent payments can collide;
+        # the unique index on invoice_no rejects the duplicate and we retry with a fresh count.
+        date_part = now.strftime('%Y%m%d')
+        for attempt in range(10):
+            for i, doc in enumerate(bill_docs_to_insert):
+                doc["invoice_no"] = f"INV-{date_part}-{(count + i + 1):04d}"
+            invoice_no = ", ".join(d["invoice_no"] for d in bill_docs_to_insert)
+            inserted = []
+            try:
+                for doc in bill_docs_to_insert:
+                    bills.insert_one(doc)
+                    inserted.append(doc["invoice_no"])
+                break
+            except DuplicateKeyError:
+                for inv_no in inserted:
+                    bills.delete_one({"invoice_no": inv_no})
+                for doc in bill_docs_to_insert:
+                    doc.pop("_id", None)
+                if attempt == 9:
+                    raise RuntimeError("Could not allocate a unique invoice number")
+                count = bills.count_documents({"payment_date": {"$gte": today_start}}) + attempt + 1
+
+        has_labs = len(final_lab_tests) > 0
+        current_workflow = patient.get("workflow_status", "active")
+    
+        if current_workflow == "consultation":
+            # Doctor still hasn't clicked "Complete", stay in consultation
+            new_workflow = "consultation"
+        else:
+            # Doctor is done, or it was active. Move to next logical step.
+            new_workflow = "lab test pending" if has_labs else "completed"
+    
+        lab_status = "pending" if has_labs else patient.get("lab_status", "none")
+
+        result = patients.update_one(
+            {"institute_id": institute_id},
             {"$set": {
+                "bill_status": "paid",
+                "workflow_status": new_workflow,
+                "lab_status": lab_status,
                 "invoice_no": invoice_no,
+                "payment_date": now,
                 "lab_tests": final_lab_tests,
-                "prescription_details": final_medicines
+                "prescriptions": final_medicines
             }}
         )
+    
+        if visit:
+            visits.update_one(
+                {"visit_id": visit["visit_id"]},
+                {"$set": {
+                    "invoice_no": invoice_no,
+                    "lab_tests": final_lab_tests,
+                    "prescription_details": final_medicines
+                }, "$unset": {"billing_lock": ""}}
+            )
 
-    returned_bill = bill_docs_to_insert if len(bill_docs_to_insert) > 1 else bill_docs_to_insert[0]
-    return {"success": True, "invoice_no": invoice_no, "total_amount": total_rounded, "bill": returned_bill}
+        returned_bill = bill_docs_to_insert if len(bill_docs_to_insert) > 1 else bill_docs_to_insert[0]
+        return {"success": True, "invoice_no": invoice_no, "total_amount": total_rounded, "bill": returned_bill}
+    except Exception:
+        if claimed_visit_id:
+            # Release the claim so the payment can be retried
+            visits.update_one({"visit_id": claimed_visit_id}, {"$unset": {"billing_lock": ""}})
+        raise
 
 
 def cancel_bill(institute_id, visit_id=None):
@@ -415,7 +457,11 @@ def cancel_bill(institute_id, visit_id=None):
 # Generate a unique medicine ID (e.g., MED0001)
 def generate_medicine_id():
     count = inventory.count_documents({})
-    return f"MED{str(count + 1).zfill(4)}"
+    candidate = count + 1
+    # Count-based IDs collide after deletions or concurrent adds; skip any ID already in use
+    while isinstance(inventory.find_one({"medicine_id": f"MED{str(candidate).zfill(4)}"}), dict):
+        candidate += 1
+    return f"MED{str(candidate).zfill(4)}"
 
 # Add a new medicine to the inventory. All fields are optional.
 def add_medicine(

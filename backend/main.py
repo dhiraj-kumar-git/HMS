@@ -33,6 +33,8 @@ import time
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+if len(app.config["JWT_SECRET_KEY"] or "") < 32:
+    print("WARNING: JWT_SECRET_KEY is missing or shorter than 32 bytes; use a long random secret in production.")
 jwt = JWTManager(app)
 
 @jwt.token_in_blocklist_loader
