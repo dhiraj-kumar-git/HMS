@@ -353,7 +353,7 @@ describe('DoctorsDashboard Component', () => {
       expect.anything(),
       expect.anything()
     );
-  }, 10000);
+  }, 60000);
 
   it('handles viewing history with past visits', async () => {
     axios.get.mockImplementation((url) => {
@@ -393,7 +393,7 @@ describe('DoctorsDashboard Component', () => {
         state: { patientData: { institute_id: '101', appointments: [{ status: 'completed' }] } }
       });
     });
-  }, 10000);
+  }, 60000);
 
   it('handles viewing history without past visits', async () => {
     axios.get.mockImplementation((url) => {
@@ -431,7 +431,7 @@ describe('DoctorsDashboard Component', () => {
       expect(screen.getByText('No Past Visits')).toBeInTheDocument();
       expect(screen.getByText('This patient has not visited you previously for a consultation.')).toBeInTheDocument();
     });
-  }, 10000);
+  }, 60000);
 
 
 

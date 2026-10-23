@@ -1,3 +1,5 @@
+import re
+import secrets
 from app.database.core import *
 def get_all_patients(skip=0, limit=0):
     pipeline = []
@@ -42,6 +44,9 @@ def register_patient(patient_data):
 
     registration_time = datetime.now(timezone.utc)
     patient_data["registration_time"] = registration_time
+    uhid_seq = next_sequence(f"uhid_{registration_time.strftime('%Y%m%d')}")
+    if uhid_seq:
+        patient_data["uhid_no"] = f"{registration_time.strftime('%Y%m%d')}{uhid_seq:04d}"
     patient_data["account_status"] = patient_data.get("account_status", "active")
     
     # Ensure date_of_birth is a datetime object for $dateDiff aggregation
@@ -61,7 +66,11 @@ def register_patient(patient_data):
     for k in ["appointments", "prescriptions", "lab_tests", "remarks", "prescription_details", "lab_results"]:
         patient_data.pop(k, None)
     
-    patients.insert_one(patient_data)
+    try:
+        patients.insert_one(patient_data)
+    except DuplicateKeyError:
+        # A concurrent request registered the same ID between the check above and this insert
+        return None
     return institute_id  # Return the Institute ID
 
 
@@ -106,6 +115,11 @@ def archive_patient(institute_id):
     return result.matched_count > 0
 
 
+ACTIVE_VISIT_STATUSES = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
+MAX_SLOT_CAPACITY = 3
+MAX_PATIENT_ACTIVE_VISITS = 3
+
+
 def book_appointment(institute_id, doctor_username, doctor_name, appointment_time, status="booked", booked_by="patient"):
     if institute_id:
         institute_id = institute_id.upper()
@@ -120,8 +134,31 @@ def book_appointment(institute_id, doctor_username, doctor_name, appointment_tim
     )
     visit_dict = v.to_dict()
     visit_dict["doctor_name"] = doctor_name
-    visits.insert_one(visit_dict)
-    
+    if isinstance(appointment_time, str) and len(appointment_time) >= 10:
+        date_str = appointment_time[:10]
+        opd_seq = next_sequence(f"opd_{date_str}")
+        if opd_seq:
+            visit_dict["opd_no"] = f"{date_str.replace('-', '')}{opd_seq:04d}"
+    inserted = visits.insert_one(visit_dict)
+
+    # Capacity limits are re-checked after the insert so simultaneous bookings cannot both take the
+    # last slot. Each booking is ranked by insertion order (_id); only those ranked past the limit
+    # are rolled back, so the earliest requests always win.
+    new_id = getattr(inserted, "inserted_id", None)
+    if new_id is not None and status in ACTIVE_VISIT_STATUSES:
+        slot_rank = visits.count_documents({
+            "doctor_username": doctor_username, "time": appointment_time,
+            "status": {"$in": ACTIVE_VISIT_STATUSES}, "_id": {"$lte": new_id}
+        })
+        patient_rank = visits.count_documents({
+            "institute_id": institute_id,
+            "status": {"$in": ACTIVE_VISIT_STATUSES}, "_id": {"$lte": new_id}
+        })
+        if (isinstance(slot_rank, int) and slot_rank > MAX_SLOT_CAPACITY) or \
+           (isinstance(patient_rank, int) and patient_rank > MAX_PATIENT_ACTIVE_VISITS):
+            visits.delete_one({"_id": new_id})
+            return False
+
     # Update active status (Legacy fallback, now visits collection is the source of truth)
     # We do NOT overwrite workflow_status here to allow multiple concurrent appointments.
     result = patients.update_one(
@@ -394,7 +431,7 @@ def store_patient_otp(institute_id, otp):
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     result = patients.update_one(
         {"institute_id": institute_id},
-        {"$set": {"otp": otp, "otp_expires": expires_at}}
+        {"$set": {"otp": otp, "otp_expires": expires_at, "otp_attempts": 0}}
     )
     return result.modified_count > 0
 
@@ -449,16 +486,21 @@ def get_receptionist_queue(start_date=None, end_date=None, status_filter=None):
             "registration_time": "$patient_info.registration_time",
             "emr_data": 1,
             "prescriptions": 1,
-            "lab_tests": 1
+            "lab_tests": 1,
+            "opd_no": 1,
+            "stored_uhid_no": "$patient_info.uhid_no"
         }},
         COMPUTE_AGE_STAGE,
         {"$sort": {"time": 1}}
     ]
     results = list(visits.aggregate(pipeline))
     for v in results:
-        # 1. OPD No calculation
+        # 1. OPD No: stored at booking time (stable); legacy visits fall back to positional calculation
         v_time = v.get("time")
-        if v_time:
+        stored_uhid = v.pop("stored_uhid_no", None)
+        if v.get("opd_no"):
+            pass
+        elif v_time:
             date_str = v_time.split("T")[0]
             day_visits = list(visits.find({"time": {"$regex": f"^{date_str}"}}).sort([("time", 1), ("visit_id", 1)]))
             visit_index = 1
@@ -473,7 +515,9 @@ def get_receptionist_queue(start_date=None, end_date=None, status_filter=None):
         # 2. UHID No calculation
         reg_time = v.get("registration_time")
         inst_id = v.get("institute_id", "")
-        if reg_time and inst_id:
+        if stored_uhid:
+            v["uhid_no"] = stored_uhid
+        elif reg_time and inst_id:
             if isinstance(reg_time, str):
                 try:
                     reg_dt = datetime.fromisoformat(reg_time.replace("Z", "+00:00"))
@@ -512,24 +556,31 @@ def update_appointment_status(visit_id, status):
     return res.modified_count > 0
 
 
+MAX_OTP_ATTEMPTS = 5
+
 def verify_patient_otp(institute_id, otp):
     if institute_id:
         institute_id = institute_id.upper()
     patient = patients.find_one({"institute_id": institute_id})
     if not patient or "otp" not in patient:
         return False, "OTP not generated or patient not found."
-    
+
     if patient.get("otp_expires") and datetime.now(timezone.utc) > patient["otp_expires"]:
         return False, "OTP has expired."
-        
-    if str(patient.get("otp")) == str(otp):
-        # Clear the OTP
+
+    attempts = patient.get("otp_attempts", 0)
+    if isinstance(attempts, int) and attempts >= MAX_OTP_ATTEMPTS:
+        return False, "Too many invalid attempts. Please request a new OTP."
+
+    if secrets.compare_digest(str(patient.get("otp")), str(otp)):
+        # Consume the OTP and reset the attempt counter
         patients.update_one(
             {"institute_id": institute_id},
-            {"$unset": {"otp": "", "otp_expires": ""}}
+            {"$unset": {"otp": "", "otp_expires": "", "otp_attempts": ""}}
         )
         return True, "Success"
-        
+
+    patients.update_one({"institute_id": institute_id}, {"$inc": {"otp_attempts": 1}})
     return False, "Invalid OTP."
 
 # Retrieve patient details by Institute ID
@@ -697,7 +748,7 @@ def search_past_patients_for_doctor(doctor_username, doctor_display_name, instit
         match_conditions["institute_id"] = institute_id.upper()
     
     if name:
-        match_conditions["name"] = {"$regex": name, "$options": "i"}
+        match_conditions["name"] = {"$regex": re.escape(name), "$options": "i"}
         
     pipeline.append({"$match": match_conditions})
     
@@ -711,7 +762,7 @@ def search_past_patients_for_doctor(doctor_username, doctor_display_name, instit
                             {"doctor_name": doctor_display_name}
                         ],
                         "status": {"$in": ["completed", "cancelled"]},
-                        "time": {"$regex": f"^{last_visit_date}"}
+                        "time": {"$regex": f"^{re.escape(last_visit_date)}"}
                     }
                 }
             }
@@ -731,7 +782,7 @@ def search_past_patients_for_doctor(doctor_username, doctor_display_name, instit
 
 
 
-def _finalize_visit(visit_id, mark_as_completed=True):
+def _finalize_visit(visit_id, mark_as_completed=True, force_consultation=False):
     if visit_id:
         visit = visits.find_one({"visit_id": visit_id})
         if visit:
@@ -753,7 +804,7 @@ def _finalize_visit(visit_id, mark_as_completed=True):
                 pass
                 
             # Allow explicitly setting the status to "consultation"
-            if not mark_as_completed and getattr(_finalize_visit, 'force_consultation', False):
+            if not mark_as_completed and force_consultation:
                 update_data["status"] = "consultation"
             
             visits.update_one(
@@ -831,9 +882,8 @@ def consultation_patient(visit_id, doctor_username, has_labs, has_meds):
     
     # Update visit summary so patient can see it in history immediately
     # We must explicitly set the visit status to 'consultation' so _map_aggregated_patient picks it up
-    setattr(_finalize_visit, 'force_consultation', True)
-    _finalize_visit(visit_id, mark_as_completed=False)
-    setattr(_finalize_visit, 'force_consultation', False)
+    # Passed explicitly (not via shared function state) so concurrent requests cannot interfere
+    _finalize_visit(visit_id, mark_as_completed=False, force_consultation=True)
 
     # If labs are assigned, move to 'lab test pending' so they show up for billing/labs
     # Otherwise, move to 'consultation'
@@ -1009,10 +1059,10 @@ def _validate_and_parse_bulk_row(row):
             except ValueError:
                 # Fallback to DD-MM-YYYY (common in Excel/Sheets)
                 try:
-                    dob = datetime.strptime(dob_str, "%m-%d-%Y") # In case it's US format
+                    dob = datetime.strptime(dob_str, "%d-%m-%Y")
                 except ValueError:
                     try:
-                        dob = datetime.strptime(dob_str, "%d-%m-%Y")
+                        dob = datetime.strptime(dob_str, "%m-%d-%Y") # US format, only when day-first is impossible
                     except ValueError:
                         raise ValueError(f"Date '{dob_str}' does not match YYYY-MM-DD or DD-MM-YYYY")
 

@@ -551,6 +551,7 @@ export default function AllPatients({ onLogout }) {
                         size="sm"
                         borderRadius="md"
                         bg="white"
+                        placeholder="e.g. John Doe"
                         value={searchName}
                         onChange={(e) => setSearchName(e.target.value)}
                       />
