@@ -41,6 +41,11 @@ describe('MedicalCounterDashboard Component', () => {
           ]
         });
       }
+      if (url.includes('/get_patient/')) {
+        return Promise.resolve({
+          data: { email: 'john@example.com', name: 'John Doe' }
+        });
+      }
       return Promise.resolve({ data: [] });
     });
   });
@@ -73,7 +78,7 @@ describe('MedicalCounterDashboard Component', () => {
   it('opens payment modal and calculates total correctly', async () => {
     renderDashboard();
 
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     fireEvent.click(screen.getByText('John Doe'));
 
@@ -91,10 +96,10 @@ describe('MedicalCounterDashboard Component', () => {
     axios.post.mockResolvedValueOnce({ data: { invoice_no: 'INV-101' } });
 
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Confirm Payment & Mark as Paid')).toBeInTheDocument());
+    await screen.findByText('Confirm Payment & Mark as Paid');
 
     await waitFor(() => {
       const amounts = screen.getAllByText('100.00');
@@ -124,10 +129,10 @@ describe('MedicalCounterDashboard Component', () => {
     axios.post.mockResolvedValueOnce({ data: { message: 'cancelled' } });
 
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Cancel Entire Bill')).toBeInTheDocument());
+    await screen.findByText('Cancel Entire Bill');
 
     const cancelBtn = screen.getByText('Cancel Entire Bill');
     fireEvent.click(cancelBtn);
@@ -146,10 +151,10 @@ describe('MedicalCounterDashboard Component', () => {
 
   it('allows toggling checkboxes for lab tests and medicines', async () => {
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Confirm Payment & Mark as Paid')).toBeInTheDocument());
+    await screen.findByText('Confirm Payment & Mark as Paid');
 
     // Find checkboxes
     const checkboxes = screen.getAllByRole('checkbox');
@@ -182,21 +187,59 @@ describe('MedicalCounterDashboard Component', () => {
     window.open = jest.fn(() => mockWindow);
 
     renderDashboard();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
     fireEvent.click(screen.getByText('John Doe'));
 
-    await waitFor(() => expect(screen.getByText('Confirm Payment & Mark as Paid')).toBeInTheDocument());
+    await screen.findByText('Confirm Payment & Mark as Paid');
 
     const confirmBtn = screen.getByText('Confirm Payment & Mark as Paid');
     fireEvent.click(confirmBtn);
 
-    await waitFor(() => expect(screen.getByText('Print Receipt')).toBeInTheDocument());
+    await screen.findByText('Print & Email Receipt');
 
-    const printBtn = screen.getByText('Print Receipt');
+    const printBtn = screen.getByText('Print & Email Receipt');
     fireEvent.click(printBtn);
 
     expect(window.open).toHaveBeenCalled();
     expect(mockWindow.print).toHaveBeenCalled();
+  });
+
+  it('sorts patients in ascending order of Completed Time (earliest first)', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/active_registrations')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: 'OPD-102',
+              name: 'Jane Smith',
+              age: 30,
+              workflow_status: 'consultation completed',
+              consultation_completed_time: '2026-07-08T10:30:00Z',
+              visit_id: 'VIS-002'
+            },
+            {
+              institute_id: 'OPD-101',
+              name: 'John Doe',
+              age: 25,
+              workflow_status: 'consultation completed',
+              consultation_completed_time: '2026-07-08T10:00:00Z',
+              visit_id: 'VIS-001'
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await screen.findByText('John Doe');
+    await screen.findByText('Jane Smith');
+
+    const rows = screen.getAllByRole('row');
+    // Row 0 is the table header, Row 1 should be John Doe (10:00), Row 2 should be Jane Smith (10:30)
+    expect(rows[1]).toHaveTextContent('John Doe');
+    expect(rows[2]).toHaveTextContent('Jane Smith');
   });
 
   it('renders correctly when no patients are active', async () => {
@@ -211,5 +254,46 @@ describe('MedicalCounterDashboard Component', () => {
     await waitFor(() => {
       expect(screen.getByText('No active patients found.')).toBeInTheDocument();
     });
+  });
+
+  it('renders Patient Details column with name, age and gender', async () => {
+    axios.get.mockImplementation((url) => {
+      if (url.includes('/active_registrations')) {
+        return Promise.resolve({
+          data: [
+            {
+              institute_id: 'OPD-101',
+              name: 'John Doe',
+              age: 25,
+              gender: 'Male',
+              workflow_status: 'consultation completed',
+              bill_status: 'pending',
+              lab_status: 'pending',
+              visit_id: 'VIS-001'
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    renderDashboard();
+
+    await waitFor(() => {
+      expect(screen.getByText('Patient Details')).toBeInTheDocument();
+      expect(screen.getByText('John Doe')).toBeInTheDocument();
+      expect(screen.getByText('25 yrs • Male')).toBeInTheDocument();
+    });
+  });
+
+  it('renders separate bills for medicines and lab tests in preview', async () => {
+    renderDashboard();
+    await screen.findByText('John Doe');
+    fireEvent.click(screen.getByText('John Doe'));
+
+    await screen.findByText('Confirm Payment & Mark as Paid');
+
+    expect(screen.getByText(/SALE BILL \(MEDICINES\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/SALE BILL \(LAB TESTS\)/i)).toBeInTheDocument();
   });
 });

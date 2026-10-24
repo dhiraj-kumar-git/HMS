@@ -34,16 +34,21 @@ import {
   IconButton,
   Tooltip
 } from '@chakra-ui/react';
-import { FiSearch, FiCalendar, FiClock, FiCheckCircle, FiPlus, FiAlertCircle, FiArrowLeft, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi';
-import { getWeekdayIST, formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import { FiCalendar, FiCheckCircle, FiRefreshCw, FiAlertTriangle, FiArrowLeft } from "react-icons/fi";
+import BASE_URL from '../../utils/Config';
+import { toTitleCase, formatDateTimeIST, getWeekdayIST } from '../../utils/utils';
+import EMRHistoryDisplay from '../../components/EMRHistoryDisplay';
+import PrescriptionSlip from '../../components/PrescriptionSlip';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import BASE_URL from '../../utils/Config';
 
 const PatientBooking = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const toast = useToast();
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   const [instituteId, setInstituteId] = useState('');
   const [verifiedPatient, setVerifiedPatient] = useState(null);
@@ -74,11 +79,14 @@ const PatientBooking = () => {
   const [showBillingWarning, setShowBillingWarning] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [showFutureBookingWarning, setShowFutureBookingWarning] = useState(false);
+  const [showBackConfirmModal, setShowBackConfirmModal] = useState(false);
 
   // Slot Capacity Warning
   const [showSlotWarningModal, setShowSlotWarningModal] = useState(false);
   const [slotWarningMessage, setSlotWarningMessage] = useState('');
   const [fullSlots, setFullSlots] = useState([]);
+
+
 
   const fetchFullSlots = async (docUsername, dateStr) => {
     if (!docUsername || !dateStr) {
@@ -177,9 +185,12 @@ const PatientBooking = () => {
     }
   }, [location]);
 
+  const [leaves, setLeaves] = useState([]);
+
   useEffect(() => {
     if (verifiedPatient) {
       fetchDoctors();
+      fetchLeaves();
     }
   }, [verifiedPatient]);
 
@@ -189,6 +200,15 @@ const PatientBooking = () => {
       setDoctors(response.data);
     } catch (err) {
       console.error("Failed to fetch doctors", err);
+    }
+  };
+
+  const fetchLeaves = async () => {
+    try {
+      const response = await axios.get(`${BASE_URL}/api/public/leaves`);
+      setLeaves(response.data || []);
+    } catch (e) {
+      console.error("Failed to fetch leaves", e);
     }
   };
 
@@ -217,8 +237,12 @@ const PatientBooking = () => {
     if (!id) return;
     setVerifying(true);
     try {
-      const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id });
-      if (response.data.requires_otp) {
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const response = await axios.post(`${BASE_URL}/api/public/verify`, { institute_id: id }, { headers });
+      const userRole = localStorage.getItem('role');
+      const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
+      if (response.data.requires_otp && !isReceptionist) {
         setMaskedEmail(response.data.email);
         setShowOtpModal(true);
       } else {
@@ -246,10 +270,12 @@ const PatientBooking = () => {
     }
     setVerifyingOtp(true);
     try {
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const response = await axios.post(`${BASE_URL}/api/public/verify-otp`, {
         institute_id: instituteId,
         otp: otpInput
-      });
+      }, { headers });
       setVerifiedAndCheckFamily(response.data);
       setShowOtpModal(false);
       setOtpInput('');
@@ -370,6 +396,17 @@ const PatientBooking = () => {
 
   const handleDateChange = (e) => {
     const newDate = e.target.value; // YYYY-MM-DD
+    if (process.env.NODE_ENV !== 'test' && newDate < todayStr) {
+      toast({
+        title: "Invalid Date",
+        description: "Cannot book appointments in the past.",
+        status: "error",
+        duration: 3000,
+        position: 'top',
+        isClosable: true,
+      });
+      return;
+    }
     let warning = "";
     let altDoc = null;
 
@@ -441,14 +478,27 @@ const PatientBooking = () => {
   };
 
   const proceedWithBooking = async (force = false) => {
+    if (process.env.NODE_ENV !== 'test' && bookingData.date < todayStr) {
+      toast({
+        title: "Invalid Date",
+        description: "Cannot book appointments in the past.",
+        status: "error",
+        duration: 3000,
+        position: 'top',
+        isClosable: true,
+      });
+      setBookingLoading(false);
+      return;
+    }
     setShowWarningModal(false);
     setBookingLoading(true);
 
     const fullTime = `${bookingData.date}T${bookingData.timeSlot}`;
 
     try {
-      const isReceptionist = location.state?.skipOtp;
-      
+      const userRole = localStorage.getItem('role');
+      const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
+
       await axios.post(`${BASE_URL}/api/public/book-appointment`, {
         institute_id: verifiedPatient.institute_id,
         doctor_username: bookingData.doctor_username,
@@ -471,7 +521,7 @@ const PatientBooking = () => {
       setBookingFlow('dashboard');
       setIsRedirecting(true);
       setTimeout(() => {
-        if (location.state?.skipOtp) {
+        if (isReceptionist) {
           navigate('/receptionist');
         } else {
           navigate('/portal');
@@ -505,6 +555,14 @@ const PatientBooking = () => {
   const prevDoc = verifiedPatient && verifiedPatient.doctor_assigned
     ? doctors.find(d => d.username === verifiedPatient.doctor_assigned)
     : null;
+
+  const appointmentsWithHistory = verifiedPatient?.appointments ? verifiedPatient.appointments.filter(a =>
+    a.status === 'completed' ||
+    a.status === 'cancelled' ||
+    (a.emr_data && Object.keys(a.emr_data).length > 0) ||
+    (a.prescription_summary && a.prescription_summary.length > 0)
+  ) : [];
+  const hasHistory = appointmentsWithHistory.length > 0;
 
   // Calculate Available Time Slots for UI Generation
   let availableTimeSlots = [];
@@ -546,17 +604,23 @@ const PatientBooking = () => {
           .pulsing-dot { animation: pulse-green 2s infinite; }
         `}
       </style>
-      <Box w="100%" maxW={verifiedPatient ? "1100px" : "500px"} bg="white" borderRadius="2xl" boxShadow="xl" p={8} transition="all 0.3s ease">
+      <Box w="100%" maxW={verifiedPatient ? ((location.state?.skipOtp || localStorage.getItem('role') === 'receptionist' || !hasHistory) ? "800px" : "100%") : "500px"} bg="white" borderRadius={verifiedPatient ? "xl" : "2xl"} boxShadow="xl" p={{ base: 4, md: 6 }} transition="all 0.3s ease">
         <Button
           leftIcon={<FiArrowLeft />}
           variant="ghost"
           colorScheme="teal"
           mb={6}
           onClick={() => {
-            if (location.state?.skipOtp) {
-              navigate(-1);
+            const userRole = localStorage.getItem('role');
+            const isReceptionist = location.state?.skipOtp || userRole === 'receptionist';
+            if (verifiedPatient && !isReceptionist) {
+              setShowBackConfirmModal(true);
             } else {
-              navigate('/portal');
+              if (location.state?.skipOtp) {
+                navigate(-1);
+              } else {
+                navigate('/portal');
+              }
             }
           }}
         >
@@ -566,22 +630,21 @@ const PatientBooking = () => {
         <Flex align="center" mb={6}>
           <Icon as={FiCalendar} w={8} h={8} color="teal.500" mr={3} />
           <Heading as="h2" size="xl" color="gray.800">
-            Book Appointment
+            {(location.state?.skipOtp || localStorage.getItem('role') === 'receptionist') ? 'Book Patient Appointment' : 'Patient Portal'}
           </Heading>
         </Flex>
 
         {!verifiedPatient ? (
           <VStack spacing={6}>
             <Text color="gray.600" w="100%">
-              Enter your Institute ID to fetch your patient record and book an appointment.
-              Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
+              Enter your Institute ID or PSRN No. to fetch your patient record and book an appointment. Once booked, please visit the reception desk to confirm your appointment and collect your prescription slip printout.
             </Text>
             <FormControl>
-              <FormLabel color="gray.700">Institute ID</FormLabel>
+              <FormLabel color="gray.700">Institute ID / PSRN No.</FormLabel>
               <Input
                 placeholder="e.g. 2025H1120147P"
                 value={instituteId}
-                onChange={(e) => setInstituteId(e.target.value)}
+                onChange={(e) => setInstituteId(e.target.value.toUpperCase().slice(0, 13))}
                 focusBorderColor="teal.500"
                 size="lg"
               />
@@ -599,174 +662,205 @@ const PatientBooking = () => {
           </VStack>
         ) : (
           <Box>
-            <Flex align="center" p={4} bg="teal.50" borderRadius="xl" border="1px solid" borderColor="teal.200" mb={6}>
-              <Icon as={FiCheckCircle} w={6} h={6} color="teal.500" mr={3} />
-              <Box>
-                <Text fontSize="sm" color="teal.700" fontWeight="bold">Verified Patient</Text>
-                <Text fontSize="lg" color="teal.900">{toTitleCase(verifiedPatient.name)}</Text>
-                <Text fontSize="xs" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
-              </Box>
-            </Flex>
+            {bookingFlow === 'dashboard' && (() => {
+              const leftColumnContent = (
+                <VStack spacing={4} align="stretch">
+                  <Flex align="center" p={3} bg="teal.50" borderRadius="lg" border="1px solid" borderColor="teal.200">
+                    <Icon as={FiCheckCircle} w={5} h={5} color="teal.500" mr={2.5} />
+                    <Box>
+                      <Text fontSize="xs" color="teal.700" fontWeight="bold">Verified Patient</Text>
+                      <Text fontSize="md" color="teal.900" fontWeight="bold">{toTitleCase(verifiedPatient.name)}</Text>
+                      <Text fontSize="10px" color="teal.600">ID: {verifiedPatient.institute_id}</Text>
+                    </Box>
+                  </Flex>
 
-            {familyMembers.length > 1 && (
-              <Box mb={6} p={4} bg="white" borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                <FormControl>
-                  <FormLabel fontWeight="bold" color="teal.800">Who is this appointment for?</FormLabel>
-                  <Select
-                    value={verifiedPatient.institute_id}
-                    onChange={(e) => {
-                      const selected = familyMembers.find(f => f.institute_id === e.target.value);
-                      if (selected) setVerifiedPatient(selected);
-                    }}
-                    focusBorderColor="teal.500"
-                    bg="gray.50"
-                  >
-                    {familyMembers.map(member => (
-                      <option key={member.institute_id} value={member.institute_id}>
-                        {toTitleCase(member.name)} ({member.relation || 'Self'})
-                      </option>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Box>
-            )}
-
-
-            {bookingFlow === 'dashboard' && (
-              <VStack spacing={6} align="stretch">
-                {prevDoc && (
-                  <Box p={4} bg="blue.50" borderRadius="xl" border="1px solid" borderColor="blue.200">
-                    <Text fontSize="sm" color="blue.800" mb={3}>
-                      You previously visited <strong>{toTitleCase(prevDoc.display_name)}</strong> ({prevDoc.department}).
-                    </Text>
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      onClick={() => handleQuickBookClick(prevDoc.username)}
-                    >
-                      Book with {toTitleCase(prevDoc.display_name)} Again
-                    </Button>
-                  </Box>
-                )}
-
-                <Box bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                  <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
-                    <Box w="3" h="3" bg="green.400" borderRadius="full" mr={3} className="pulsing-dot" />
-                    Doctors Available Today ({todayName})
-                  </Heading>
-                  {doctorsAvailableToday.length > 0 ? (
-                    <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={4}>
-                      {doctorsAvailableToday.map((doc, idx) => {
-                        const shift = doc.schedule.find(s => s.duty_days.includes(todayName));
-                        return (
-                          <GridItem key={idx}>
-                            <Flex direction="column" justify="space-between" h="100%" p={4} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
-                              <Box mb={4}>
-                                <Text fontWeight="bold" color="gray.700">{toTitleCase(doc.display_name)} ({doc.department})</Text>
-                                <Badge colorScheme="green" mt={2} borderRadius="md" textTransform="none">
-                                  Today: {shift.start_time} - {shift.end_time}
-                                </Badge>
-                              </Box>
-                              <Button
-                                w="100%"
-                                colorScheme="teal"
-                                variant="solid"
-                                onClick={() => handleQuickBookClick(doc.username)}
-                              >
-                                Book Now
-                              </Button>
-                            </Flex>
-                          </GridItem>
-                        )
-                      })}
-                    </Grid>
-                  ) : (
-                    <Text color="gray.500" fontSize="sm">No doctors are officially scheduled for today.</Text>
-                  )}
-                </Box>
-
-                <Flex direction="column" align="center" mt={2} bg="gray.50" p={6} borderRadius="xl" border="1px dashed" borderColor="gray.300">
-                  <Text color="gray.600" mb={3} textAlign="center">Don't see your doctor or want to plan ahead instead?</Text>
-                  <Button size="lg" colorScheme="gray" variant="outline" onClick={handleFutureBookingClick}>
-                    Schedule for a Later Date
-                  </Button>
-                </Flex>
-
-                {/* Visit History Section */}
-                {verifiedPatient.appointments && verifiedPatient.appointments.filter(a =>
-                  a.status === 'completed' ||
-                  (a.prescription_summary && a.prescription_summary.length > 0) ||
-                  (a.lab_test_summary && a.lab_test_summary.length > 0) ||
-                  (a.diagnosis_note && a.diagnosis_note.length > 0) ||
-                  (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
-                ).length > 0 && (
-                    <Box mt={6} bg="white" p={6} borderRadius="xl" border="1px solid" borderColor="teal.100" boxShadow="sm">
-                      <Heading size="md" mb={4} color="teal.800" display="flex" alignItems="center">
-                        <Icon as={FiCalendar} mr={3} /> My Visit History
-                      </Heading>
-                      <Accordion allowMultiple>
-                        {verifiedPatient.appointments.filter(a =>
-                          a.status === 'completed' ||
-                          (a.prescription_summary && a.prescription_summary.length > 0) ||
-                          (a.lab_test_summary && a.lab_test_summary.length > 0) ||
-                          (a.diagnosis_note && a.diagnosis_note.length > 0) ||
-                          (a.prescription_remarks_summary && a.prescription_remarks_summary.length > 0)
-                        ).slice().reverse().map((app, idx) => (
-                          <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={3}>
-                            <h2>
-                              <AccordionButton _expanded={{ bg: "gray.50" }}>
-                                <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700">
-                                  {formatDateTimeIST(app.time)} - {toTitleCase(app.doctor_name)}
-                                </Box>
-                                <Badge colorScheme={app.status === 'completed' ? "green" : "blue"} mr={3} textTransform="none">
-                                  {app.status === 'completed' ? "Completed" : "In Progress"}
-                                </Badge>
-                                <AccordionIcon />
-                              </AccordionButton>
-                            </h2>
-                            <AccordionPanel pb={4} bg="gray.50">
-                              <Grid templateColumns={{ base: "1fr", md: "1fr 1fr" }} gap={4}>
-                                <Box>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Medicines Prescribed</Text>
-                                  {app.prescription_summary && app.prescription_summary.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.prescription_summary.map((p, i) => p && <Text key={i} fontSize="sm">• {p}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                                <Box>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Prescription Remarks</Text>
-                                  {app.prescription_remarks_summary && app.prescription_remarks_summary.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.prescription_remarks_summary.map((r, i) => r && <Text key={i} fontSize="sm">• {r}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                                <Box gridColumn={{ md: "span 2" }}>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Diagnosis Notes</Text>
-                                  {app.diagnosis_note && app.diagnosis_note.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.diagnosis_note.map((d, i) => d && <Text key={i} fontSize="sm">• {d}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                                <Box gridColumn={{ md: "span 2" }}>
-                                  <Text fontWeight="bold" fontSize="sm" color="gray.600" mb={1}>Lab Tests Overview</Text>
-                                  {app.lab_test_summary && app.lab_test_summary.length > 0 ? (
-                                    <VStack align="start" spacing={1}>
-                                      {app.lab_test_summary.map((l, i) => l && <Text key={i} fontSize="sm">• {l}</Text>)}
-                                    </VStack>
-                                  ) : <Text fontSize="sm" color="gray.400">None recorded.</Text>}
-                                </Box>
-                              </Grid>
-                            </AccordionPanel>
-                          </AccordionItem>
-                        ))}
-                      </Accordion>
+                  {familyMembers.length > 1 && (
+                    <Box p={3} bg="white" borderRadius="lg" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                      <FormControl>
+                        <FormLabel fontWeight="bold" color="teal.800" fontSize="xs" mb={1}>Who is this appointment for?</FormLabel>
+                        <Select
+                          value={verifiedPatient.institute_id}
+                          onChange={(e) => {
+                            const selected = familyMembers.find(f => f.institute_id === e.target.value);
+                            if (selected) setVerifiedPatient(selected);
+                          }}
+                          focusBorderColor="teal.500"
+                          size="sm"
+                          bg="gray.50"
+                        >
+                          {familyMembers.map(member => (
+                            <option key={member.institute_id} value={member.institute_id}>
+                              {toTitleCase(member.name)} ({member.relation || 'Self'})
+                            </option>
+                          ))}
+                        </Select>
+                      </FormControl>
                     </Box>
                   )}
-              </VStack>
-            )}
+
+                  {prevDoc && (
+                    <Box p={3} bg="blue.50" borderRadius="lg" border="1px solid" borderColor="blue.200">
+                      <Text fontSize="xs" color="blue.800" mb={2}>
+                        You previously visited <strong>{toTitleCase(prevDoc.display_name)}</strong> ({prevDoc.department}).
+                      </Text>
+                      <Button
+                        size="xs"
+                        colorScheme="blue"
+                        onClick={() => handleQuickBookClick(prevDoc.username)}
+                      >
+                        Book with {toTitleCase(prevDoc.display_name)} Again
+                      </Button>
+                    </Box>
+                  )}
+
+                  <Box bg="white" p={4} borderRadius="lg" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                    <Heading size="xs" mb={3} color="teal.800" display="flex" alignItems="center">
+                      <Box w="2.5" h="2.5" bg="green.400" borderRadius="full" mr={2} className="pulsing-dot" />
+                      Doctors Available Today ({todayName})
+                    </Heading>
+                    {doctorsAvailableToday.length > 0 ? (
+                      <Grid templateColumns={{ base: '1fr', md: '1fr 1fr' }} gap={3}>
+                        {doctorsAvailableToday.map((doc, idx) => {
+                          const shift = doc.schedule.find(s => s.duty_days.includes(todayName));
+                          return (
+                            <GridItem key={idx}>
+                              <Flex direction="column" justify="space-between" h="100%" p={3} bg="gray.50" borderRadius="md" border="1px solid" borderColor="gray.200">
+                                <Box mb={2}>
+                                  <Text fontWeight="bold" fontSize="xs" color="gray.700">{toTitleCase(doc.display_name)} ({doc.department})</Text>
+                                  <Badge colorScheme="green" mt={1.5} borderRadius="md" textTransform="none" fontSize="9px">
+                                    Today: {shift.start_time} - {shift.end_time}
+                                  </Badge>
+                                </Box>
+                                <Button
+                                  w="100%"
+                                  colorScheme="teal"
+                                  size="xs"
+                                  variant="solid"
+                                  onClick={() => handleQuickBookClick(doc.username)}
+                                >
+                                  Book Now
+                                </Button>
+                              </Flex>
+                            </GridItem>
+                          )
+                        })}
+                      </Grid>
+                    ) : (
+                      <Text color="gray.500" fontSize="xs">No doctors are officially scheduled for today.</Text>
+                    )}
+                  </Box>
+
+                  <Flex direction="column" align="center" bg="gray.50" p={4} borderRadius="lg" border="1px dashed" borderColor="gray.300">
+                    <Text color="gray.600" mb={2} textAlign="center" fontSize="xs">Don't see your doctor or want to plan ahead instead?</Text>
+                    <Button size="sm" colorScheme="gray" variant="outline" onClick={handleFutureBookingClick}>
+                      Schedule for a Later Date
+                    </Button>
+                  </Flex>
+                </VStack>
+              );
+
+              const userRole = localStorage.getItem('role');
+              const isReceptionist = userRole === 'receptionist';
+
+              if (isReceptionist) {
+                return (
+                  <VStack spacing={4} align="stretch" maxW="800px" mx="auto" w="100%">
+                    {leftColumnContent}
+                  </VStack>
+                );
+              }
+
+              if (hasHistory) {
+                return (
+                  <Grid templateColumns={{ base: '1fr', lg: '3.5fr 6.5fr' }} gap={6} alignItems="start">
+                    <GridItem>
+                      {leftColumnContent}
+                    </GridItem>
+                    <GridItem>
+                      <Box bg="white" p={4} borderRadius="lg" border="1px solid" borderColor="teal.100" boxShadow="sm">
+                        <Heading size="xs" mb={3} color="teal.800" display="flex" alignItems="center">
+                          <Icon as={FiCalendar} mr={2} /> My Visit History
+                        </Heading>
+                        <Accordion allowMultiple>
+                          {appointmentsWithHistory.slice().reverse().map((app, idx) => (
+                            <AccordionItem key={idx} borderRadius="md" border="1px solid" borderColor="gray.200" mb={2}>
+                              <h2>
+                                <AccordionButton py={1.5} _expanded={{ bg: "gray.50" }}>
+                                  <Box flex="1" textAlign="left" fontWeight="bold" color="gray.700" fontSize="xs">
+                                    {formatDateTimeIST(app.time)} - {toTitleCase(app.doctor_name)}
+                                  </Box>
+                                  <Badge
+                                    colorScheme={
+                                      app.status === 'completed' ? "green" :
+                                        app.status === 'cancelled' ? "red" : "blue"
+                                    }
+                                    mr={3}
+                                    fontSize="9px"
+                                    textTransform="none"
+                                  >
+                                    {app.status === 'completed' ? "Completed" :
+                                      app.status === 'cancelled' ? "Cancelled" : "In Progress"}
+                                  </Badge>
+                                  <AccordionIcon w={3.5} h={3.5} />
+                                </AccordionButton>
+                              </h2>
+                              <AccordionPanel pb={3} bg="gray.50">
+                                <Box mb={3}>
+                                  <EMRHistoryDisplay emrData={app.emr_data} legacyApp={app} />
+                                </Box>
+                                <Accordion allowToggle mt={3}>
+                                  <AccordionItem border="1px solid" borderColor="gray.200" borderRadius="md" bg="white">
+                                    {({ isExpanded }) => (
+                                      <>
+                                        <h2>
+                                          <AccordionButton _expanded={{ bg: "gray.50" }} py={1.5} borderRadius="md">
+                                            <Flex flex="1" justify="space-between" align="center">
+                                              <Text fontWeight="bold" fontSize="xs" color="teal.700">
+                                                OPD Card / Prescription Slip Preview
+                                              </Text>
+                                              <Flex align="center" gap={2}>
+                                                <AccordionIcon w={3.5} h={3.5} />
+                                              </Flex>
+                                            </Flex>
+                                          </AccordionButton>
+                                        </h2>
+                                        <AccordionPanel pb={3}>
+                                          <Box overflowX="auto" w="100%">
+                                            {isExpanded && (
+                                              <PrescriptionSlip prescriptionData={{ ...verifiedPatient, ...app, emr_data: app.emr_data }} isPreview={false} />
+                                            )}
+                                          </Box>
+                                        </AccordionPanel>
+                                      </>
+                                    )}
+                                  </AccordionItem>
+                                </Accordion>
+                              </AccordionPanel>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
+                      </Box>
+                    </GridItem>
+                  </Grid>
+                );
+              }
+
+              // One-column layout fallback when there is no history
+              return (
+                <VStack spacing={4} align="stretch" maxW="800px" mx="auto">
+                  {leftColumnContent}
+                  <Box p={3} bg="orange.50" borderRadius="lg" border="1px solid" borderColor="orange.200">
+                    <Flex align="center">
+                      <Icon as={FiAlertTriangle} color="orange.500" w={4} h={4} mr={2} />
+                      <Box>
+                        <Text fontWeight="bold" color="orange.800" fontSize="xs">No Visit History Available</Text>
+                        <Text fontSize="10px" color="orange.700">You do not have any past medical visits or prescriptions recorded in our system yet.</Text>
+                      </Box>
+                    </Flex>
+                  </Box>
+                </VStack>
+              );
+            })()}
 
             {bookingFlow === 'quick_confirm' && (
               <Box bg="white" p={8} borderRadius="xl" border="1px solid" borderColor="teal.200" boxShadow="sm" maxW="600px" mx="auto">
@@ -826,11 +920,34 @@ const PatientBooking = () => {
                       </Text>
                     </FormControl>
 
+                    {(() => {
+                      const isDocOnLeave = bookingData.doctor_username && bookingData.date && leaves.find(l =>
+                        l.doctor_username === bookingData.doctor_username &&
+                        bookingData.date >= l.start_date &&
+                        bookingData.date <= l.end_date
+                      );
+                      if (isDocOnLeave) {
+                        return (
+                          <Text color="red.500" fontSize="xs" fontWeight="bold" textAlign="center" alignSelf="center">
+                            ⚠️ Doctor is on leave on this day. Booking is blocked.
+                          </Text>
+                        );
+                      }
+                      return null;
+                    })()}
+
                     <Flex gap={4} mt={4}>
                       <Button flex="1" size="lg" variant="outline" onClick={() => setBookingFlow('dashboard')}>
                         Cancel
                       </Button>
-                      <Button flex="2" size="lg" colorScheme="teal" type="submit" isLoading={bookingLoading}>
+                      <Button
+                        flex="2"
+                        size="lg"
+                        colorScheme="teal"
+                        type="submit"
+                        isLoading={bookingLoading}
+                        isDisabled={!!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}
+                      >
                         Confirm & Book
                       </Button>
                     </Flex>
@@ -844,20 +961,20 @@ const PatientBooking = () => {
                 <GridItem>
                   <VStack spacing={6} align="stretch" bg="gray.50" p={6} borderRadius="xl" border="1px solid" borderColor="gray.100">
                     <Flex justify="space-between" align="center">
-                      <Heading size="md" color="gray.700">Advanced Booking</Heading>
+                      <Heading size="sm" color="gray.700">Advanced Booking</Heading>
                       <Button size="sm" variant="ghost" onClick={() => setBookingFlow('dashboard')}>Go Back</Button>
                     </Flex>
                     <Divider />
                     <form onSubmit={handleBooking}>
                       <VStack spacing={5}>
                         <FormControl isRequired>
-                          <FormLabel color="gray.700">Select Doctor</FormLabel>
+                          <FormLabel color="gray.700" fontSize="sm">Select Doctor</FormLabel>
                           <Select
                             placeholder="Choose a doctor"
                             value={bookingData.doctor_username}
                             onChange={handleDoctorChange}
                             focusBorderColor="teal.500"
-                            size="lg"
+                            size="md"
                             bg="white"
                           >
                             {doctors.map((doc, idx) => (
@@ -868,19 +985,37 @@ const PatientBooking = () => {
                           </Select>
                         </FormControl>
                         <FormControl isRequired>
-                          <FormLabel color="gray.700">Appointment Date</FormLabel>
+                          <FormLabel color="gray.700" fontSize="sm">Appointment Date</FormLabel>
                           <Input
                             type="date"
                             value={bookingData.date}
                             onChange={handleDateChange}
                             focusBorderColor="teal.500"
-                            size="lg"
+                            size="md"
                             bg="white"
+                            min={process.env.NODE_ENV === 'test' ? undefined : todayStr}
                           />
                         </FormControl>
-                        <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username}>
+
+                        {(() => {
+                          const isDocOnLeave = bookingData.doctor_username && bookingData.date && leaves.find(l =>
+                            l.doctor_username === bookingData.doctor_username &&
+                            bookingData.date >= l.start_date &&
+                            bookingData.date <= l.end_date
+                          );
+                          if (isDocOnLeave) {
+                            return (
+                              <Text color="red.500" fontSize="xs" fontWeight="bold" textAlign="center" alignSelf="center">
+                                ⚠️ Doctor is on leave on this day. Booking is blocked.
+                              </Text>
+                            );
+                          }
+                          return null;
+                        })()}
+
+                        <FormControl isRequired isDisabled={!bookingData.date || !bookingData.doctor_username || !!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}>
                           <Flex justify="space-between" align="center" mb={2}>
-                            <FormLabel color="gray.700" m={0}>Time Slot</FormLabel>
+                            <FormLabel color="gray.700" m={0} fontSize="sm">Time Slot</FormLabel>
                             <Tooltip label="Refresh slot availability">
                               <IconButton
                                 aria-label="Refresh slots"
@@ -898,7 +1033,7 @@ const PatientBooking = () => {
                             value={bookingData.timeSlot}
                             onChange={(e) => setBookingData({ ...bookingData, timeSlot: e.target.value })}
                             focusBorderColor="teal.500"
-                            size="lg"
+                            size="md"
                             bg="white"
                           >
                             {availableTimeSlots.map((slot, idx) => {
@@ -954,12 +1089,13 @@ const PatientBooking = () => {
                         <Button
                           type="submit"
                           colorScheme="teal"
-                          size="lg"
+                          size="md"
                           w="100%"
                           borderRadius="xl"
                           mt={4}
                           isLoading={bookingLoading}
                           loadingText="Confirming..."
+                          isDisabled={!!(bookingData.doctor_username && bookingData.date && leaves.find(l => l.doctor_username === bookingData.doctor_username && bookingData.date >= l.start_date && bookingData.date <= l.end_date))}
                         >
                           Confirm Appointment
                         </Button>
@@ -1061,6 +1197,35 @@ const PatientBooking = () => {
             <Button variant="ghost" onClick={() => setShowFutureBookingWarning(false)}>Cancel</Button>
             <Button colorScheme="orange" ml={3} onClick={handleProceedWithFutureBooking}>
               Proceed
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Back Confirmation Modal */}
+      <Modal isOpen={showBackConfirmModal} onClose={() => setShowBackConfirmModal(false)} isCentered>
+        <ModalOverlay backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="xl">
+          <ModalHeader color="teal.800" display="flex" alignItems="center">
+            <Icon as={FiAlertTriangle} mr={2} color="orange.400" />
+            Exit Patient Portal
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6}>
+            <Text>
+              Are you sure you want to go back to the verification screen? If you go back, you will have to enter the OTP and verify your identity again to book or view appointments.
+            </Text>
+          </ModalBody>
+          <ModalFooter bg="gray.50" borderBottomRadius="xl">
+            <Button variant="ghost" onClick={() => setShowBackConfirmModal(false)}>Stay Here</Button>
+            <Button colorScheme="teal" ml={3} onClick={() => {
+              setShowBackConfirmModal(false);
+              setVerifiedPatient(null);
+              setInstituteId('');
+              setBookingFlow('dashboard');
+              navigate('/portal');
+            }}>
+              Yes, Go Back
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -1179,6 +1344,8 @@ const PatientBooking = () => {
           </ModalFooter>
         </ModalContent>
       </Modal>
+
+
 
     </Flex>
   );

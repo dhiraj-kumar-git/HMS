@@ -74,7 +74,7 @@ describe('PatientRegistration Component', () => {
     fireEvent.change(screen.getByLabelText(/Address \/ Hostel/i), { target: { value: 'Other' } });
 
     // Custom Address should appear
-    await waitFor(() => expect(screen.getByLabelText(/Custom Address Details/i)).toBeInTheDocument());
+    await screen.findByLabelText(/Custom Address Details/i);
 
     fireEvent.change(screen.getByLabelText(/Custom Address Details/i), { target: { value: 'My Custom Home' } });
 

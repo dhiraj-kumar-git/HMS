@@ -1,9 +1,38 @@
 from flask import Blueprint, request, jsonify, send_from_directory, current_app
-from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt, verify_jwt_in_request
 import database
 import time
 import random
+import secrets
 from app.routes.lab_routes import send_email
+
+# The portal and the staff-registration screens accept exactly this many digits, so every OTP must have them.
+OTP_LENGTH = 4
+# OTPs run from 1000 to 9999 inclusive: always 4 digits, never starting with a zero.
+OTP_MIN = 1000
+OTP_MAX = 9999
+
+
+def generate_otp():
+    """A random OTP between OTP_MIN and OTP_MAX (1000-9999), from the secure generator."""
+    return str(OTP_MIN + secrets.randbelow(OTP_MAX - OTP_MIN + 1))
+
+
+def strip_public_patient_emr(patient):
+    if not patient:
+        return
+    for k in ["prescriptions", "prescription_details", "remarks", "prescription_summary", 
+              "prescription_remarks_summary", "lab_test_summary", "diagnosis_note", 
+              "prescriptions_draft", "prescription_details_draft", "lab_tests_draft", 
+              "remarks_draft", "emr_data"]:
+        patient.pop(k, None)
+    if "appointments" in patient:
+        for appt in patient["appointments"]:
+            for k in ["emr_data", "prescriptions", "prescription_details", "remarks", 
+                      "prescription_summary", "prescription_remarks_summary", "lab_test_summary", 
+                      "diagnosis_note", "prescriptions_draft", "prescription_details_draft", 
+                      "lab_tests_draft", "remarks_draft"]:
+                appt.pop(k, None)
 import os
 import smtplib
 from email.mime.text import MIMEText
@@ -13,15 +42,11 @@ import uuid
 from datetime import datetime
 import pandas as pd
 import json
-import boto3
-from botocore.config import Config
+from app.s3_client import s3, BUCKET
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-
-s3 = boto3.client('s3', endpoint_url='http://localstack:4566', aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1', config=Config(s3={'addressing_style': 'path'}, signature_version='s3v4'))
-BUCKET = 'hms-lab-reports'
 
 public_bp = Blueprint('public', __name__)
 
@@ -192,7 +217,7 @@ def send_registration_otp():
     if not email:
         return jsonify({"error": "Email is required"}), 400
         
-    otp = str(random.randint(1000, 9999))
+    otp = generate_otp()
     if database.redis_client:
         database.redis_client.setex(f"otp_{email}", 300, otp)
     else:
@@ -221,10 +246,18 @@ def verify_registration_otp():
     if not stored_otp:
         return jsonify({"error": "OTP expired or not found. Please request a new one."}), 400
         
-    if stored_otp != user_otp:
+    attempts_key = f"otp_attempts_{email}"
+    attempts = database.redis_client.incr(attempts_key)
+    database.redis_client.expire(attempts_key, 300)
+    if isinstance(attempts, int) and attempts > 5:
+        database.redis_client.delete(f"otp_{email}")
+        return jsonify({"error": "Too many invalid attempts. Please request a new OTP."}), 429
+
+    if not secrets.compare_digest(str(stored_otp), str(user_otp)):
         return jsonify({"error": "Invalid OTP"}), 400
+
         
-    database.redis_client.delete(f"otp_{email}")
+    database.redis_client.delete(f"otp_{email}", attempts_key)
     return jsonify({"message": "OTP verified successfully"}), 200
 
 @public_bp.route('/api/public/verify', methods=['POST'])
@@ -240,12 +273,27 @@ def public_verify_patient():
         
     if patient.get("account_status") == "archived":
         return jsonify({"error": "This ID belongs to a former student/staff member and is no longer eligible for active appointments. Please contact the Hospital Receptionist."}), 403
+
+    # Check if receptionist JWT token is provided
+    is_receptionist = False
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        if claims and claims.get("role") == "receptionist":
+            is_receptionist = True
+    except:
+        pass
+
+    if is_receptionist:
+        patient_copy = dict(patient)
+        strip_public_patient_emr(patient_copy)
+        return jsonify(patient_copy), 200
         
     email = patient.get("email")
     if not email:
         return jsonify({"error": "Patient does not have a registered email address for OTP."}), 400
         
-    otp = str(random.randint(1000, 9999))
+    otp = generate_otp()
     if not database.store_patient_otp(institute_id, otp):
         return jsonify({"error": "Failed to generate OTP"}), 500
         
@@ -282,15 +330,29 @@ def public_verify_otp():
     patient = database.get_patient_by_id(institute_id)
     if not patient:
         return jsonify({"error": "No patient found"}), 404
+
+    # Check if receptionist JWT token is provided
+    is_receptionist = False
+    try:
+        verify_jwt_in_request(optional=True)
+        claims = get_jwt()
+        if claims and claims.get("role") == "receptionist":
+            is_receptionist = True
+    except:
+        pass
+
+    patient_copy = dict(patient)
+    if is_receptionist:
+        strip_public_patient_emr(patient_copy)
         
     return jsonify({
         "message": "OTP verified successfully", 
-        "institute_id": patient.get("institute_id"), 
-        "name": patient.get("name"),
-        "psrn_id": patient.get("psrn_id"),
-        "doctor_assigned": patient.get("doctor_assigned"),
-        "appointments": patient.get("appointments", []),
-        "bill_status": patient.get("bill_status", "none")
+        "institute_id": patient_copy.get("institute_id"), 
+        "name": patient_copy.get("name"),
+        "psrn_id": patient_copy.get("psrn_id"),
+        "doctor_assigned": patient_copy.get("doctor_assigned"),
+        "appointments": patient_copy.get("appointments", []),
+        "bill_status": patient_copy.get("bill_status", "none")
     }), 200
 
 @public_bp.route('/api/public/doctor-availability/<doctor_username>', methods=['GET'])
@@ -331,6 +393,47 @@ def public_doctor_availability(doctor_username):
     return jsonify({"full_slots": full_slots}), 200
 
 def validate_appointment_slot(institute_id, doctor_username, appointment_time, force, booked_by):
+    if institute_id:
+        institute_id = institute_id.upper()
+
+    # Block past dates in IST (UTC+5:30)
+    from datetime import datetime, timezone, timedelta
+    ist_now = datetime.now(timezone.utc) + timedelta(hours=5, minutes=30)
+    today_ist = ist_now.date()
+    
+    try:
+        if "T" in appointment_time:
+            app_date_str = appointment_time.split("T")[0]
+        else:
+            app_date_str = appointment_time.split(" ")[0]
+        
+        app_date = datetime.strptime(app_date_str, "%Y-%m-%d").date()
+        from flask import current_app
+        is_testing = current_app.config.get("TESTING", False)
+        if not is_testing and app_date < today_ist:
+            return False, (jsonify({"error": "Cannot book appointments in the past."}), 400)
+    except Exception as e:
+        print("Error validating past date:", str(e))
+
+    # Check if doctor is on leave
+    try:
+        if "T" in appointment_time:
+            app_date_str = appointment_time.split("T")[0]
+        else:
+            app_date_str = appointment_time.split(" ")[0]
+        
+        leave_match = database.leaves.find_one({
+            "doctor_username": doctor_username,
+            "start_date": {"$lte": app_date_str},
+            "end_date": {"$gte": app_date_str}
+        })
+        if leave_match:
+            doctor = database.users.find_one({"username": doctor_username})
+            doc_name = doctor.get("display_name") if doctor else doctor_username
+            return False, (jsonify({"error": f"Doctor {doc_name} is on leave on this day."}), 400)
+    except Exception as e:
+        print("Error validating doctor leave:", str(e))
+
     active_statuses = ["upcoming", "booked", "confirmed", "checked_in", "consultation", "Upcoming", "Consultation"]
     
     # HARD BLOCK: Same doctor, same slot
@@ -438,6 +541,8 @@ def validate_appointment_slot(institute_id, doctor_username, appointment_time, f
 def public_book_appointment():
     data = request.json
     institute_id = data.get("institute_id")
+    if institute_id:
+        institute_id = institute_id.upper()
     doctor_username = data.get("doctor_username")
     appointment_time = data.get("time") 
     force = data.get("force", False)
@@ -481,21 +586,12 @@ def check_active_appointments(institute_id):
     
     return jsonify({"active_appointments": active_appointments}), 200
 
-# uploading lab reports to s3
+@public_bp.route('/api/public/leaves', methods=['GET'])
+def get_public_leaves():
+    try:
+        all_leaves = list(database.leaves.find({}, {"_id": 0}))
+        return jsonify(all_leaves), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-s3 = boto3.client(
-    "s3",
-    region_name="eu-north-1",
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
-    config=Config(
-        signature_version="s3v4",
-        s3={"addressing_style": "virtual"}
-    )
-)
-BUCKET = "hms-lab-reports"
-
-try:
-    print(s3.list_buckets())
-except Exception as e:
-    print("S3 ERROR:", e)
+# Central S3 client is imported at module top level

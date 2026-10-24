@@ -1,5 +1,6 @@
 from datetime import datetime, date, timezone, timedelta, timezone
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 from dotenv import load_dotenv
 import os
 import uuid
@@ -34,6 +35,20 @@ sessions = db.sessions
 inventory = db.inventory  # New collection for inventory management
 visits = db.visits # Collection for storing individual patient visits
 bills = db.bills # Collection for storing permanent billing ledger
+leaves = db.leaves # Collection for storing doctor leave dates
+lab_view_access = db.lab_view_access # Short-lived records: admin windows for viewing lab results, and failed password attempts
+counters = db.counters # Atomic sequence counters (OPD / UHID numbers)
+
+def next_sequence(name):
+    """Atomically increment and return the named counter; None if the counter store is unavailable."""
+    try:
+        doc = counters.find_one_and_update(
+            {"_id": name}, {"$inc": {"seq": 1}}, upsert=True, return_document=True
+        )
+        seq = doc.get("seq") if isinstance(doc, dict) else None
+        return seq if isinstance(seq, int) else None
+    except Exception:
+        return None
 
 # Ensure Indexes Configuration
 try:
@@ -50,8 +65,22 @@ try:
     visits.create_index("doctor_username")
     bills.create_index("institute_id")
     bills.create_index("payment_date")
+    leaves.create_index([("doctor_username", 1), ("start_date", 1), ("end_date", 1)])
 except Exception as e:
     print(f"Error creating indexes: {e}")
+
+# Invoice numbers must be unique; kept separate so legacy duplicate data cannot block the indexes above
+try:
+    bills.create_index("invoice_no", unique=True)
+except Exception as e:
+    print(f"Error creating invoice_no unique index (resolve duplicate invoice numbers, then restart): {e}")
+
+# Records in lab_view_access delete themselves when expires_at passes
+try:
+    lab_view_access.create_index("expires_at", expireAfterSeconds=0)
+    lab_view_access.create_index([("kind", 1), ("username", 1)])
+except Exception as e:
+    print(f"Error creating lab_view_access indexes: {e}")
 
 # ---------------------------------------------------------------------------
 # COMPUTE_AGE_STAGE — MongoDB aggregation stage that derives 'age' at query

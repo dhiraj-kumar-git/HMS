@@ -77,8 +77,8 @@ function Login({ onLogin }) {
   return (
     <Flex
       direction="column"
-      w="100vw"
-      h="100vh"
+      w="100%"
+      minH="100vh"
       bg="gray.50"
       overflow="hidden"
       bgSize="cover"

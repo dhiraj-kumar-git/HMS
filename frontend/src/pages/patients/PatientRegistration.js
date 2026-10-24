@@ -9,11 +9,9 @@ import {
   Input,
   Select,
   Button,
-  Text,
   useToast,
   Icon,
-  SimpleGrid,
-  Textarea
+  SimpleGrid
 } from '@chakra-ui/react';
 import { FiArrowLeft, FiUserCheck } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
@@ -42,20 +40,41 @@ const PatientRegistration = () => {
   });
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    let { name, value } = e.target;
+    if (name === 'institute_id') {
+      value = value.toUpperCase().slice(0, 13);
+    }
+    if (name === 'name') {
+      value = value.replace(/[^a-zA-Z\s']/g, '').slice(0, 40);
+    }
+    if (name === 'email') {
+      value = value.slice(0, 60);
+    }
+    setFormData({ ...formData, [name]: value });
   };
-
+ 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (formData.email && !formData.email.includes('@')) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid email address containing '@'.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+        position: 'top'
+      });
+      return;
+    }
     setLoading(true);
-
+ 
     // Process final address
     const finalAddress = formData.address === 'Other' ? formData.customAddress : formData.address;
     const submissionData = {
       ...formData,
       address: finalAddress
     };
-
+ 
     try {
       const response = await axios.post(`${BASE_URL}/api/public/register`, submissionData);
       toast({

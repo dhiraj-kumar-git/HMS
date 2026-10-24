@@ -138,7 +138,7 @@ describe('AllPatients Component', () => {
   it('filters by date and status', async () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     // Filter by status 'active'
     const statusSelect = screen.getAllByRole('combobox')[0]; // Status
@@ -161,7 +161,7 @@ describe('AllPatients Component', () => {
   it('sorts by date', async () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     // Sort
     const sortSelect = screen.getAllByRole('combobox')[1]; // Sort
@@ -182,7 +182,7 @@ describe('AllPatients Component', () => {
     
     axios.get.mockResolvedValueOnce({ data: manyPatients });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('Patient 0')).toBeInTheDocument());
+    await screen.findByText('Patient 0');
 
     expect(screen.queryByText('Patient 14')).not.toBeInTheDocument();
 
@@ -203,13 +203,13 @@ describe('AllPatients Component', () => {
     renderComponent();
 
     // Just verifying it doesn't crash
-    await waitFor(() => expect(screen.getByText(/No patient history available/i)).toBeInTheDocument());
+    await screen.findByText(/No patient history available/i);
   });
 
   it('handles default logout', async () => {
     axios.get.mockResolvedValueOnce({ data: mockPatientsData });
     renderComponent();
-    await waitFor(() => expect(screen.getByText('John Doe')).toBeInTheDocument());
+    await screen.findByText('John Doe');
 
     // Original window.location
     const originalLocation = window.location;
@@ -229,5 +229,78 @@ describe('AllPatients Component', () => {
 
     // Restore window.location
     window.location = originalLocation;
+  });
+
+  it('shows patients with cancelled visits in the list and formats last visit date', async () => {
+    const mockCancelledData = [
+      {
+        institute_id: 'INST003',
+        name: 'Bob Ross',
+        age: 40,
+        gender: 'Male',
+        workflow_status: 'completed',
+        appointments: [
+          {
+            status: 'cancelled',
+            time: '2023-03-01T10:00:00Z',
+            doctor_username: 'doc1',
+            doctor_name: 'Dr. Test'
+          }
+        ]
+      }
+    ];
+    axios.get.mockResolvedValueOnce({ data: mockCancelledData });
+    renderComponent();
+
+    await screen.findByText('Bob Ross');
+    expect(screen.getByText('01/03/2023')).toBeInTheDocument();
+  });
+
+  it('allows searching past patients under the search tab', async () => {
+    axios.get.mockResolvedValueOnce({ data: [] }); // initial mount
+    renderComponent();
+
+    // Wait for loading to finish
+    await screen.findByText('Recent Visits (Past 7 Days)');
+
+    // Click Search Past Patients tab
+    const searchTab = screen.getByRole('tab', { name: 'Search Past Patients' });
+    fireEvent.click(searchTab);
+
+    // Mock search API response
+    const mockSearchResult = [
+      {
+        institute_id: 'INST999',
+        name: 'Searched Patient',
+        age: 50,
+        gender: 'Male',
+        appointments: [
+          { status: 'completed', doctor_username: 'test_doc', time: '2023-01-01T10:00:00Z' }
+        ]
+      }
+    ];
+    axios.get.mockResolvedValueOnce({ data: mockSearchResult });
+
+    // Fill in Name in search form
+    const nameInput = screen.getByPlaceholderText('e.g. John Doe');
+    fireEvent.change(nameInput, { target: { value: 'Searched' } });
+
+    // Click Search button
+    const searchBtn = screen.getByRole('button', { name: 'Search Past Patients' });
+    fireEvent.click(searchBtn);
+
+    // Verify axios called search API
+    await waitFor(() => {
+      expect(axios.get).toHaveBeenLastCalledWith(
+        expect.stringContaining('/doctor/search_past_patients'),
+        expect.objectContaining({
+          params: expect.objectContaining({ name: 'Searched' })
+        })
+      );
+    });
+
+    // Verify searched patient is rendered
+    await screen.findByText('Searched Patient');
+    expect(screen.getByText('INST999')).toBeInTheDocument();
   });
 });

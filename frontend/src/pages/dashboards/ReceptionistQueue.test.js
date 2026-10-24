@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
 import axios from 'axios';
 import ReceptionistQueue from './ReceptionistQueue';
+import { getDateISTString } from '../../utils/utils';
 
 jest.mock('axios');
 
@@ -110,7 +111,7 @@ describe('ReceptionistQueue Component', () => {
     renderComponent();
 
     // Initial fetch should have today's date and 'active' status
-    const today = new Date().toISOString().split('T')[0];
+    const today = getDateISTString();
     await waitFor(() => {
       expect(axios.get).toHaveBeenCalledWith(
         expect.stringContaining('/api/receptionist/queue'),

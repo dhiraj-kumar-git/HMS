@@ -98,12 +98,64 @@ def test_get_patient_history_for_doctor(mocker):
     mock_patients.aggregate.return_value = [{"institute_id": "123", "patient_visits": []}]
     res = get_patient_history_for_doctor("doc1", "Dr. One")
     assert len(res) == 1
+    
+    # Verify pipeline match status in aggregate call
+    pipeline = mock_patients.aggregate.call_args[0][0]
+    match_stage = pipeline[1]["$match"]
+    assert match_stage["patient_visits"]["$elemMatch"]["status"] == {"$in": ["completed", "cancelled"]}
 
 def test_update_consultation_details(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
     mock_visits.update_one.return_value.matched_count = 1
-    res = update_consultation_details("v123", "doc1", [], [], [], [])
+    
+    prescription_data = {
+        "plan": {
+            "medications": [
+                {"drug": "Dolo", "dose": "650mg", "route": "PO", "frequency": "1-1-1", "duration": "3 days", "quantity": "10"}
+            ],
+            "investigations": ["CBC", "X-Ray"]
+        }
+    }
+    
+    res = update_consultation_details("v123", "doc1", prescription_data)
     assert res is True
+    
+    # Verify the $set was called correctly
+    mock_visits.update_one.assert_called_once()
+    call_args = mock_visits.update_one.call_args[0]
+    assert call_args[0] == {"visit_id": "v123"}
+    
+    update_doc = call_args[1]["$set"]
+    assert "prescriptions" in update_doc
+    assert "lab_tests" in update_doc
+    assert "emr_data" in update_doc
+    
+    assert len(update_doc["prescriptions"]) == 1
+    assert update_doc["prescriptions"][0]["note"] == "Dolo"
+    assert update_doc["prescriptions"][0]["dose"] == "650mg"
+    assert update_doc["prescriptions"][0]["route"] == "PO"
+    assert update_doc["prescriptions"][0]["frequency"] == "1-1-1"
+    assert update_doc["prescriptions"][0]["duration"] == "3 days"
+    assert update_doc["prescriptions"][0]["quantity"] == "10"
+    
+    assert len(update_doc["lab_tests"]) == 2
+    assert update_doc["lab_tests"][0]["lab_test"] == "CBC"
+    assert update_doc["lab_tests"][1]["lab_test"] == "X-Ray"
+
+def test_update_consultation_details_empty(mocker):
+    mock_visits = mocker.patch.object(patients_db, 'visits')
+    mock_visits.update_one.return_value.matched_count = 1
+    res = update_consultation_details("v123", "doc1", {})
+    assert res is True
+    
+    update_doc = mock_visits.update_one.call_args[0][1]["$set"]
+    assert len(update_doc["prescriptions"]) == 0
+    assert len(update_doc["lab_tests"]) == 0
+
+def test_update_consultation_details_no_visit(mocker):
+    # Should return False if visit_id is missing
+    res = update_consultation_details("", "doc1", {})
+    assert res is False
 
 def test_complete_patient(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')
@@ -210,6 +262,42 @@ def test_map_aggregated_patient_other_statuses():
     }
     res = _map_aggregated_patient(p)
     assert res["workflow_status"] == "completed"
+
+def test_map_aggregated_patient_visit_independence():
+    p = {
+        "institute_id": "123",
+        "patient_visits": [
+            {
+                "visit_id": "v1", "status": "completed", "invoice_no": None,
+                "lab_tests": [{"status": "pending"}], "prescriptions": [{"medicine": "A"}]
+            },
+            {
+                "visit_id": "v2", "status": "confirmed", "doctor_username": "doc2"
+            }
+        ]
+    }
+    res = _map_aggregated_patient(p)
+    # The root workflow_status should represent the latest active visit's workflow
+    assert res["workflow_status"] == "confirmed"
+    # Root bill_status must aggregate globally and remain "pending" because v1 has an unpaid bill
+    assert res["bill_status"] == "pending"
+    # Root lab_status must aggregate globally and remain "pending" because v1 has a pending lab
+    assert res["lab_status"] == "pending"
+
+def test_map_aggregated_patient_cancelled_visit():
+    p = {
+        "institute_id": "123",
+        "patient_visits": [
+            {
+                "visit_id": "v1", "status": "cancelled", "invoice_no": None,
+                "lab_tests": [{"status": "cancelled"}], "prescriptions": [{"medicine": "A"}]
+            }
+        ]
+    }
+    res = _map_aggregated_patient(p)
+    assert res["workflow_status"] == "cancelled"
+    assert res["bill_status"] == "cancelled"
+    assert res["lab_status"] == "cancelled"
 
 def test_get_active_visit_id(mocker):
     mock_visits = mocker.patch.object(patients_db, 'visits')

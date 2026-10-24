@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ChakraProvider } from '@chakra-ui/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import axios from 'axios';
 import PatientBooking from './PatientBooking';
 import * as utils from '../../utils/utils';
@@ -622,4 +622,94 @@ describe('PatientBooking Component', () => {
       expect(screen.getByText(/You have reached the maximum limit of 3 active appointments/i)).toBeInTheDocument();
     });
   }, 10000);
+
+  it('renders patient visit history and expands the prescription slip accordion', async () => {
+    const mockHistoryPatient = {
+      institute_id: '12345',
+      name: 'John Doe',
+      appointments: [
+        {
+          status: 'completed',
+          time: new Date('2023-01-01T10:00:00Z').toISOString(),
+          doctor_name: 'Dr. Smith',
+          emr_data: {
+            assessment: { provisional_diagnosis: 'Fever' },
+            subjective: { chief_complaints: 'High temp' },
+            plan: { investigations: [], medications: [] }
+          }
+        }
+      ]
+    };
+
+    axios.post.mockResolvedValueOnce({ data: mockHistoryPatient });
+    renderComponent();
+
+    // Verify patient to load history
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    // Wait for history to load
+    await waitFor(() => {
+      expect(screen.getByText('My Visit History')).toBeInTheDocument();
+    });
+
+    // Expand the main visit history panel
+    const visitAccordionButton = screen.getByText(/Dr. Smith/i);
+    fireEvent.click(visitAccordionButton);
+
+    // Verify EMR details from EMRHistoryDisplay are rendered
+    expect(screen.getByText(/High temp/i)).toBeInTheDocument();
+
+    // Verify OPD Card nested accordion button is visible, but the slip itself is closed/not visible
+    const slipAccordionButton = screen.getByText('OPD Card / Prescription Slip Preview');
+    expect(slipAccordionButton).toBeInTheDocument();
+    expect(screen.queryByText('Birla Institute of Technology & Science')).not.toBeInTheDocument();
+
+    // Expand the OPD Card nested accordion
+    fireEvent.click(slipAccordionButton);
+    expect(screen.getByText('Birla Institute of Technology & Science')).toBeInTheDocument();
+
+  });
+
+  it('asks for confirmation when clicking Back to Portal after verification', async () => {
+    const mockPatient = {
+      institute_id: '12345',
+      name: 'John Doe',
+      appointments: []
+    };
+    axios.post.mockResolvedValueOnce({ data: mockPatient });
+    renderComponent();
+
+    // Verify patient
+    fireEvent.change(screen.getByPlaceholderText(/e.g. 2025H1120147P/i), { target: { value: '12345' } });
+    fireEvent.click(screen.getByRole('button', { name: /Verify Patient/i }));
+
+    // Wait for verified state
+    await screen.findByText('Verified Patient');
+
+    // Click Back to Portal button
+    const backBtn = screen.getByRole('button', { name: 'Back to Portal' });
+    fireEvent.click(backBtn);
+
+    // Confirmation Modal should appear
+    await screen.findByText('Exit Patient Portal');
+    expect(screen.getByText(/Are you sure you want to go back/i)).toBeInTheDocument();
+
+    // Click Stay Here to cancel
+    fireEvent.click(screen.getByRole('button', { name: 'Stay Here' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Exit Patient Portal')).not.toBeInTheDocument();
+    });
+    expect(screen.getByText('Verified Patient')).toBeInTheDocument();
+
+    // Click back again
+    fireEvent.click(backBtn);
+    await screen.findByText('Exit Patient Portal');
+
+    // Click Yes, Go Back to confirm
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, Go Back' }));
+    await waitFor(() => {
+      expect(screen.queryByText('Verified Patient')).not.toBeInTheDocument();
+    });
+  });
 });

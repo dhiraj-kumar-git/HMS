@@ -6,6 +6,13 @@ This architecture centralizes patient registration, unifies doctor queue workflo
 
 ---
 
+## Documentation Directory
+- **[Functional Guide (GUIDE.md)](./GUIDE.md)**: A complete walkthrough of user roles, dashboards, and system functionalities.
+- **[Technical Documentation (TECHNICAL_DOC.md)](./TECHNICAL_DOC.md)**: Details on the system architecture, backend routes, directory structure, and onboarding guidelines.
+- **[API Testing Guide (API_TESTING_GUIDE.md)](./API_TESTING_GUIDE.md)**: Instructions for using the built-in Swagger UI sandbox to test HMS APIs.
+
+---
+
 ## Technology Stack
 
 - **Frontend**: React.js, Chakra UI, Tailwind CSS, Framer Motion
@@ -86,6 +93,38 @@ docker compose logs -f
 When you no longer need the application broadcasting, smoothly terminate and spin down all containers by running:
 ```bash
 docker compose down
+```
+
+---
+
+## Linting & Code Quality
+
+Linting tools are configured for both the frontend and backend to check for syntax errors, unused variables, styling issues, and potential bugs.
+
+### 1. Frontend Linting (ESLint)
+To run ESLint on the frontend codebase:
+```bash
+cd frontend
+# Run checks and view warnings/errors
+npm run lint
+
+# Automatically resolve fixable style violations and unused imports
+npm run lint:fix
+```
+
+### 2. Backend Linting (Ruff)
+Ruff is set up to analyze Python files. Config rules (like ignoring line-length checks) are managed in `backend/pyproject.toml`.
+To run checks on the backend:
+```bash
+cd backend
+# Activate virtual environment
+venv\Scripts\activate  # or source venv/bin/activate on Mac/Linux
+
+# Run checks and view issues
+ruff check .
+
+# Automatically fix fixable issues
+ruff check . --fix
 ```
 
 ---

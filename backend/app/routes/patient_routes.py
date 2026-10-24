@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify, send_from_directory, current_app
+from flask import Blueprint, request, jsonify, send_from_directory, current_app, send_file
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 import database
 import io
+import mimetypes
 from database import get_doctors_name, generate_relation_id
 import os
 import smtplib
@@ -12,15 +13,11 @@ import uuid
 from datetime import datetime
 import pandas as pd
 import json
-import boto3
-from botocore.config import Config
+from app.s3_client import s3, BUCKET, get_public_s3_url, generate_presigned_url
 SMTP_SERVER = 'smtp.gmail.com'
 SMTP_PORT = 587
 EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-
-s3 = boto3.client('s3', endpoint_url='http://localstack:4566', aws_access_key_id='test', aws_secret_access_key='test', region_name='us-east-1', config=Config(s3={'addressing_style': 'path'}, signature_version='s3v4'))
-BUCKET = 'hms-lab-reports'
 
 patient_bp = Blueprint('patient', __name__)
 
@@ -52,6 +49,8 @@ def register_patient():
     doctor_assigned = data.get("doctor_assigned")
     patient_type = data.get("patient_type")
     institute_id = data.get("institute_id")
+    if institute_id:
+        institute_id = institute_id.upper()
 
     if patient_type == "Temporary" and not institute_id:
         import uuid
@@ -112,12 +111,38 @@ def register_patient():
         
     return jsonify({"message": "Patient registered successfully", "institute_id": result_id}), 201
 
+def strip_patient_emr(patient):
+    if not patient:
+        return
+    for k in ["prescriptions", "prescription_details", "remarks", "prescription_summary", 
+              "prescription_remarks_summary", "lab_test_summary", "diagnosis_note", 
+              "prescriptions_draft", "prescription_details_draft", "lab_tests_draft", 
+              "remarks_draft", "emr_data"]:
+        patient.pop(k, None)
+    if "appointments" in patient:
+        for appt in patient["appointments"]:
+            for k in ["emr_data", "prescriptions", "prescription_details", "remarks", 
+                      "prescription_summary", "prescription_remarks_summary", "lab_test_summary", 
+                      "diagnosis_note", "prescriptions_draft", "prescription_details_draft", 
+                      "lab_tests_draft", "remarks_draft"]:
+                appt.pop(k, None)
+
 # Protected route to fetch patient details
 @patient_bp.route('/get_patient/<institute_id>', methods=['GET'])
 @jwt_required()
 def get_patient(institute_id):
     patient = database.get_patient_by_id(institute_id)
     if patient:
+        claims = get_jwt()
+        if claims.get("role") == "doctor":
+            username = get_jwt_identity()
+            if "appointments" in patient:
+                patient["appointments"] = [
+                    v for v in patient["appointments"]
+                    if v.get("doctor_username") == username
+                ]
+        elif claims.get("role") == "receptionist":
+            strip_patient_emr(patient)
         return jsonify(patient), 200
     return jsonify({"error": "Patient not found"}), 404
 
@@ -138,6 +163,9 @@ def get_patients():
         
     skip = (page - 1) * limit if limit > 0 else 0
     patients_list = database.get_all_patients(skip, limit)
+    if claims.get("role") == "receptionist":
+        for p in patients_list:
+            strip_patient_emr(p)
     return jsonify(patients_list), 200
 
 
@@ -153,9 +181,11 @@ def get_all_patients_for_doctor():
     try:
         page = int(request.args.get('page', 1))
         limit = int(request.args.get('limit', 0))
+        days = int(request.args.get('days', 7))
     except ValueError:
         page = 1
         limit = 0
+        days = 7
         
     skip = (page - 1) * limit if limit > 0 else 0
     
@@ -163,8 +193,37 @@ def get_all_patients_for_doctor():
     doctor_user = database.users.find_one({"username": username})
     doctor_display_name = doctor_user.get("display_name", username) if doctor_user else username
 
-    all_patients = database.get_patient_history_for_doctor(username, doctor_display_name, skip, limit)
+    all_patients = database.get_patient_history_for_doctor(username, doctor_display_name, skip, limit, days)
     return jsonify(all_patients), 200
+
+
+@patient_bp.route('/doctor/search_past_patients', methods=['GET'])
+@jwt_required()
+def search_past_patients():
+    claims = get_jwt()
+    if claims.get("role") != "doctor":
+        return jsonify({"error": "Unauthorized"}), 403
+
+    username = get_jwt_identity()
+    
+    institute_id = request.args.get('institute_id', '').strip() or None
+    last_visit_date = request.args.get('last_visit_date', '').strip() or None
+    name = request.args.get('name', '').strip() or None
+
+    if not institute_id and not last_visit_date and not name:
+        return jsonify({"error": "Please provide at least one search criterion"}), 400
+
+    doctor_user = database.users.find_one({"username": username})
+    doctor_display_name = doctor_user.get("display_name", username) if doctor_user else username
+
+    results = database.search_past_patients_for_doctor(
+        doctor_username=username,
+        doctor_display_name=doctor_display_name,
+        institute_id=institute_id,
+        last_visit_date=last_visit_date,
+        name=name
+    )
+    return jsonify(results), 200
 
 # Endpoint to get patients assigned to the doctor
 @patient_bp.route('/doctor/patients', methods=['GET'])
@@ -189,12 +248,9 @@ def save_consultation_details_route(visit_id):
     data = request.json
     doctor_username = get_jwt_identity()
     
-    prescriptions = data.get("prescriptions", [])
-    prescription_details = data.get("prescription_details", [])
-    lab_tests = data.get("lab_tests", [])
-    remarks = data.get("remarks", [])
+    prescription_data = data.get("prescription_data", {})
 
-    if database.update_consultation_details(visit_id, doctor_username, prescriptions, prescription_details, lab_tests, remarks):
+    if database.update_consultation_details(visit_id, doctor_username, prescription_data):
         return jsonify({"message": "Consultation details saved successfully"}), 200
     return jsonify({"error": "Failed to save consultation details"}), 400
 
@@ -290,6 +346,8 @@ def get_family(psrn_id):
     family = database.get_family_by_psrn(psrn_id)
     if not family:
         return jsonify({"error": "No family found for this PSRN ID"}), 404
+    for member in family:
+        strip_patient_emr(member)
     return jsonify(family), 200
 
 @patient_bp.route('/api/family/dependant/<institute_id>', methods=['PUT'])
@@ -465,7 +523,7 @@ def debug_s3():
 @jwt_required()
 def generate_upload_url():
     data = request.json
-    instituteId=data.get("instituteId")
+    instituteId = data.get("instituteId")
     filename = data.get("filename")
     content_type = data.get("content_type")
 
@@ -476,24 +534,32 @@ def generate_upload_url():
     key = f"reports/{user}/{uuid.uuid4()}_{filename}"
 
     try:
-        url = s3.generate_presigned_url(
-            "put_object",
-            Params={
-                "Bucket": BUCKET,
-                "Key": key,
-                "ContentType": content_type
-            },
-            ExpiresIn=600
-        )
+        proxy_url = f"{request.host_url.rstrip('/')}/s3/proxy-upload?key={key}"
 
         return jsonify({
-            "upload_url": url,
+            "upload_url": proxy_url,
             "key": key
         })
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
+@patient_bp.route('/s3/proxy-upload', methods=['PUT'])
+@jwt_required()
+def proxy_upload():
+    key = request.args.get('key')
+    if not key:
+        return jsonify({"error": "Missing key"}), 400
+
+    try:
+        s3.put_object(
+            Bucket=BUCKET,
+            Key=key,
+            Body=request.get_data()
+        )
+        return jsonify({"message": "File uploaded successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @patient_bp.route('/s3/save-metadata', methods=['POST'])
 @jwt_required()
 def save_s3_metadata():
@@ -502,6 +568,7 @@ def save_s3_metadata():
     institute_id = data.get("instituteId")
     key = data.get("key")
     filename = data.get("filename")
+    test_name = data.get("testName")
 
     if not institute_id or not key or not filename:
         return jsonify({"error": "Missing fields"}), 400
@@ -509,6 +576,7 @@ def save_s3_metadata():
     user = get_jwt_identity()
 
     report_data = {
+        "test_name": test_name,
         "file_name": filename,
         "s3_key": key,
         "uploaded_by": user,
@@ -525,7 +593,7 @@ def save_s3_metadata():
         return jsonify({"error": str(e)}), 500
 
 @patient_bp.route('/s3/view-url', methods=['POST'])
-@jwt_required()
+@jwt_required(optional=True)
 def generate_view_url():
     data = request.json
     key = data.get("s3_key")
@@ -534,17 +602,31 @@ def generate_view_url():
         return jsonify({"error": "Missing key"}), 400
 
     try:
-        url = s3.generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": BUCKET,
-                "Key": key
-            },
-            ExpiresIn=300
+        proxy_url = f"{request.host_url.rstrip('/')}/s3/proxy-download?key={key}"
+        return jsonify({"url": proxy_url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@patient_bp.route('/s3/proxy-download', methods=['GET'])
+@jwt_required(optional=True)
+def proxy_download():
+    key = request.args.get('key')
+    if not key:
+        return jsonify({"error": "Missing key"}), 400
+
+    try:
+        response_obj = s3.get_object(Bucket=BUCKET, Key=key)
+        file_data = response_obj['Body'].read()
+        mime_type, _ = mimetypes.guess_type(key)
+        if not mime_type:
+            mime_type = 'application/octet-stream'
+        filename = key.split('/')[-1]
+        return send_file(
+            io.BytesIO(file_data),
+            mimetype=mime_type,
+            as_attachment=False,
+            download_name=filename
         )
-
-        return jsonify({"url": url})
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -574,7 +656,7 @@ def get_receptionist_appointments():
 @jwt_required()
 def update_appointment_status_route(visit_id):
     claims = get_jwt()
-    if claims.get("role") not in ["receptionist", "admin"]:
+    if claims.get("role") not in ["receptionist", "admin", "doctor"]:
         return jsonify({"error": "Unauthorized"}), 403
 
     data = request.json
@@ -584,9 +666,55 @@ def update_appointment_status_route(visit_id):
 
     try:
         import database
+        visit = database.visits.find_one({"visit_id": visit_id})
+        if not visit:
+            return jsonify({"error": "Visit not found"}), 404
+
+        old_status = visit.get("status")
         success = database.update_appointment_status(visit_id, new_status)
+
+        email_error = None
         if success:
-            return jsonify({"message": "Appointment status updated"}), 200
+            if new_status == "confirmed" and old_status != "confirmed":
+                try:
+                    patient = database.patients.find_one({"institute_id": visit.get("institute_id")})
+                    if patient and patient.get("email"):
+                        recipient_email = patient["email"]
+                        patient_name = patient.get("name", "Patient")
+                        doctor_name = visit.get("doctor_name") or visit.get("doctor_username") or "Doctor"
+
+                        from datetime import datetime
+                        raw_time = visit.get("time")
+                        formatted_time = str(raw_time)
+                        if isinstance(raw_time, datetime):
+                            formatted_time = raw_time.strftime("%d-%b-%Y %I:%M %p")
+                        elif isinstance(raw_time, str):
+                            try:
+                                dt = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+                                formatted_time = dt.strftime("%d-%b-%Y %I:%M %p")
+                            except Exception:
+                                pass
+
+                        subject = "Appointment Confirmed - BITS Pilani Medical Center"
+                        body = (
+                            f"Dear {patient_name},\n\n"
+                            f"Your appointment at BITS Pilani Medical Center has been confirmed.\n\n"
+                            f"Details:\n"
+                            f"Doctor: {doctor_name}\n"
+                            f"Date & Time: {formatted_time}\n\n"
+                            f"Please arrive on time and Check-in with the receptionist at the Medical Center.\n\n"
+                            f"Regards,\n"
+                            f"Medical Center\n"
+                            f"BITS Pilani"
+                        )
+                        from app.routes.lab_routes import send_email
+                        send_email(recipient_email, subject, body)
+                    else:
+                        email_error = "Patient email address is not available in system."
+                except Exception as e:
+                    email_error = str(e)
+
+            return jsonify({"message": "Appointment status updated", "email_error": email_error}), 200
         return jsonify({"error": "Visit not found or no changes made"}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -14,43 +14,25 @@ import {
   Button,
   HStack,
   Text,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalCloseButton,
-  ModalBody,
-  ModalFooter,
-  Progress,
   Badge,
-  Alert,
-  AlertIcon,
-  AlertTitle,
-  AlertDescription,
   useToast,
   useDisclosure,
   Icon,
-  VStack,
-  Divider,
   IconButton,
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-  PopoverArrow,
-  PopoverBody,
-  Avatar
+  Spinner
 } from '@chakra-ui/react';
-import { FiSearch, FiRefreshCw, FiTrash2, FiChevronDown, FiChevronUp, FiActivity, FiUploadCloud, FiFileText, FiDownload, FiAlertCircle, FiFile, FiHelpCircle, FiInfo, FiChevronRight } from 'react-icons/fi';
+import { FiRefreshCw, FiChevronDown, FiHelpCircle, FiChevronRight } from 'react-icons/fi';
 import { Select } from '@chakra-ui/react';
 import axios from 'axios';
 import BASE_URL from '../../utils/Config';
 import StatusGuideModal from '../../components/StatusGuideModal';
-import { formatDateTimeIST, toTitleCase } from '../../utils/utils';
+import { formatDateTimeIST, toTitleCase, formatReceptionistDateTime } from '../../utils/utils';
 
 export default function PatientsList() {
   const [patients, setPatients] = useState([]);
   const [search, setSearch] = useState('');
   const [doctorFilter, setDoctorFilter] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const userRole = localStorage.getItem('role');
   const toast = useToast();
@@ -74,6 +56,7 @@ export default function PatientsList() {
   useEffect(() => { fetchPatients(); }, []);
 
   const fetchPatients = async () => {
+    setLoading(true);
     try {
       const token = localStorage.getItem('token');
       const { data } = await axios.get(`${BASE_URL}/patients`, {
@@ -91,6 +74,8 @@ export default function PatientsList() {
     } catch (err) {
       console.error(err);
       toast({ title: 'Error loading patients', status: 'error', duration: 3000, isClosable: true });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -166,7 +151,12 @@ export default function PatientsList() {
 
       {/* Patients Table */}
       <Box overflowX="auto">
-        <Table variant="simple" size="sm" fontSize="sm">
+        {loading ? (
+          <Flex justify="center" align="center" py="10">
+            <Spinner size="xl" color="blue.500" thickness="4px" speed="0.65s" />
+          </Flex>
+        ) : (
+          <Table variant="simple" size="sm" fontSize="sm">
           <Thead bg="gray.100">
             <Tr>
               <Th w="40px"></Th>
@@ -265,7 +255,9 @@ export default function PatientsList() {
                             <Tbody>
                               {p.appointments.map((appt, idx) => (
                                 <Tr key={idx} borderBottom="1px solid" borderColor="gray.100">
-                                  <Td color="gray.600">{formatDateTimeIST(appt.booked_at)}</Td>
+                                  <Td color="gray.600">
+                                    {userRole === 'receptionist' ? formatReceptionistDateTime(appt.booked_at) : formatDateTimeIST(appt.booked_at)}
+                                  </Td>
                                   <Td color="gray.600">{toTitleCase(appt.doctor_name)}</Td>
                                   <Td>
                                     <Badge
@@ -319,6 +311,7 @@ export default function PatientsList() {
             )}
           </Tbody>
         </Table>
+        )}
       </Box>
 
       {/* Pagination Controls */}

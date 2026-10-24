@@ -184,6 +184,21 @@ def test_get_all_patients_for_doctor(client, mock_db, mocker, app):
     res = client.get("/doctor/all_patients", headers={"Authorization": f"Bearer {token}"})
     assert res.status_code == 200
 
+def test_search_past_patients_for_doctor(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
+    mocker.patch("database.users.find_one", return_value={"display_name": "Dr. One"})
+    mocker.patch("database.search_past_patients_for_doctor", return_value=[{"institute_id": "123"}])
+    
+    # 1. Missing criteria returns 400
+    res = client.get("/doctor/search_past_patients", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 400
+    
+    # 2. Providing name should query successfully
+    res = client.get("/doctor/search_past_patients?name=John", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.json == [{"institute_id": "123"}]
+
 def test_get_doctor_patients(client, mock_db, mocker, app):
     with app.app_context():
         token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
@@ -195,7 +210,7 @@ def test_save_consultation_details(client, mock_db, mocker, app):
     with app.app_context():
         token = create_access_token(identity="doc1", additional_claims={"role": "doctor"})
     mocker.patch("database.update_consultation_details", return_value=True)
-    res = client.put("/doctor/save_consultation_details/123", headers={"Authorization": f"Bearer {token}"}, json={"prescriptions": []})
+    res = client.put("/doctor/save_consultation_details/123", headers={"Authorization": f"Bearer {token}"}, json={"prescription_data": {}})
     assert res.status_code == 200
 
 def test_save_consultation(client, mock_db, mocker, app):
@@ -290,10 +305,12 @@ def test_bulk_register_staff(client, mock_db, mocker, app):
 def test_s3_upload_url(client, mocker, app):
     with app.app_context():
         token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
-    mocker.patch("app.routes.patient_routes.s3.generate_presigned_url", return_value="http://url")
     
     res = client.post("/s3/upload-url", headers={"Authorization": f"Bearer {token}"}, json={"instituteId": "123", "filename": "test.pdf", "content_type": "application/pdf"})
     assert res.status_code == 200
+    data = res.get_json()
+    assert "upload_url" in data
+    assert "/s3/proxy-upload?key=" in data["upload_url"]
 
 def test_s3_save_metadata(client, mock_db, mocker, app):
     with app.app_context():
@@ -306,10 +323,12 @@ def test_s3_save_metadata(client, mock_db, mocker, app):
 def test_s3_view_url(client, mocker, app):
     with app.app_context():
         token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
-    mocker.patch("app.routes.patient_routes.s3.generate_presigned_url", return_value="http://url")
     
     res = client.post("/s3/view-url", headers={"Authorization": f"Bearer {token}"}, json={"s3_key": "k"})
     assert res.status_code == 200
+    data = res.get_json()
+    assert "url" in data
+    assert "/s3/proxy-download?key=k" in data["url"]
 
 def test_receptionist_get_queue(client, mock_db, mocker, app):
     with app.app_context():
@@ -352,6 +371,123 @@ def test_receptionist_book_appointment(client, mock_db, mocker, app):
     res = client.post("/api/receptionist/book-appointment", headers={"Authorization": f"Bearer {token}"}, json=data)
     assert res.status_code == 200
     assert "Appointment booked and confirmed successfully" in res.json["message"]
+
+def test_receptionist_confirm_appointment_email_success(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    
+    mock_visit = {
+        "visit_id": "v_test",
+        "institute_id": "p_test",
+        "doctor_name": "Dr. Smith",
+        "time": "2026-07-11T12:00:00",
+        "status": "booked"
+    }
+    mock_patient = {
+        "institute_id": "p_test",
+        "name": "Jane Doe",
+        "email": "jane@example.com"
+    }
+    
+    mocker.patch("database.visits.find_one", return_value=mock_visit)
+    mocker.patch("database.patients.find_one", return_value=mock_patient)
+    mocker.patch("database.update_appointment_status", return_value=True)
+    mock_send = mocker.patch("app.routes.lab_routes.send_email", return_value=None)
+    
+    res = client.post("/api/receptionist/appointment/v_test/status", headers={"Authorization": f"Bearer {token}"}, json={"status": "confirmed"})
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data["message"] == "Appointment status updated"
+    assert data["email_error"] is None
+    mock_send.assert_called_once()
+
+def test_receptionist_confirm_appointment_email_failure(client, mock_db, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="recep1", additional_claims={"role": "receptionist"})
+    
+    mock_visit = {
+        "visit_id": "v_test",
+        "institute_id": "p_test",
+        "doctor_name": "Dr. Smith",
+        "time": "2026-07-11T12:00:00",
+        "status": "booked"
+    }
+    mock_patient = {
+        "institute_id": "p_test",
+        "name": "Jane Doe",
+        "email": "jane@example.com"
+    }
+    
+    mocker.patch("database.visits.find_one", return_value=mock_visit)
+    mocker.patch("database.patients.find_one", return_value=mock_patient)
+    mocker.patch("database.update_appointment_status", return_value=True)
+    mocker.patch("app.routes.lab_routes.send_email", side_effect=Exception("SMTP Connection Error"))
+    
+    res = client.post("/api/receptionist/appointment/v_test/status", headers={"Authorization": f"Bearer {token}"}, json={"status": "confirmed"})
+    assert res.status_code == 200
+    data = json.loads(res.data)
+    assert data["message"] == "Appointment status updated"
+    assert "SMTP Connection Error" in data["email_error"]
 import json
 from unittest.mock import MagicMock
 from flask_jwt_extended import create_access_token
+
+def test_s3_proxy_upload_success(client, mocker, app):
+    mocker.patch("app.routes.patient_routes.s3.put_object", return_value={})
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+        
+    res = client.put("/s3/proxy-upload?key=reports/user1/test.pdf", headers={"Authorization": f"Bearer {token}"}, data=b"pdf content")
+    assert res.status_code == 200
+    assert b"File uploaded successfully" in res.data
+
+def test_s3_proxy_upload_missing_token(client, mocker, app):
+    res = client.put("/s3/proxy-upload?key=reports/user1/test.pdf", data=b"pdf content")
+    assert res.status_code == 401
+
+def test_s3_proxy_download_success(client, mocker, app):
+    mock_body = MagicMock()
+    mock_body.read.return_value = b"pdf binary content"
+    mocker.patch("app.routes.patient_routes.s3.get_object", return_value={"Body": mock_body})
+    
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+        
+    res = client.get("/s3/proxy-download?key=reports/user1/test.pdf", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 200
+    assert res.data == b"pdf binary content"
+    assert res.mimetype == "application/pdf"
+
+def test_s3_proxy_download_missing_key(client, mocker, app):
+    res = client.get("/s3/proxy-download")
+    assert res.status_code == 400
+
+def test_s3_proxy_upload_invalid_token(client, mocker, app):
+    res = client.put("/s3/proxy-upload?key=reports/user1/test.pdf", headers={"Authorization": "Bearer invalid-token"}, data=b"pdf content")
+    assert res.status_code == 422
+
+def test_s3_proxy_upload_missing_key(client, mocker, app):
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+    res = client.put("/s3/proxy-upload", headers={"Authorization": f"Bearer {token}"}, data=b"pdf content")
+    assert res.status_code == 400
+
+def test_s3_proxy_upload_s3_error(client, mocker, app):
+    mocker.patch("app.routes.patient_routes.s3.put_object", side_effect=Exception("MinIO Connection Timeout"))
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+    res = client.put("/s3/proxy-upload?key=reports/user1/test.pdf", headers={"Authorization": f"Bearer {token}"}, data=b"pdf content")
+    assert res.status_code == 500
+    assert b"MinIO Connection Timeout" in res.data
+
+def test_s3_proxy_download_invalid_token(client, mocker, app):
+    res = client.get("/s3/proxy-download?key=reports/user1/test.pdf", headers={"Authorization": "Bearer invalid-token"})
+    assert res.status_code == 422
+
+def test_s3_proxy_download_s3_error(client, mocker, app):
+    mocker.patch("app.routes.patient_routes.s3.get_object", side_effect=Exception("S3 Object Not Found"))
+    with app.app_context():
+        token = create_access_token(identity="user1", additional_claims={"role": "doctor"})
+    res = client.get("/s3/proxy-download?key=reports/user1/test.pdf", headers={"Authorization": f"Bearer {token}"})
+    assert res.status_code == 500
+    assert b"S3 Object Not Found" in res.data

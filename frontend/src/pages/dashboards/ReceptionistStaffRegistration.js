@@ -127,10 +127,26 @@ const ReceptionistStaffRegistration = () => {
   const [selectedBookingPatientId, setSelectedBookingPatientId] = useState('');
 
   const handlePrimaryChange = (e) => {
-    setPrimary({ ...primary, [e.target.name]: e.target.value });
+    let { name, value } = e.target;
+    if (name === 'psrn_id') {
+      value = value.toUpperCase().slice(0, 13);
+    }
+    if (name === 'name') {
+      value = value.replace(/[^a-zA-Z\s']/g, '').slice(0, 40);
+    }
+    if (name === 'email') {
+      value = value.slice(0, 60);
+    }
+    setPrimary({ ...primary, [name]: value });
   };
 
   const handleDependantChange = (index, field, value) => {
+    if (field === 'name') {
+      value = value.replace(/[^a-zA-Z\s']/g, '').slice(0, 40);
+    }
+    if (field === 'email') {
+      value = value.slice(0, 60);
+    }
     const newDeps = [...dependants];
     newDeps[index][field] = value;
     setDependants(newDeps);
@@ -243,6 +259,30 @@ const ReceptionistStaffRegistration = () => {
 
   const submitNewRegistration = (e) => {
     e.preventDefault();
+    if (primary.email && !primary.email.includes('@')) {
+      toast({
+        title: "Invalid Email",
+        description: "Please enter a valid primary email address containing '@'.",
+        status: "warning",
+        duration: 3000,
+        isClosable: true,
+        position: 'top'
+      });
+      return;
+    }
+    for (let dep of dependants) {
+      if (dep.email && !dep.email.includes('@')) {
+        toast({
+          title: "Invalid Email",
+          description: `Please enter a valid email address for dependant "${dep.name}".`,
+          status: "warning",
+          duration: 3000,
+          isClosable: true,
+          position: 'top'
+        });
+        return;
+      }
+    }
     setShowRegisterConfirmModal(true);
   };
 

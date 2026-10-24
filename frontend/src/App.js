@@ -19,6 +19,7 @@ import ReceptionistStudentRegistration from './pages/dashboards/ReceptionistStud
 import ReceptionistStaffRegistration from './pages/dashboards/ReceptionistStaffRegistration';
 import ReceptionistHistory from './pages/dashboards/ReceptionistHistory';
 import DoctorSchedulePage from "./pages/staff/DoctorSchedulePage";
+import ManageLeaves from './pages/dashboards/ManageLeaves';
 import AdminDashboard from './pages/dashboards/AdminDashboard';
 import MedicalCounterDashboard from './pages/dashboards/MedicalCounterDashboard';
 import BillHistory from './pages/inventory/BillHistory';
@@ -27,7 +28,6 @@ import AddMedicine from './pages/inventory/AddMedicine';
 import InventoryList from './pages/inventory/InventoryList';
 import LabTest from './pages/lab/LabTest';
 import AllPatients from './pages/patients/AllPatients';
-import PatientsList from './pages/patients/PatientsList';
 import ReceptionistPatientsList from './pages/dashboards/ReceptionistPatientsList';
 import PatientHistory from './pages/patients/PatientHistory';
 import PatientLabReports from "./pages/lab/PatientLabReports";
@@ -203,6 +203,26 @@ function AppContent({ isLoggedIn, username, role, handleLogout, onLogin }) {
             element={
               isLoggedIn && role === 'receptionist' ? (
                 <PatientHistory />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/schedule"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <DoctorSchedulePage />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+          <Route
+            path="/receptionist/leaves"
+            element={
+              isLoggedIn && role === 'receptionist' ? (
+                <ManageLeaves />
               ) : (
                 <Navigate to="/login" />
               )

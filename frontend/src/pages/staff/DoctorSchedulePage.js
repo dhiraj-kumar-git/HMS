@@ -16,7 +16,7 @@ export default function DoctorSchedulePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const fromDashboard = location.state?.fromDashboard || false; // check flag
-  const [viewMode, setViewMode] = useState("calendar"); // "calendar" | "list"
+  const [viewMode, setViewMode] = useState("list"); // "calendar" | "list"
   const [searchTerm, setSearchTerm] = useState("");
 
   const [schedule, setSchedule] = useState({

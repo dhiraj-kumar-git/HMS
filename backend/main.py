@@ -33,6 +33,8 @@ import time
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY")
+if len(app.config["JWT_SECRET_KEY"] or "") < 32:
+    print("WARNING: JWT_SECRET_KEY is missing or shorter than 32 bytes; use a long random secret in production.")
 jwt = JWTManager(app)
 
 @jwt.token_in_blocklist_loader
@@ -56,9 +58,20 @@ from app.routes.public_routes import public_bp
 app.register_blueprint(public_bp)
 from app.routes.patient_routes import patient_bp
 app.register_blueprint(patient_bp)
+from app.routes.admin_appointment_routes import admin_appointments_bp
+app.register_blueprint(admin_appointments_bp)
+from app.routes.admin_lab_report_routes import admin_lab_reports_bp
+app.register_blueprint(admin_lab_reports_bp)
+from app.routes.admin_billing_routes import admin_billing_bp
+app.register_blueprint(admin_billing_bp)
+from app.routes.admin_dashboard_routes import admin_dashboard_bp
+app.register_blueprint(admin_dashboard_bp)
+from app.routes.leaves_routes import leaves_bp
+app.register_blueprint(leaves_bp)
 from app.routes.swagger_routes import swagger_bp, swaggerui_blueprint
 app.register_blueprint(swagger_bp)
 app.register_blueprint(swaggerui_blueprint)
+
 
 @app.route('/health', methods=['GET'])
 def health_check():

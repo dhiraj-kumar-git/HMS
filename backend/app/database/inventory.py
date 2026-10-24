@@ -1,9 +1,12 @@
+import re
 from app.database.core import *
 from app.database.lab import load_lab_tests_from_config, get_test_price
 
 def get_bill_history_patients(skip=0, limit=20, search_term="", start_date=None, end_date=None):
     query = {}
     if search_term:
+        # Escape user input so regex metacharacters ("(", "*", etc.) are matched literally, not parsed
+        search_term = re.escape(search_term)
         query["$or"] = [
             {"institute_id": {"$regex": search_term, "$options": "i"}},
             {"patient_name": {"$regex": search_term, "$options": "i"}},
@@ -65,9 +68,27 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
     if not patient:
         return {"success": False, "error": "Patient not found"}
         
+    p_type = patient.get("patient_type", "Student")
+    is_faculty_eligible = p_type in ["Faculty", "Staff", "Dependant"]
+    
+    sponsor_name = None
+    sponsor_psrn = None
+    relation = "Student"
+    
+    if is_faculty_eligible:
+        relation = patient.get("relation", "Self")
+        if p_type == "Dependant":
+            sponsor_psrn = patient.get("primary_psrn_id")
+            if sponsor_psrn:
+                sponsor_doc = patients.find_one({"institute_id": sponsor_psrn})
+                sponsor_name = sponsor_doc.get("name") if sponsor_doc else None
+        else:
+            sponsor_psrn = patient.get("institute_id")
+            sponsor_name = patient.get("name")
+            relation = "Self"
+
     # Compute totals for snapshot
     config_list = load_lab_tests_from_config()
-    total_amount = 0
     billed_items = []
     
     # Fetch specific visit to extract lab_tests and prescriptions
@@ -76,105 +97,304 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
     else:
         visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
     
-    lab_tests = visit.get("lab_tests", []) if visit else []
-    medicines = visit.get("prescriptions", []) if visit else []
+    # Guard against double payment (e.g. double-click or two cashiers) creating duplicate bills
+    if visit and visit.get("invoice_no"):
+        return {"success": False, "error": "Bill already paid for this visit"}
+
+    visit_doc = visit or {}
+    doctor_name = visit_doc.get("doctor_name", visit_doc.get("doctor_username", ""))
+    lab_tests = visit_doc.get("lab_tests", [])
+    medicines = visit_doc.get("prescriptions", [])
 
     if selected_labs is None:
         selected_labs = list(range(len(lab_tests)))
     if selected_medicines is None:
         selected_medicines = list(range(len(medicines)))
         
-    # We will update the patient and visit with ONLY the selected lab tests.
     final_lab_tests = []
     
     for i, t in enumerate(lab_tests):
         if i in selected_labs:
             test_name = t.get("lab_test", "")
             gross = get_test_price(test_name, config_list)
-            discPerc = t.get("discount", 0)
+            discPerc = 50
             discAmt = gross * discPerc / 100
-            rembPerc = t.get("rembPerc", 0)
-            rembAmt = gross * rembPerc / 100
-            amt = gross - discAmt - rembAmt
+            amt = gross - discAmt
             
             billed_items.append({
                 "type": "lab_test",
                 "name": test_name,
                 "gross": gross,
                 "discount": discPerc,
-                "discount_amount": discAmt,
-                "rembursement": rembPerc,
-                "rembursement_amount": rembAmt,
-                "amount": amt
+                "discount_amount": round(discAmt, 2),
+                "cgst": 0.00,
+                "sgst": 0.00,
+                "amount": round(amt, 2),
+                "item_total": round(amt, 2)
             })
-            total_amount += amt
             final_lab_tests.append(t)
         
     final_medicines = []
-    for i, p in enumerate(medicines):
-        if i in selected_medicines:
-            billed_items.append({
-                "type": "medicine",
-                "name": p.get("note", p) if isinstance(p, dict) else p,
-                "amount": 0 # Assuming medicines are dispensed without extra charge here, or handled separately
-            })
-            final_medicines.append(p)
+    from app.database.patients import get_stable_medicine_details
+    
+    for idx, item in enumerate(selected_medicines):
+        if isinstance(item, dict):
+            m_dict = dict(item)
+        else:
+            # item is an index
+            idx_val = int(item)
+            if idx_val < len(medicines):
+                p = medicines[idx_val]
+                m_dict = dict(p) if isinstance(p, dict) else {"drug": p}
+            else:
+                continue
+                
+        med_name = m_dict.get("drug") or m_dict.get("note") or ""
+        qty_str = m_dict.get("quantity") or "1"
+        try:
+            quantity = float(qty_str) if qty_str else 1.0
+        except ValueError:
+            quantity = 1.0
+            
+        rate = m_dict.get("sale_rate")
+        gst_rate = m_dict.get("gst_rate")
+        batch = m_dict.get("batch_number")
+        expiry = m_dict.get("expiry_date")
+        
+        if rate is None or gst_rate is None or batch is None or expiry is None:
+            # Lookup or fallback
+            rate, gst_rate, batch, expiry = get_stable_medicine_details(visit_id or (visit.get("visit_id") if visit else None), med_name)
+            
+        gross = rate * quantity
+        gst_amount = gross * (gst_rate / 100.0)
+        cgst = gst_amount / 2.0
+        sgst = gst_amount / 2.0
+        item_total = gross + gst_amount
+        
+        billed_items.append({
+            "type": "medicine",
+            "name": med_name,
+            "rate": rate,
+            "quantity": int(quantity) if quantity.is_integer() else quantity,
+            "gross": round(gross, 2),
+            "discount": 0,
+            "discount_amount": 0.00,
+            "cgst": round(cgst, 2),
+            "sgst": round(sgst, 2),
+            "amount": round(gross, 2),
+            "item_total": round(item_total, 2),
+            "batch": batch,
+            "expiry": expiry
+        })
+        m_dict["quantity"] = quantity
+        m_dict["sale_rate"] = rate
+        m_dict["gst_rate"] = gst_rate
+        m_dict["batch_number"] = batch
+        m_dict["expiry_date"] = expiry
+        final_medicines.append(m_dict)
             
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Filter items by type
+    med_items = [item for item in billed_items if item["type"] == "medicine"]
+    lab_items = [item for item in billed_items if item["type"] == "lab_test"]
+    
     count = bills.count_documents({"payment_date": {"$gte": today_start}})
-    invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
     
-    bill_doc = {
-        "invoice_no": invoice_no,
-        "payment_date": now,
-        "institute_id": patient.get("institute_id"),
-        "patient_name": patient.get("name"),
-        "patient_type": patient.get("patient_type"),
-        "age": patient.get("date_of_birth"), # Age is derived from DOB later
-        "gender": patient.get("gender"),
-        "items": billed_items,
-        "total_amount": round(total_amount, 2),
-        "payment_mode": payment_mode
-    }
-    bills.insert_one(bill_doc)
-
-    has_labs = len(final_lab_tests) > 0
-    current_workflow = patient.get("workflow_status", "active")
+    bill_docs_to_insert = []
+    invoice_no = ""
+    total_rounded = 0
     
-    if current_workflow == "consultation":
-        # Doctor still hasn't clicked "Complete", stay in consultation
-        new_workflow = "consultation"
+    if len(med_items) > 0 and len(lab_items) > 0:
+        # Scenario 3: Both Medicines and Labs -> Generate 2 distinct bills
+        invoice_no_med = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
+        invoice_no_lab = f"INV-{now.strftime('%Y%m%d')}-{(count + 2):04d}"
+        invoice_no = f"{invoice_no_med}, {invoice_no_lab}"
+        
+        # Med Bill
+        med_unrounded = sum(item["item_total"] for item in med_items)
+        med_rounded = round(med_unrounded)
+        med_round_off = round(med_rounded - med_unrounded, 2)
+        if is_faculty_eligible:
+            med_reimbursed = round(med_unrounded * 0.90, 2)
+            med_self_paid = round(med_rounded - med_reimbursed, 2)
+        else:
+            med_reimbursed = 0.00
+            med_self_paid = float(med_rounded)
+            
+        bill_doc_med = {
+            "invoice_no": invoice_no_med,
+            "payment_date": now,
+            "institute_id": patient.get("institute_id"),
+            "patient_name": patient.get("name"),
+            "patient_type": p_type,
+            "age": patient.get("date_of_birth"),
+            "gender": patient.get("gender"),
+            "items": med_items,
+            "unrounded_total": round(med_unrounded, 2),
+            "round_off": med_round_off,
+            "total_amount": med_rounded,
+            "reimbursed_amount": med_reimbursed,
+            "self_paid_amount": med_self_paid,
+            "sponsor_name": sponsor_name,
+            "sponsor_psrn": sponsor_psrn,
+            "relation": relation,
+            "payment_mode": payment_mode,
+            "doctor_name": doctor_name,
+            "bill_category": "medicine"
+        }
+        bill_docs_to_insert.append(bill_doc_med)
+        
+        # Lab Bill
+        lab_unrounded = sum(item["item_total"] for item in lab_items)
+        lab_rounded = round(lab_unrounded)
+        lab_round_off = round(lab_rounded - lab_unrounded, 2)
+        if is_faculty_eligible:
+            lab_reimbursed = round(lab_unrounded * 0.90, 2)
+            lab_self_paid = round(lab_rounded - lab_reimbursed, 2)
+        else:
+            lab_reimbursed = 0.00
+            lab_self_paid = float(lab_rounded)
+            
+        bill_doc_lab = {
+            "invoice_no": invoice_no_lab,
+            "payment_date": now,
+            "institute_id": patient.get("institute_id"),
+            "patient_name": patient.get("name"),
+            "patient_type": p_type,
+            "age": patient.get("date_of_birth"),
+            "gender": patient.get("gender"),
+            "items": lab_items,
+            "unrounded_total": round(lab_unrounded, 2),
+            "round_off": lab_round_off,
+            "total_amount": lab_rounded,
+            "reimbursed_amount": lab_reimbursed,
+            "self_paid_amount": lab_self_paid,
+            "sponsor_name": sponsor_name,
+            "sponsor_psrn": sponsor_psrn,
+            "relation": relation,
+            "payment_mode": payment_mode,
+            "doctor_name": doctor_name,
+            "bill_category": "lab_test"
+        }
+        bill_docs_to_insert.append(bill_doc_lab)
+        total_rounded = med_rounded + lab_rounded
+        
     else:
-        # Doctor is done, or it was active. Move to next logical step.
-        new_workflow = "lab test pending" if has_labs else "completed"
-    
-    lab_status = "pending" if has_labs else patient.get("lab_status", "none")
-
-    result = patients.update_one(
-        {"institute_id": institute_id},
-        {"$set": {
-            "bill_status": "paid",
-            "workflow_status": new_workflow,
-            "lab_status": lab_status,
+        # Scenario 1 & 2: Medicines only or Labs only -> Single bill
+        invoice_no = f"INV-{now.strftime('%Y%m%d')}-{(count + 1):04d}"
+        total_unrounded = sum(item["item_total"] for item in billed_items)
+        total_rounded = round(total_unrounded)
+        round_off = round(total_rounded - total_unrounded, 2)
+        if is_faculty_eligible:
+            reimbursed = round(total_unrounded * 0.90, 2)
+            self_paid = round(total_rounded - reimbursed, 2)
+        else:
+            reimbursed = 0.00
+            self_paid = float(total_rounded)
+            
+        bill_category = "medicine" if len(med_items) > 0 else "lab_test"
+        bill_doc = {
             "invoice_no": invoice_no,
             "payment_date": now,
-            "lab_tests": final_lab_tests,
-            "prescriptions": final_medicines
-        }}
-    )
-    
+            "institute_id": patient.get("institute_id"),
+            "patient_name": patient.get("name"),
+            "patient_type": p_type,
+            "age": patient.get("date_of_birth"),
+            "gender": patient.get("gender"),
+            "items": billed_items,
+            "unrounded_total": round(total_unrounded, 2),
+            "round_off": round_off,
+            "total_amount": total_rounded,
+            "reimbursed_amount": reimbursed,
+            "self_paid_amount": self_paid,
+            "sponsor_name": sponsor_name,
+            "sponsor_psrn": sponsor_psrn,
+            "relation": relation,
+            "payment_mode": payment_mode,
+            "doctor_name": doctor_name,
+            "bill_category": bill_category
+        }
+        bill_docs_to_insert.append(bill_doc)
+        total_rounded = total_rounded
+
+    # Atomically claim the visit so two simultaneous payments cannot both proceed
+    claimed_visit_id = None
     if visit:
-        visits.update_one(
-            {"visit_id": visit["visit_id"]},
+        claim = visits.update_one(
+            {"visit_id": visit["visit_id"], "invoice_no": {"$exists": False}, "billing_lock": {"$ne": True}},
+            {"$set": {"billing_lock": True}}
+        )
+        if claim.matched_count == 0:
+            return {"success": False, "error": "Bill already paid for this visit"}
+        claimed_visit_id = visit["visit_id"]
+
+    try:
+        # Insert bills. Invoice numbers derive from a count, so concurrent payments can collide;
+        # the unique index on invoice_no rejects the duplicate and we retry with a fresh count.
+        date_part = now.strftime('%Y%m%d')
+        for attempt in range(10):
+            for i, doc in enumerate(bill_docs_to_insert):
+                doc["invoice_no"] = f"INV-{date_part}-{(count + i + 1):04d}"
+            invoice_no = ", ".join(d["invoice_no"] for d in bill_docs_to_insert)
+            inserted = []
+            try:
+                for doc in bill_docs_to_insert:
+                    bills.insert_one(doc)
+                    inserted.append(doc["invoice_no"])
+                break
+            except DuplicateKeyError:
+                for inv_no in inserted:
+                    bills.delete_one({"invoice_no": inv_no})
+                for doc in bill_docs_to_insert:
+                    doc.pop("_id", None)
+                if attempt == 9:
+                    raise RuntimeError("Could not allocate a unique invoice number")
+                count = bills.count_documents({"payment_date": {"$gte": today_start}}) + attempt + 1
+
+        has_labs = len(final_lab_tests) > 0
+        current_workflow = patient.get("workflow_status", "active")
+    
+        if current_workflow == "consultation":
+            # Doctor still hasn't clicked "Complete", stay in consultation
+            new_workflow = "consultation"
+        else:
+            # Doctor is done, or it was active. Move to next logical step.
+            new_workflow = "lab test pending" if has_labs else "completed"
+    
+        lab_status = "pending" if has_labs else patient.get("lab_status", "none")
+
+        result = patients.update_one(
+            {"institute_id": institute_id},
             {"$set": {
+                "bill_status": "paid",
+                "workflow_status": new_workflow,
+                "lab_status": lab_status,
                 "invoice_no": invoice_no,
+                "payment_date": now,
                 "lab_tests": final_lab_tests,
-                "prescription_details": final_medicines
+                "prescriptions": final_medicines
             }}
         )
+    
+        if visit:
+            visits.update_one(
+                {"visit_id": visit["visit_id"]},
+                {"$set": {
+                    "invoice_no": invoice_no,
+                    "lab_tests": final_lab_tests,
+                    "prescription_details": final_medicines
+                }, "$unset": {"billing_lock": ""}}
+            )
 
-    return {"success": result.modified_count > 0, "invoice_no": invoice_no, "total_amount": total_amount, "bill": bill_doc}
+        returned_bill = bill_docs_to_insert if len(bill_docs_to_insert) > 1 else bill_docs_to_insert[0]
+        return {"success": True, "invoice_no": invoice_no, "total_amount": total_rounded, "bill": returned_bill}
+    except Exception:
+        if claimed_visit_id:
+            # Release the claim so the payment can be retried
+            visits.update_one({"visit_id": claimed_visit_id}, {"$unset": {"billing_lock": ""}})
+        raise
 
 
 def cancel_bill(institute_id, visit_id=None):
@@ -182,7 +402,7 @@ def cancel_bill(institute_id, visit_id=None):
     if not patient:
         return {"success": False, "error": "Patient not found"}
         
-    result = patients.update_one(
+    patients.update_one(
         {"institute_id": institute_id},
         {"$set": {
             "bill_status": "cancelled",
@@ -190,7 +410,27 @@ def cancel_bill(institute_id, visit_id=None):
             "lab_status": "cancelled",
         }}
     )
-    return {"success": result.modified_count > 0}
+
+    if visit_id:
+        visit = visits.find_one({"visit_id": visit_id})
+    else:
+        visit = visits.find_one({"institute_id": institute_id}, sort=[("booked_at", -1)])
+
+    if visit:
+        updated_lab_tests = visit.get("lab_tests", [])
+        for lt in updated_lab_tests:
+            if lt.get("status") == "pending":
+                lt["status"] = "cancelled"
+
+        visits.update_one(
+            {"visit_id": visit["visit_id"]},
+            {"$set": {
+                "status": "cancelled",
+                "lab_tests": updated_lab_tests
+            }}
+        )
+
+    return {"success": True}
 
 # def add_lab_test(psr_no, lab_test, doctor_username):
 #     # Define reference ranges based on test type
@@ -217,7 +457,11 @@ def cancel_bill(institute_id, visit_id=None):
 # Generate a unique medicine ID (e.g., MED0001)
 def generate_medicine_id():
     count = inventory.count_documents({})
-    return f"MED{str(count + 1).zfill(4)}"
+    candidate = count + 1
+    # Count-based IDs collide after deletions or concurrent adds; skip any ID already in use
+    while isinstance(inventory.find_one({"medicine_id": f"MED{str(candidate).zfill(4)}"}), dict):
+        candidate += 1
+    return f"MED{str(candidate).zfill(4)}"
 
 # Add a new medicine to the inventory. All fields are optional.
 def add_medicine(

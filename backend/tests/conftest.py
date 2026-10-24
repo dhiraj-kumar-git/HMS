@@ -51,6 +51,8 @@ def mock_db(mocker):
     mock_end_session = mocker.patch("database.end_session", return_value=True)
     mock_hash_password = mocker.patch("database.hash_password", return_value=b"hashed_pwd")
     mock_users_collection = mocker.patch("database.users")
+    mock_leaves_collection = mocker.patch("database.leaves")
+    mock_leaves_collection.find_one.return_value = None
     
     # Mocks for staff routes
     mock_get_all_users = mocker.patch("database.get_all_users", return_value=[{"username": "testuser", "role": "staff"}])
