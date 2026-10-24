@@ -4,3 +4,4 @@ from app.database.staff import *
 from app.database.lab import *
 from app.database.inventory import *
 from app.database.patients import *
+from app.database.appointments_admin import *

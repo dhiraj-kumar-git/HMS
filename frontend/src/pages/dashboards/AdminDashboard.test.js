@@ -101,4 +101,16 @@ describe('AdminDashboard Component', () => {
     renderDashboard('/admin/users-list');
     expect(screen.getByText('Mock UsersList')).toBeInTheDocument();
   });
+  it('opens the Appointments page from the sidebar route instead of a blank screen', async () => {
+    axios.get.mockResolvedValue({ data: {
+      date: '2026-10-24', generated_at: 'x',
+      counts: { booked: 1, confirmed: 0, checked_in: 0, consultation: 0, completed: 0, cancelled: 0, other: 0, total: 1 },
+      active: [{ visit_id: 'v1', time: '2026-10-24T09:00', status: 'booked', institute_id: 'H1', patient_name: 'ANN LEE',
+                 patient_type: 'Student', doctor_name: 'Dr. X', doctor_username: 'drx', booked_by: 'patient' }],
+    } });
+    renderDashboard('/admin/appointments');
+    expect(await screen.findByText('Total today')).toBeInTheDocument();
+    expect(screen.getByText('Ann Lee')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Appointments' })).toBeInTheDocument();
+  });
 });

@@ -73,6 +73,7 @@ import PatientsList from '../patients/PatientsList';
 import DoctorSchedulePage from "../staff/DoctorSchedulePage";
 import ManageSchedule from "../staff/ManageSchedule";
 import BulkRegistration from '../patients/BulkRegistration';
+import AdminAppointments from '../admin/AdminAppointments';
 
 // Reusable component for the sidebar nav items
 const SidebarItem = ({ icon, label, to }) => (
@@ -253,6 +254,7 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
             <Route path="bulk-registration" element={<BulkRegistration />} />
             <Route path="manage-schedule" element={<ManageSchedule />} />
             <Route path="schedule" element={<DoctorSchedulePage />} />
+            <Route path="appointments" element={<AdminAppointments />} />
             <Route path="*" element={<Navigate to="" />} />
           </Routes>
         </Box>
