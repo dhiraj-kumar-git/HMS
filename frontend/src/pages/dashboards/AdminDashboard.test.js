@@ -124,4 +124,16 @@ describe('AdminDashboard Component', () => {
     expect(await screen.findByText('Ann Lee')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Lab Reports' })).toBeInTheDocument();
   });
+  it('opens the Billing page from the Billing route instead of a blank screen', async () => {
+    axios.get.mockImplementation((url) => Promise.resolve({ data: url.includes('/filters') ? { doctors: [], payment_modes: [], patient_types: [] } : {
+      page: 1, limit: 25, total: 1, total_pages: 1, export_limit: 10000,
+      summary: { counts: { paid: 1, pending: 0, cancelled: 0, total: 1 }, paid_amount: { total: 50, reimbursed: 0, self_paid: 50 } },
+      rows: [{ kind: 'bill', key: 'INV-1', date: '2026-10-24T09:00', status: 'paid', invoice_no: 'INV-1', institute_id: 'H1', patient_name: 'ANN LEE',
+               patient_type: 'Student', doctor_name: 'Dr. X', category: 'medicine', payment_mode: 'UPI', item_count: 2,
+               total_amount: 50, reimbursed_amount: 0, self_paid_amount: 50 }],
+    } }));
+    renderDashboard('/admin/billing');
+    expect(await screen.findByText('Ann Lee')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Billing' })).toBeInTheDocument();
+  });
 });

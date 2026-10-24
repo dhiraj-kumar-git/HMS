@@ -10,7 +10,7 @@ import { labStatusInfo, testStatusInfo } from './labStatusStyles';
 
 // ---------------------------------------------------------------- password prompt
 
-export function PasswordPrompt({ isOpen, onClose, onUnlocked, notice }) {
+export function PasswordPrompt({ isOpen, onClose, onUnlocked, notice, message }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -53,7 +53,7 @@ export function PasswordPrompt({ isOpen, onClose, onUnlocked, notice }) {
         <ModalCloseButton />
         <ModalBody>
           <Text fontSize="sm" color="gray.600" mb={3}>
-            Lab results are confidential. Enter your admin password to see test names and results. They stay available for 10 minutes.
+            {message || 'Lab results are confidential. Enter your admin password to see test names and results. They stay available for 10 minutes.'}
           </Text>
           {notice && <Alert status="info" borderRadius="md" fontSize="sm" mb={3}><AlertIcon />{notice}</Alert>}
           {error && <Alert status="error" borderRadius="md" fontSize="sm" mb={3}><AlertIcon />{error}</Alert>}

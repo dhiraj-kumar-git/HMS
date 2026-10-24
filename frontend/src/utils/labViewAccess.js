@@ -59,6 +59,11 @@ export const fetchLabDetails = async (visitId) => {
   return res.data;
 };
 
+export const fetchBillDetails = async (kind, key) => {
+  const res = await axios.get(`${BASE_URL}/api/admin/billing/${encodeURIComponent(kind)}/${encodeURIComponent(key)}/details`, { headers: authHeaders() });
+  return res.data;
+};
+
 export const openLabFile = async (visitId, index) => {
   const res = await axios.get(`${BASE_URL}/api/admin/lab-reports/${encodeURIComponent(visitId)}/file/${index}`, {
     headers: authHeaders(),

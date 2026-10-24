@@ -6,3 +6,4 @@ from app.database.inventory import *
 from app.database.patients import *
 from app.database.appointments_admin import *
 from app.database.lab_reports_admin import *
+from app.database.billing_admin import *
