@@ -60,6 +60,8 @@ from app.routes.patient_routes import patient_bp
 app.register_blueprint(patient_bp)
 from app.routes.admin_appointment_routes import admin_appointments_bp
 app.register_blueprint(admin_appointments_bp)
+from app.routes.admin_lab_report_routes import admin_lab_reports_bp
+app.register_blueprint(admin_lab_reports_bp)
 from app.routes.leaves_routes import leaves_bp
 app.register_blueprint(leaves_bp)
 from app.routes.swagger_routes import swagger_bp, swaggerui_blueprint

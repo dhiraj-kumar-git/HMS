@@ -74,6 +74,8 @@ import DoctorSchedulePage from "../staff/DoctorSchedulePage";
 import ManageSchedule from "../staff/ManageSchedule";
 import BulkRegistration from '../patients/BulkRegistration';
 import AdminAppointments from '../admin/AdminAppointments';
+import AdminReports from '../admin/AdminReports';
+import { clearLabViewUnlock } from '../../utils/labViewAccess';
 
 // Reusable component for the sidebar nav items
 const SidebarItem = ({ icon, label, to }) => (
@@ -227,6 +229,7 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
                 <MenuItem
                   icon={<FiLogOut />}
                   onClick={() => {
+                    clearLabViewUnlock();
                     onLogout();
                     navigate('/login');
                   }}
@@ -255,6 +258,7 @@ export default function AdminDashboard({ username = 'Dr. Doctor Name', onLogout 
             <Route path="manage-schedule" element={<ManageSchedule />} />
             <Route path="schedule" element={<DoctorSchedulePage />} />
             <Route path="appointments" element={<AdminAppointments />} />
+            <Route path="reports" element={<AdminReports />} />
             <Route path="*" element={<Navigate to="" />} />
           </Routes>
         </Box>

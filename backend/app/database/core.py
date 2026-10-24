@@ -36,6 +36,7 @@ inventory = db.inventory  # New collection for inventory management
 visits = db.visits # Collection for storing individual patient visits
 bills = db.bills # Collection for storing permanent billing ledger
 leaves = db.leaves # Collection for storing doctor leave dates
+lab_view_access = db.lab_view_access # Short-lived records: admin windows for viewing lab results, and failed password attempts
 counters = db.counters # Atomic sequence counters (OPD / UHID numbers)
 
 def next_sequence(name):
@@ -73,6 +74,13 @@ try:
     bills.create_index("invoice_no", unique=True)
 except Exception as e:
     print(f"Error creating invoice_no unique index (resolve duplicate invoice numbers, then restart): {e}")
+
+# Records in lab_view_access delete themselves when expires_at passes
+try:
+    lab_view_access.create_index("expires_at", expireAfterSeconds=0)
+    lab_view_access.create_index([("kind", 1), ("username", 1)])
+except Exception as e:
+    print(f"Error creating lab_view_access indexes: {e}")
 
 # ---------------------------------------------------------------------------
 # COMPUTE_AGE_STAGE — MongoDB aggregation stage that derives 'age' at query

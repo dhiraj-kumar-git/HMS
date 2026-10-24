@@ -113,4 +113,15 @@ describe('AdminDashboard Component', () => {
     expect(screen.getByText('Ann Lee')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Appointments' })).toBeInTheDocument();
   });
+  it('opens the Lab Reports page from the Reports route instead of a blank screen', async () => {
+    axios.get.mockImplementation((url) => Promise.resolve({ data: url.includes('/doctors') ? [] : {
+      page: 1, limit: 25, total: 1, total_pages: 1, export_limit: 10000,
+      summary: { awaiting_payment: 0, pending: 1, in_progress: 0, partially_completed: 0, completed: 0, cancelled: 0, total: 1 },
+      rows: [{ visit_id: 'v1', time: '2026-10-24T09:00', status: 'pending', institute_id: 'H1', patient_name: 'ANN LEE', patient_type: 'Student',
+               doctor_name: 'Dr. X', doctor_username: 'drx', tests_total: 2, tests_completed: 0, tests_cancelled: 0, report_files: 0, report_typed: 0 }],
+    } }));
+    renderDashboard('/admin/reports');
+    expect(await screen.findByText('Ann Lee')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Lab Reports' })).toBeInTheDocument();
+  });
 });
