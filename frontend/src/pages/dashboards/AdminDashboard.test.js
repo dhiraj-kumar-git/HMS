@@ -52,42 +52,27 @@ describe('AdminDashboard Component', () => {
     expect(screen.getByText('Welcome, Test Admin')).toBeInTheDocument();
   });
 
-  it('renders DashboardHome by default and fetches new patients', async () => {
-    const mockPatients = [
-      { institute_id: '123', name: 'John Doe', address: 'Pilani', disease: 'Fever', workflow_status: 'inactive' },
-      { institute_id: '124', name: 'Jane Doe', address: 'Delhi', disease: 'Cold', workflow_status: 'active' },
-    ];
-    axios.get.mockResolvedValueOnce({ data: mockPatients });
-
+  it('shows the real overview by default instead of the old demo numbers', async () => {
+    axios.get.mockResolvedValueOnce({ data: {
+      date: '2026-10-25', generated_at: '2026-10-25T08:00:00+00:00', errors: [],
+      appointments_today: { total: 7, open: 3, completed: 3, cancelled: 1, other: 0 },
+      revenue: { today: 1500, bills_today: 4, yesterday: 900, bills_yesterday: 2 },
+      trend: [], pending_bills: { total: 2, oldest_days: 9, over_7_days: 1 },
+      lab_orders: { open: 1, by_status: { awaiting_payment: 1, pending: 0, in_progress: 0, partially_completed: 0 }, days: 30 },
+      patients: { total: 40, new_this_week: 5, by_type: [{ name: 'Student', count: 40 }] },
+      staff: { total: 6, by_role: { doctor: 3, receptionist: 1, lab_staff: 1, medical_store: 1 } },
+      new_patients: [{ name: 'JOHN DOE', institute_id: '123', patient_type: 'Student', registered: '2026-10-25T09:00' }],
+      attention: [],
+    } });
     renderDashboard();
 
-    expect(screen.getByText('New Patients')).toBeInTheDocument();
-    expect(screen.getByText('Hospital Survey')).toBeInTheDocument();
-    expect(screen.getByText('Patient Categories')).toBeInTheDocument();
-
-    // Only 'inactive' patients should be set as new patients
-    await waitFor(() => {
-      expect(screen.getByText('John Doe')).toBeInTheDocument();
-    });
-    // Jane Doe is 'active' so she shouldn't be in the new patients list
-    expect(screen.queryByText('Jane Doe')).not.toBeInTheDocument();
-  });
-
-  it('opens and closes the View All modal for new patients', async () => {
-    axios.get.mockResolvedValueOnce({ data: [] });
-    renderDashboard();
-
-    const viewAllBtn = screen.getByRole('button', { name: /View All/i });
-    fireEvent.click(viewAllBtn);
-
-    expect(screen.getByText('All New Patients')).toBeInTheDocument();
-
-    const closeBtn = screen.getByRole('button', { name: /Close/i });
-    fireEvent.click(closeBtn);
-
-    await waitFor(() => {
-      expect(screen.queryByText('All New Patients')).not.toBeInTheDocument();
-    });
+    expect(await screen.findByText("Today's appointments")).toBeInTheDocument();
+    expect(await screen.findByText('John Doe')).toBeInTheDocument();
+    expect(axios.get.mock.calls[0][0]).toMatch(/\/api\/admin\/dashboard$/);
+    // the made-up content is gone
+    ['Hospital Survey', 'Patient Categories', 'Hospital Earning', 'New Patient List'].forEach((t) => expect(screen.queryByText(t)).not.toBeInTheDocument());
+    // and the page no longer downloads every patient
+    expect(axios.get.mock.calls.some(([u]) => /\/patients$/.test(u))).toBe(false);
   });
 
   it('navigates to create-user route', () => {

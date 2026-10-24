@@ -64,6 +64,8 @@ from app.routes.admin_lab_report_routes import admin_lab_reports_bp
 app.register_blueprint(admin_lab_reports_bp)
 from app.routes.admin_billing_routes import admin_billing_bp
 app.register_blueprint(admin_billing_bp)
+from app.routes.admin_dashboard_routes import admin_dashboard_bp
+app.register_blueprint(admin_dashboard_bp)
 from app.routes.leaves_routes import leaves_bp
 app.register_blueprint(leaves_bp)
 from app.routes.swagger_routes import swagger_bp, swaggerui_blueprint
