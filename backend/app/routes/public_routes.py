@@ -6,6 +6,18 @@ import random
 import secrets
 from app.routes.lab_routes import send_email
 
+# The portal and the staff-registration screens accept exactly this many digits, so every OTP must have them.
+OTP_LENGTH = 4
+# OTPs run from 1000 to 9999 inclusive: always 4 digits, never starting with a zero.
+OTP_MIN = 1000
+OTP_MAX = 9999
+
+
+def generate_otp():
+    """A random OTP between OTP_MIN and OTP_MAX (1000-9999), from the secure generator."""
+    return str(OTP_MIN + secrets.randbelow(OTP_MAX - OTP_MIN + 1))
+
+
 def strip_public_patient_emr(patient):
     if not patient:
         return
@@ -205,7 +217,7 @@ def send_registration_otp():
     if not email:
         return jsonify({"error": "Email is required"}), 400
         
-    otp = f"{secrets.randbelow(1000000):06d}"
+    otp = generate_otp()
     if database.redis_client:
         database.redis_client.setex(f"otp_{email}", 300, otp)
     else:
@@ -281,7 +293,7 @@ def public_verify_patient():
     if not email:
         return jsonify({"error": "Patient does not have a registered email address for OTP."}), 400
         
-    otp = f"{secrets.randbelow(1000000):06d}"
+    otp = generate_otp()
     if not database.store_patient_otp(institute_id, otp):
         return jsonify({"error": "Failed to generate OTP"}), 500
         
