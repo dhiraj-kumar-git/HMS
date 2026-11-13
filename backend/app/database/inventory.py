@@ -564,3 +564,39 @@ def add_medicine(
 def get_inventory():
     return list(inventory.find({}, {"_id": 0}))
 
+def restock_medicine(medicine_id, quantity):
+    if not medicine_id:
+        return {"success": False, "error": "Missing medicine_id"}
+    try:
+        qty_num = float(quantity)
+        if qty_num <= 0:
+            return {"success": False, "error": "Quantity must be a positive number"}
+    except (ValueError, TypeError):
+        return {"success": False, "error": "Invalid quantity"}
+
+    inc_qty = int(qty_num) if qty_num.is_integer() else qty_num
+
+    med = inventory.find_one({"medicine_id": medicine_id})
+    if not med:
+        return {"success": False, "error": "Medicine not found"}
+
+    if isinstance(med, dict) and med.get("qty") is None:
+        inventory.update_one(
+            {"medicine_id": medicine_id},
+            {"$set": {"qty": inc_qty}}
+        )
+        updated_qty = inc_qty
+    else:
+        inventory.update_one(
+            {"medicine_id": medicine_id},
+            {"$inc": {"qty": inc_qty}}
+        )
+        updated_med = inventory.find_one({"medicine_id": medicine_id})
+        if isinstance(updated_med, dict):
+            updated_qty = updated_med.get("qty")
+        elif isinstance(med, dict):
+            updated_qty = (med.get("qty") or 0) + inc_qty
+        else:
+            updated_qty = inc_qty
+
+    return {"success": True, "qty": updated_qty}
