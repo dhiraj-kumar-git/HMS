@@ -40,7 +40,8 @@ def pay_bill_route():
     if result and result.get("success"):
         return jsonify({"message": "Bill paid successfully", "invoice_no": result.get("invoice_no")}), 200
     else:
-        return jsonify({"error": "Failed to pay bill"}), 400
+        error_msg = result.get("error", "Failed to pay bill") if isinstance(result, dict) else "Failed to pay bill"
+        return jsonify({"error": error_msg}), 400
 
 @inventory_bp.route('/cancel_bill', methods=['POST'])
 @jwt_required()
