@@ -40,7 +40,8 @@ def pay_bill_route():
     if result and result.get("success"):
         return jsonify({"message": "Bill paid successfully", "invoice_no": result.get("invoice_no")}), 200
     else:
-        return jsonify({"error": "Failed to pay bill"}), 400
+        error_msg = result.get("error", "Failed to pay bill") if isinstance(result, dict) else "Failed to pay bill"
+        return jsonify({"error": error_msg}), 400
 
 @inventory_bp.route('/cancel_bill', methods=['POST'])
 @jwt_required()
@@ -161,6 +162,39 @@ def add_medicine_route():
     if medicine_id:
         return jsonify({"message": "Medicine added successfully", "medicine_id": medicine_id}), 201
     return jsonify({"error": "Failed to add medicine"}), 400
+
+@inventory_bp.route('/inventory/restock', methods=['POST'])
+@jwt_required()
+def restock_medicine_route():
+    claims = get_jwt()
+    if claims.get("role") != "medical_store":
+        return jsonify({"error": "Unauthorized access"}), 403
+
+    data = request.json or {}
+    medicine_id = data.get("medicine_id")
+    quantity = data.get("quantity")
+
+    if not medicine_id:
+        return jsonify({"error": "Missing medicine_id"}), 400
+
+    if quantity is None:
+        return jsonify({"error": "Missing quantity"}), 400
+
+    try:
+        qty_num = float(quantity)
+        if qty_num <= 0:
+            return jsonify({"error": "Quantity must be a positive number"}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid quantity"}), 400
+
+    result = database.restock_medicine(medicine_id, qty_num)
+    if result and result.get("success"):
+        return jsonify({"message": "Medicine restocked successfully", "medicine_id": medicine_id, "qty": result.get("qty")}), 200
+    elif result and result.get("error") == "Medicine not found":
+        return jsonify({"error": result.get("error")}), 404
+    else:
+        error_msg = result.get("error", "Failed to restock medicine") if isinstance(result, dict) else "Failed to restock medicine"
+        return jsonify({"error": error_msg}), 400
 
 # Endpoint to fetch all inventory items (accessible by medical_store and admin)
 @inventory_bp.route('/inventory', methods=['GET'])

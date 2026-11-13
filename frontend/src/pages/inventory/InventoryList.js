@@ -42,6 +42,46 @@ function InventoryList() {
     window.location.href = '/login';
   };
 
+  const handleRestock = async (medicineId) => {
+    const input = window.prompt('Enter restock quantity:');
+    if (input === null) return;
+    const qty = parseFloat(input);
+    if (isNaN(qty) || qty <= 0) {
+      toast({
+        title: 'Invalid quantity',
+        description: 'Please enter a positive number',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(
+        `${BASE_URL}/inventory/restock`,
+        { medicine_id: medicineId, quantity: qty },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      toast({
+        title: 'Restock successful',
+        description: response.data?.message || 'Medicine restocked successfully',
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+      fetchInventory();
+    } catch (error) {
+      toast({
+        title: 'Error restocking medicine',
+        description: error.response?.data?.error || 'An error occurred',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
   const fetchInventory = async () => {
     try {
       const token = localStorage.getItem('token');
@@ -179,22 +219,28 @@ function InventoryList() {
                   <Th>Sale Rate</Th>
                   <Th>Quantity</Th>
                   <Th>Expiry Date</Th>
+                  <Th>Action</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {filteredInventory.map((item, index) => (
-                  <Tr key={index} _hover={{ bg: "gray.50", cursor: "pointer" }}>
+                  <Tr key={index} _hover={{ bg: "gray.50" }}>
                     <Td>{item.medicine_id}</Td>
                     <Td>{item.item_name}</Td>
                     <Td>{item.manufacturer}</Td>
                     <Td>{item.sale_rate}</Td>
                     <Td>{item.qty}</Td>
                     <Td>{item.expiry_date}</Td>
+                    <Td>
+                      <Button size="xs" colorScheme="blue" onClick={(e) => { e.stopPropagation(); handleRestock(item.medicine_id); }}>
+                        Restock
+                      </Button>
+                    </Td>
                   </Tr>
                 ))}
                 {filteredInventory.length === 0 && (
                   <Tr>
-                    <Td colSpan={6} textAlign="center">
+                    <Td colSpan={7} textAlign="center">
                       No inventory items found.
                     </Td>
                   </Tr>
