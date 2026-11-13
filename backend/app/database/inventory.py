@@ -319,6 +319,23 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
         bill_docs_to_insert.append(bill_doc)
         total_rounded = total_rounded
 
+    # Validate stock before inserting bills
+    med_quantities = {}
+    for item in med_items:
+        name = item.get("name")
+        if name:
+            q = item.get("quantity", 0)
+            med_quantities[name] = med_quantities.get(name, 0) + q
+
+    for name, req_qty in med_quantities.items():
+        inv_item = inventory.find_one({"item_name": name})
+        if inv_item is None:
+            return {"success": False, "error": f"Medicine '{name}' not found in inventory"}
+        if isinstance(inv_item, dict):
+            avail_qty = inv_item.get("qty")
+            if avail_qty is None or avail_qty < req_qty:
+                return {"success": False, "error": f"Insufficient stock for {name}"}
+
     # Atomically claim the visit so two simultaneous payments cannot both proceed
     claimed_visit_id = None
     if visit:
@@ -352,6 +369,19 @@ def pay_bill(institute_id, visit_id=None, payment_mode="UPI", selected_labs=None
                 if attempt == 9:
                     raise RuntimeError("Could not allocate a unique invoice number")
                 count = bills.count_documents({"payment_date": {"$gte": today_start}}) + attempt + 1
+
+        # Deduct quantity for billed medicines
+        for name, req_qty in med_quantities.items():
+            qty_num = int(req_qty) if isinstance(req_qty, (int, float)) and float(req_qty).is_integer() else req_qty
+            res_update = inventory.update_one(
+                {
+                    "item_name": name,
+                    "qty": {"$gte": qty_num}
+                },
+                {"$inc": {"qty": -qty_num}}
+            )
+            if isinstance(res_update.matched_count, int) and res_update.matched_count == 0:
+                raise RuntimeError(f"Failed to deduct inventory for {name}: insufficient stock")
 
         has_labs = len(final_lab_tests) > 0
         current_workflow = patient.get("workflow_status", "active")
